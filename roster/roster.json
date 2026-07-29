@@ -1,0 +1,66 @@
+{
+  "$comment": "Placeholder roster. See roster/README.md before editing. IDs are permanent; never delete a character, retire it.",
+  "rosterVersion": "2026.07.28-1",
+  "characters": [
+    {
+      "id": "anvil",
+      "name": "The Anvil",
+      "blurb": "Placeholder. Absorbs pressure and gives ground slowly.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "cartographer",
+      "name": "The Cartographer",
+      "blurb": "Placeholder. Trades early tempo for board knowledge.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "duelist",
+      "name": "The Duelist",
+      "blurb": "Placeholder. High variance, decides rounds quickly.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "gambler",
+      "name": "The Gambler",
+      "blurb": "Placeholder. Rewards risk, punishes hesitation.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "herald",
+      "name": "The Herald",
+      "blurb": "Placeholder. Strong opener, fades late.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "magpie",
+      "name": "The Magpie",
+      "blurb": "Placeholder. Takes what the opponent leaves behind.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "oracle",
+      "name": "The Oracle",
+      "blurb": "Placeholder. Information over force.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "sentinel",
+      "name": "The Sentinel",
+      "blurb": "Placeholder. Denies options rather than creating them.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "tinker",
+      "name": "The Tinker",
+      "blurb": "Placeholder. Slow build, compounding advantage.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "vagrant",
+      "name": "The Vagrant",
+      "blurb": "Placeholder. No strong suit, no weak one either.",
+      "status": "ACTIVE"
+    }
+  ]
+}

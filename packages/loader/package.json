@@ -1,0 +1,17 @@
+{
+  "name": "@banpick/loader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mode YAML -> validated, resolved, hashed modes. Build-time only; never shipped to a client.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@banpick/engine": "0.1.0",
+    "@banpick/types": "0.1.0",
+    "ajv": "^8.20.0",
+    "yaml": "^2.9.0"
+  }
+}

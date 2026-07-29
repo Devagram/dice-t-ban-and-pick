@@ -1,0 +1,125 @@
+# Spec §9.1 — the base mode.
+#
+# This file is the acceptance test for §1's extensibility requirement: "New modes must be
+# config, never engine code." If anything here needed a change in @banpick/engine, that would
+# be a finding about the module boundary rather than a patch to apply.
+#
+# Every module carries an id, and overrides remove by id rather than by type. §9.1 writes
+# round 2's as `remove: [CHOOSE, BAN]`, but the template holds *two* CHOOSE modules — the
+# privilege choice and D24's declareOrder — so removing by type would silently delete the
+# play-order decision from the final round.
+schemaVersion: 1
+mode: base
+label: 'Standard Bo3 — draft ${draftCount}'
+
+# D25 — one mode file, not two. The 3-vs-4 question is a live balance question, and a
+# parameter turns a design argument into an A/B test that runs during ordinary play (§15).
+parameters:
+  draftCount:
+    values: [3, 4]
+    default: 4
+    label: 'Characters drafted'
+
+modules:
+  - use: SIMULTANEOUS_COMMIT
+    id: draft
+    commits:
+      picks:
+        count: ${draftCount}
+        pool: legalDraftPool
+        crossSeatMirrors: ALLOWED # D1 — mirrors are allowed across seats
+        selfDuplicates: FORBIDDEN # D12 — but never within one seat
+    reveal:
+      picks: IMMEDIATE
+
+  - use: ROUND_LOOP
+    id: rounds
+    count: 3
+    template:
+      - use: ROLL
+        id: roll
+        dice: 1d6
+        actors: BOTH
+        resolve: HIGHEST
+        onTie: REROLL
+
+      # D2 — the roll winner takes one privilege, the loser receives the complement.
+      # Under D10 this is no longer "which privilege do I want" but "the weaker one now, or
+      # the stronger one next round". See open item O5 before reading §15's numbers.
+      - use: CHOOSE
+        id: privilegeChoice
+        actor: rollWinner
+        options: [DRAFT_PRIVILEGE, TURN_ORDER]
+        loserGets: COMPLEMENT
+
+      - use: BAN
+        id: ban
+        tier: ROUND
+        actor: privilegeHolder
+        pool: legalRoundBan
+
+      - use: SELECT
+        id: selectFirst
+        mode: SEQUENTIAL
+        actor: opponent
+        pool: legalRoundPick
+
+      - use: SELECT
+        id: selectSecond
+        mode: SEQUENTIAL
+        actor: privilegeHolder
+        pool: legalRoundPick
+
+      # D23/D24 — the turn-order holder *declares* play order, after both picks are revealed,
+      # and may put themselves second. Declared blind it would be a coin flip with ceremony.
+      - use: CHOOSE
+        id: declareOrder
+        actor: turnOrderHolder
+        options: [SELF_FIRST, OPPONENT_FIRST]
+
+      - use: REPORT_RESULT
+        id: report
+        allowTie: true
+
+    overrides:
+      # D10 — round 1 is the mirror of round 0. No roll: both privileges invert. Inverting only
+      # the draft privilege would leave the round-0 winner holding turn order across two
+      # consecutive rounds, so the alternation would not actually be symmetric.
+      1:
+        remove: [roll, privilegeChoice]
+        insert:
+          - use: ASSIGN
+            id: invert
+            privilegeHolder: INVERT_PREVIOUS
+            turnOrderHolder: INVERT_PREVIOUS
+        # §9.3 — the *opponent* gets the last-pick information advantage, as deliberate
+        # compensation for round 1's stronger ban. At draftCount 3 the opponent is forced and
+        # the counterweight is dead on arrival; at 4 it does the job it was written to do.
+        selectOrder: [privilegeHolder, opponent]
+
+      # D11 — no draft privilege exists in round 2, so the roll assigns turn order directly and
+      # CHOOSE is removed rather than narrowed to a single option that grants nothing.
+      # D26 — and no branch on draftCount. At 4 each seat holds 2 unconsumed and picks for
+      # real; at 3 each holds 1 and SELECT auto-commits. Same file, both values.
+      2:
+        remove: [privilegeChoice, ban]
+        rollAssigns: TURN_ORDER
+        select:
+          mode: SIMULTANEOUS_HIDDEN
+          actor: BOTH
+          pool: legalRoundPick
+
+# §10, D21 — one rule ships. A tied round awards 0.5 each, three rounds are played, and
+# 1.5–1.5 is a legal terminal state: the match is a draw.
+onTie:
+  scoring: HALF_POINT
+  consumesCharacters: true
+
+match:
+  resolution: ALWAYS_3_ROUNDS
+  # Skips a dead rubber. After two rounds only 2–0 is mathematically settled — at 1.5–0.5 a
+  # draw is still reachable, so round 3 is played.
+  stopWhenDecided: true
+
+overtime:
+  enabled: false

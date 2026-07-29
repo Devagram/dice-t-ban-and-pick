@@ -1,0 +1,17 @@
+{
+  "name": "@banpick/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "One Durable Object per match (D8). The authority for all dice and all legality.",
+  "main": "./src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@banpick/engine": "0.1.0",
+    "@banpick/loader": "0.1.0",
+    "@banpick/types": "0.1.0"
+  }
+}

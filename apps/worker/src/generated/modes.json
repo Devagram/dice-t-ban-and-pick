@@ -1,0 +1,1151 @@
+{
+  "$comment": "GENERATED — do not edit. Produced by packages/loader/test/generate-modes.test.ts from modes/*.yaml. Regenerate with `npm run build:modes`. Every mode here has passed all six §13 validators at every declared parameter combination (D25).",
+  "rosterVersion": "2026.07.28-1",
+  "modes": {
+    "base": {
+      "modeId": "base",
+      "schemaVersion": 1,
+      "definition": {
+        "modeId": "base",
+        "label": "Standard Bo3 — draft ${draftCount}",
+        "parameters": {
+          "draftCount": {
+            "values": [
+              3,
+              4
+            ],
+            "default": 4,
+            "label": "Characters drafted"
+          }
+        },
+        "modules": [
+          {
+            "type": "SIMULTANEOUS_COMMIT",
+            "id": "draft",
+            "commits": {
+              "picks": {
+                "count": {
+                  "param": "draftCount"
+                },
+                "pool": "legalDraftPool"
+              },
+              "metaBan": null
+            },
+            "reveal": {
+              "picks": "IMMEDIATE",
+              "metaBan": "NONE"
+            }
+          },
+          {
+            "type": "ROUND_LOOP",
+            "id": "rounds",
+            "count": 3,
+            "template": [
+              {
+                "type": "ROLL",
+                "id": "roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": null
+              },
+              {
+                "type": "CHOOSE",
+                "id": "privilegeChoice",
+                "actor": "rollWinner",
+                "options": [
+                  "DRAFT_PRIVILEGE",
+                  "TURN_ORDER"
+                ],
+                "loserGets": "COMPLEMENT"
+              },
+              {
+                "type": "BAN",
+                "id": "ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan"
+              },
+              {
+                "type": "SELECT",
+                "id": "selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick"
+              },
+              {
+                "type": "SELECT",
+                "id": "selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick"
+              },
+              {
+                "type": "CHOOSE",
+                "id": "declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "report",
+                "allowTie": true
+              }
+            ],
+            "overrides": {
+              "1": {
+                "remove": [
+                  "roll",
+                  "privilegeChoice"
+                ],
+                "insert": [
+                  {
+                    "type": "ASSIGN",
+                    "id": "invert",
+                    "privilegeHolder": "INVERT_PREVIOUS",
+                    "turnOrderHolder": "INVERT_PREVIOUS"
+                  }
+                ],
+                "selectOrder": [
+                  "privilegeHolder",
+                  "opponent"
+                ]
+              },
+              "2": {
+                "remove": [
+                  "privilegeChoice",
+                  "ban"
+                ],
+                "rollAssigns": "TURN_ORDER",
+                "select": {
+                  "mode": "SIMULTANEOUS_HIDDEN",
+                  "actor": "BOTH",
+                  "pool": "legalRoundPick"
+                }
+              }
+            }
+          }
+        ],
+        "onTie": {
+          "scoring": "HALF_POINT",
+          "consumesCharacters": true
+        },
+        "match": {
+          "resolution": "ALWAYS_3_ROUNDS",
+          "stopWhenDecided": true
+        },
+        "overtime": {
+          "enabled": false
+        }
+      },
+      "variants": [
+        {
+          "parameters": {
+            "draftCount": 3
+          },
+          "mode": {
+            "modeId": "base",
+            "label": "Standard Bo3 — draft 3",
+            "parameters": {
+              "draftCount": 3
+            },
+            "program": [
+              {
+                "type": "SIMULTANEOUS_COMMIT",
+                "id": "draft",
+                "roundIndex": null,
+                "commits": {
+                  "picks": {
+                    "count": 3,
+                    "pool": "legalDraftPool"
+                  },
+                  "metaBan": null
+                },
+                "reveal": {
+                  "picks": "IMMEDIATE",
+                  "metaBan": "NONE"
+                },
+                "revealTags": {
+                  "picks": "draft:reveal",
+                  "metaBan": null
+                }
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.0.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": null,
+                "roundIndex": 0
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.0.privilegeChoice",
+                "actor": "rollWinner",
+                "options": [
+                  "DRAFT_PRIVILEGE",
+                  "TURN_ORDER"
+                ],
+                "loserGets": "COMPLEMENT",
+                "roundIndex": 0
+              },
+              {
+                "type": "BAN",
+                "id": "rounds.0.ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan",
+                "roundIndex": 0
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.0.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 0
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.0.report",
+                "allowTie": true,
+                "roundIndex": 0
+              },
+              {
+                "type": "ASSIGN",
+                "id": "rounds.1.invert",
+                "privilegeHolder": "INVERT_PREVIOUS",
+                "turnOrderHolder": "INVERT_PREVIOUS",
+                "roundIndex": 1
+              },
+              {
+                "type": "BAN",
+                "id": "rounds.1.ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan",
+                "roundIndex": 1
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.1.selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick",
+                "roundIndex": 1
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.1.selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick",
+                "roundIndex": 1
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.1.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 1
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.1.report",
+                "allowTie": true,
+                "roundIndex": 1
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.2.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "TURN_ORDER",
+                "roundIndex": 2
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.2.select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 2
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.2.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 2
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.2.report",
+                "allowTie": true,
+                "roundIndex": 2
+              }
+            ],
+            "onTie": {
+              "scoring": "HALF_POINT",
+              "consumesCharacters": true
+            },
+            "match": {
+              "resolution": "ALWAYS_3_ROUNDS",
+              "stopWhenDecided": true
+            },
+            "overtime": {
+              "enabled": false
+            }
+          },
+          "modeContentHash": "e3d9ca218e2a"
+        },
+        {
+          "parameters": {
+            "draftCount": 4
+          },
+          "mode": {
+            "modeId": "base",
+            "label": "Standard Bo3 — draft 4",
+            "parameters": {
+              "draftCount": 4
+            },
+            "program": [
+              {
+                "type": "SIMULTANEOUS_COMMIT",
+                "id": "draft",
+                "roundIndex": null,
+                "commits": {
+                  "picks": {
+                    "count": 4,
+                    "pool": "legalDraftPool"
+                  },
+                  "metaBan": null
+                },
+                "reveal": {
+                  "picks": "IMMEDIATE",
+                  "metaBan": "NONE"
+                },
+                "revealTags": {
+                  "picks": "draft:reveal",
+                  "metaBan": null
+                }
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.0.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": null,
+                "roundIndex": 0
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.0.privilegeChoice",
+                "actor": "rollWinner",
+                "options": [
+                  "DRAFT_PRIVILEGE",
+                  "TURN_ORDER"
+                ],
+                "loserGets": "COMPLEMENT",
+                "roundIndex": 0
+              },
+              {
+                "type": "BAN",
+                "id": "rounds.0.ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan",
+                "roundIndex": 0
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.0.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 0
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.0.report",
+                "allowTie": true,
+                "roundIndex": 0
+              },
+              {
+                "type": "ASSIGN",
+                "id": "rounds.1.invert",
+                "privilegeHolder": "INVERT_PREVIOUS",
+                "turnOrderHolder": "INVERT_PREVIOUS",
+                "roundIndex": 1
+              },
+              {
+                "type": "BAN",
+                "id": "rounds.1.ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan",
+                "roundIndex": 1
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.1.selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick",
+                "roundIndex": 1
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.1.selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick",
+                "roundIndex": 1
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.1.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 1
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.1.report",
+                "allowTie": true,
+                "roundIndex": 1
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.2.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "TURN_ORDER",
+                "roundIndex": 2
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.2.select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 2
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.2.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 2
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.2.report",
+                "allowTie": true,
+                "roundIndex": 2
+              }
+            ],
+            "onTie": {
+              "scoring": "HALF_POINT",
+              "consumesCharacters": true
+            },
+            "match": {
+              "resolution": "ALWAYS_3_ROUNDS",
+              "stopWhenDecided": true
+            },
+            "overtime": {
+              "enabled": false
+            }
+          },
+          "modeContentHash": "8827f9d3d38c"
+        }
+      ]
+    },
+    "bring-ban1": {
+      "modeId": "bring-ban1",
+      "schemaVersion": 1,
+      "definition": {
+        "modeId": "bring-ban1",
+        "label": "Bring ${draftCount}, Ban 1",
+        "parameters": {
+          "draftCount": {
+            "values": [
+              3,
+              4
+            ],
+            "default": 4,
+            "label": "Characters drafted"
+          }
+        },
+        "modules": [
+          {
+            "type": "SIMULTANEOUS_COMMIT",
+            "id": "draft",
+            "commits": {
+              "picks": {
+                "count": {
+                  "param": "draftCount"
+                },
+                "pool": "legalDraftPool"
+              },
+              "metaBan": {
+                "count": 1,
+                "pool": "legalMetaBanPool",
+                "tier": "META",
+                "targets": "OPPONENT_ONLY"
+              }
+            },
+            "reveal": {
+              "picks": "DEFERRED",
+              "metaBan": "IMMEDIATE"
+            }
+          },
+          {
+            "type": "CONDITIONAL_RECOMMIT",
+            "id": "repick",
+            "trigger": "repickTrigger",
+            "pool": "legalDraftPool",
+            "hidden": true
+          },
+          {
+            "type": "REVEAL",
+            "id": "pickReveal",
+            "slices": [
+              "slots"
+            ]
+          },
+          {
+            "type": "ROUND_LOOP",
+            "id": "rounds",
+            "count": 3,
+            "template": [
+              {
+                "type": "ROLL",
+                "id": "roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": null
+              },
+              {
+                "type": "CHOOSE",
+                "id": "privilegeChoice",
+                "actor": "rollWinner",
+                "options": [
+                  "DRAFT_PRIVILEGE",
+                  "TURN_ORDER"
+                ],
+                "loserGets": "COMPLEMENT"
+              },
+              {
+                "type": "BAN",
+                "id": "ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan"
+              },
+              {
+                "type": "SELECT",
+                "id": "selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick"
+              },
+              {
+                "type": "SELECT",
+                "id": "selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick"
+              },
+              {
+                "type": "CHOOSE",
+                "id": "declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "report",
+                "allowTie": true
+              }
+            ],
+            "overrides": {
+              "1": {
+                "remove": [
+                  "roll",
+                  "privilegeChoice"
+                ],
+                "insert": [
+                  {
+                    "type": "ASSIGN",
+                    "id": "invert",
+                    "privilegeHolder": "INVERT_PREVIOUS",
+                    "turnOrderHolder": "INVERT_PREVIOUS"
+                  }
+                ],
+                "selectOrder": [
+                  "privilegeHolder",
+                  "opponent"
+                ]
+              },
+              "2": {
+                "remove": [
+                  "privilegeChoice",
+                  "ban"
+                ],
+                "rollAssigns": "TURN_ORDER",
+                "select": {
+                  "mode": "SIMULTANEOUS_HIDDEN",
+                  "actor": "BOTH",
+                  "pool": "legalRoundPick"
+                }
+              }
+            }
+          }
+        ],
+        "onTie": {
+          "scoring": "HALF_POINT",
+          "consumesCharacters": true
+        },
+        "match": {
+          "resolution": "ALWAYS_3_ROUNDS",
+          "stopWhenDecided": true
+        },
+        "overtime": {
+          "enabled": false
+        }
+      },
+      "variants": [
+        {
+          "parameters": {
+            "draftCount": 3
+          },
+          "mode": {
+            "modeId": "bring-ban1",
+            "label": "Bring 3, Ban 1",
+            "parameters": {
+              "draftCount": 3
+            },
+            "program": [
+              {
+                "type": "SIMULTANEOUS_COMMIT",
+                "id": "draft",
+                "roundIndex": null,
+                "commits": {
+                  "picks": {
+                    "count": 3,
+                    "pool": "legalDraftPool"
+                  },
+                  "metaBan": {
+                    "count": 1,
+                    "pool": "legalMetaBanPool",
+                    "tier": "META",
+                    "targets": "OPPONENT_ONLY"
+                  }
+                },
+                "reveal": {
+                  "picks": "DEFERRED",
+                  "metaBan": "IMMEDIATE"
+                },
+                "revealTags": {
+                  "picks": "pickReveal:reveal",
+                  "metaBan": "draft:reveal"
+                }
+              },
+              {
+                "type": "CONDITIONAL_RECOMMIT",
+                "id": "repick",
+                "trigger": "repickTrigger",
+                "pool": "legalDraftPool",
+                "hidden": true,
+                "roundIndex": null,
+                "revealTag": "pickReveal:reveal"
+              },
+              {
+                "type": "REVEAL",
+                "id": "pickReveal",
+                "slices": [
+                  "slots"
+                ],
+                "roundIndex": null
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.0.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": null,
+                "roundIndex": 0
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.0.privilegeChoice",
+                "actor": "rollWinner",
+                "options": [
+                  "DRAFT_PRIVILEGE",
+                  "TURN_ORDER"
+                ],
+                "loserGets": "COMPLEMENT",
+                "roundIndex": 0
+              },
+              {
+                "type": "BAN",
+                "id": "rounds.0.ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan",
+                "roundIndex": 0
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.0.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 0
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.0.report",
+                "allowTie": true,
+                "roundIndex": 0
+              },
+              {
+                "type": "ASSIGN",
+                "id": "rounds.1.invert",
+                "privilegeHolder": "INVERT_PREVIOUS",
+                "turnOrderHolder": "INVERT_PREVIOUS",
+                "roundIndex": 1
+              },
+              {
+                "type": "BAN",
+                "id": "rounds.1.ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan",
+                "roundIndex": 1
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.1.selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick",
+                "roundIndex": 1
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.1.selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick",
+                "roundIndex": 1
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.1.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 1
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.1.report",
+                "allowTie": true,
+                "roundIndex": 1
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.2.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "TURN_ORDER",
+                "roundIndex": 2
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.2.select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 2
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.2.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 2
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.2.report",
+                "allowTie": true,
+                "roundIndex": 2
+              }
+            ],
+            "onTie": {
+              "scoring": "HALF_POINT",
+              "consumesCharacters": true
+            },
+            "match": {
+              "resolution": "ALWAYS_3_ROUNDS",
+              "stopWhenDecided": true
+            },
+            "overtime": {
+              "enabled": false
+            }
+          },
+          "modeContentHash": "22fd9099408d"
+        },
+        {
+          "parameters": {
+            "draftCount": 4
+          },
+          "mode": {
+            "modeId": "bring-ban1",
+            "label": "Bring 4, Ban 1",
+            "parameters": {
+              "draftCount": 4
+            },
+            "program": [
+              {
+                "type": "SIMULTANEOUS_COMMIT",
+                "id": "draft",
+                "roundIndex": null,
+                "commits": {
+                  "picks": {
+                    "count": 4,
+                    "pool": "legalDraftPool"
+                  },
+                  "metaBan": {
+                    "count": 1,
+                    "pool": "legalMetaBanPool",
+                    "tier": "META",
+                    "targets": "OPPONENT_ONLY"
+                  }
+                },
+                "reveal": {
+                  "picks": "DEFERRED",
+                  "metaBan": "IMMEDIATE"
+                },
+                "revealTags": {
+                  "picks": "pickReveal:reveal",
+                  "metaBan": "draft:reveal"
+                }
+              },
+              {
+                "type": "CONDITIONAL_RECOMMIT",
+                "id": "repick",
+                "trigger": "repickTrigger",
+                "pool": "legalDraftPool",
+                "hidden": true,
+                "roundIndex": null,
+                "revealTag": "pickReveal:reveal"
+              },
+              {
+                "type": "REVEAL",
+                "id": "pickReveal",
+                "slices": [
+                  "slots"
+                ],
+                "roundIndex": null
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.0.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": null,
+                "roundIndex": 0
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.0.privilegeChoice",
+                "actor": "rollWinner",
+                "options": [
+                  "DRAFT_PRIVILEGE",
+                  "TURN_ORDER"
+                ],
+                "loserGets": "COMPLEMENT",
+                "roundIndex": 0
+              },
+              {
+                "type": "BAN",
+                "id": "rounds.0.ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan",
+                "roundIndex": 0
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.0.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 0
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.0.report",
+                "allowTie": true,
+                "roundIndex": 0
+              },
+              {
+                "type": "ASSIGN",
+                "id": "rounds.1.invert",
+                "privilegeHolder": "INVERT_PREVIOUS",
+                "turnOrderHolder": "INVERT_PREVIOUS",
+                "roundIndex": 1
+              },
+              {
+                "type": "BAN",
+                "id": "rounds.1.ban",
+                "tier": "ROUND",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundBan",
+                "roundIndex": 1
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.1.selectFirst",
+                "mode": "SEQUENTIAL",
+                "actor": "privilegeHolder",
+                "pool": "legalRoundPick",
+                "roundIndex": 1
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.1.selectSecond",
+                "mode": "SEQUENTIAL",
+                "actor": "opponent",
+                "pool": "legalRoundPick",
+                "roundIndex": 1
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.1.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 1
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.1.report",
+                "allowTie": true,
+                "roundIndex": 1
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.2.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "TURN_ORDER",
+                "roundIndex": 2
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.2.select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 2
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.2.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 2
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.2.report",
+                "allowTie": true,
+                "roundIndex": 2
+              }
+            ],
+            "onTie": {
+              "scoring": "HALF_POINT",
+              "consumesCharacters": true
+            },
+            "match": {
+              "resolution": "ALWAYS_3_ROUNDS",
+              "stopWhenDecided": true
+            },
+            "overtime": {
+              "enabled": false
+            }
+          },
+          "modeContentHash": "c42a0a24e10d"
+        }
+      ]
+    }
+  }
+}

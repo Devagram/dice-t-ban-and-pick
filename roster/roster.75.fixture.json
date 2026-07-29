@@ -1,0 +1,456 @@
+{
+  "$comment": "SYNTHETIC FIXTURE. Not the game roster - see roster/roster.json. Exists so Phase 1 and Phase 4 exercise the ~75-character target scale (open item O6).",
+  "rosterVersion": "2026.07.28-fixture75",
+  "characters": [
+    {
+      "id": "ashen-warden",
+      "name": "Ashen Warden",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "bell-ringer",
+      "name": "Bell Ringer",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "brass-vulture",
+      "name": "Brass Vulture",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "cinder-monk",
+      "name": "Cinder Monk",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "clockmaker",
+      "name": "Clockmaker",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "coil-serpent",
+      "name": "Coil Serpent",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "dawn-courier",
+      "name": "Dawn Courier",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "deep-diver",
+      "name": "Deep Diver",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "dust-prophet",
+      "name": "Dust Prophet",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "ember-twin",
+      "name": "Ember Twin",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "fen-walker",
+      "name": "Fen Walker",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "flint-widow",
+      "name": "Flint Widow",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "gale-sister",
+      "name": "Gale Sister",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "glass-knight",
+      "name": "Glass Knight",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "grave-tender",
+      "name": "Grave Tender",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "hollow-choir",
+      "name": "Hollow Choir",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "ice-cartwright",
+      "name": "Ice Cartwright",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "iron-gardener",
+      "name": "Iron Gardener",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "jack-of-cups",
+      "name": "Jack of Cups",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "kiln-master",
+      "name": "Kiln Master",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "lamplighter",
+      "name": "Lamplighter",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "lantern-fish",
+      "name": "Lantern Fish",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "lead-alchemist",
+      "name": "Lead Alchemist",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "long-shadow",
+      "name": "Long Shadow",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "loom-keeper",
+      "name": "Loom Keeper",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "marsh-king",
+      "name": "Marsh King",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "mirror-twin",
+      "name": "Mirror Twin",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "moss-giant",
+      "name": "Moss Giant",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "night-ferrier",
+      "name": "Night Ferrier",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "nine-fingers",
+      "name": "Nine Fingers",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "oath-breaker",
+      "name": "Oath Breaker",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "old-salt",
+      "name": "Old Salt",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "pale-rider",
+      "name": "Pale Rider",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "paper-tiger",
+      "name": "Paper Tiger",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "pitch-diviner",
+      "name": "Pitch Diviner",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "quarry-hand",
+      "name": "Quarry Hand",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "quiet-sister",
+      "name": "Quiet Sister",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "rag-merchant",
+      "name": "Rag Merchant",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "rain-caller",
+      "name": "Rain Caller",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "reed-piper",
+      "name": "Reed Piper",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "rust-baron",
+      "name": "Rust Baron",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "salt-miner",
+      "name": "Salt Miner",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "scrap-angel",
+      "name": "Scrap Angel",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "sea-lawyer",
+      "name": "Sea Lawyer",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "shale-runner",
+      "name": "Shale Runner",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "silt-fisher",
+      "name": "Silt Fisher",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "slate-judge",
+      "name": "Slate Judge",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "smoke-signal",
+      "name": "Smoke Signal",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "snow-hermit",
+      "name": "Snow Hermit",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "sparrow-thief",
+      "name": "Sparrow Thief",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "spindle-witch",
+      "name": "Spindle Witch",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "stone-cutter",
+      "name": "Stone Cutter",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "storm-glass",
+      "name": "Storm Glass",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "straw-doll",
+      "name": "Straw Doll",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "sun-dial",
+      "name": "Sun Dial",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "tallow-wick",
+      "name": "Tallow Wick",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "thorn-bailiff",
+      "name": "Thorn Bailiff",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "tide-reader",
+      "name": "Tide Reader",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "tin-soldier",
+      "name": "Tin Soldier",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "torch-bearer",
+      "name": "Torch Bearer",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "trench-coat",
+      "name": "Trench Coat",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "turnkey",
+      "name": "Turnkey",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "under-cook",
+      "name": "Under Cook",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "vault-keeper",
+      "name": "Vault Keeper",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "verdigris",
+      "name": "Verdigris",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "wax-sealer",
+      "name": "Wax Sealer",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "well-digger",
+      "name": "Well Digger",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "whale-road",
+      "name": "Whale Road",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "wheelwright",
+      "name": "Wheelwright",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "whisper-gate",
+      "name": "Whisper Gate",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "wick-trimmer",
+      "name": "Wick Trimmer",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "willow-bones",
+      "name": "Willow Bones",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "wind-auditor",
+      "name": "Wind Auditor",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "wire-walker",
+      "name": "Wire Walker",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "yarn-spinner",
+      "name": "Yarn Spinner",
+      "blurb": "Synthetic fixture entry. Not a real character.",
+      "status": "ACTIVE"
+    }
+  ]
+}

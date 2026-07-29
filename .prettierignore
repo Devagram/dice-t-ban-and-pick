@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+package-lock.json
+packages/*/test/fixtures/
+
+# Generated, and byte-compared against its generator. Formatting it would make the freshness
+# check fail on a difference nobody introduced.
+apps/worker/src/generated/

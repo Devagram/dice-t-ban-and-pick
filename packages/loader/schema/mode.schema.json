@@ -1,0 +1,362 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://banpick.local/schema/mode/1",
+  "title": "Ban/pick mode definition, schema version 1",
+  "description": "Spec §8 and §9. A mode is an ordered list of phase modules. Adding a mode must never require engine code (§1), so this file is the entire authoring surface. Structural shape is checked here; the six §13 validators check meaning.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "mode", "label", "modules", "onTie", "match", "overtime"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "Bumped when this schema changes shape. A mode file that does not say which schema it was written against is a mode file that silently means something else later."
+    },
+    "mode": { "$ref": "#/$defs/identifier" },
+    "label": {
+      "type": "string",
+      "description": "May interpolate ${param}. Rendered to the joiner before seating (§12.3)."
+    },
+    "parameters": {
+      "type": "object",
+      "description": "D25. The declared parameter space. Every combination is validated at load, so a parameterized mode is never validated only for its defaults.",
+      "additionalProperties": { "$ref": "#/$defs/parameter" }
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/module" }
+    },
+    "onTie": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scoring", "consumesCharacters"],
+      "properties": {
+        "scoring": {
+          "enum": ["HALF_POINT"],
+          "description": "D21 cut COMPENSATION, ROLL_OFF, and VOID_AND_REPLAY. Deferred rather than permanent — §15 measures tie frequency and reopens the question with evidence."
+        },
+        "consumesCharacters": {
+          "const": true,
+          "description": "D6. A tie spends both characters, which keeps `consumed` monotonic."
+        }
+      }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resolution", "stopWhenDecided"],
+      "properties": {
+        "resolution": { "enum": ["ALWAYS_3_ROUNDS"] },
+        "stopWhenDecided": { "type": "boolean" }
+      }
+    },
+    "overtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": { "enabled": { "const": false } }
+    }
+  },
+
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "moduleId": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$" },
+
+    "numberOrParam": {
+      "description": "A literal count, or a ${param} reference resolved against the declared parameter space (D25).",
+      "oneOf": [
+        { "type": "integer", "minimum": 1 },
+        { "type": "string", "pattern": "^\\$\\{[A-Za-z_][A-Za-z0-9_]*\\}$" }
+      ]
+    },
+
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["values", "default", "label"],
+      "properties": {
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": ["string", "number"] }
+        },
+        "default": { "type": ["string", "number"] },
+        "label": { "type": "string" }
+      }
+    },
+
+    "poolName": {
+      "enum": [
+        "legalDraftPool",
+        "legalMetaBanPool",
+        "legalRoundBan",
+        "legalRoundPick",
+        "repickTrigger"
+      ]
+    },
+    "sliceName": { "enum": ["slots", "metaBan", "selection"] },
+    "actorRef": {
+      "enum": ["rollWinner", "privilegeHolder", "turnOrderHolder", "opponent", "BOTH"]
+    },
+    "revealTiming": { "enum": ["IMMEDIATE", "DEFERRED", "NONE"] },
+
+    "module": {
+      "type": "object",
+      "required": ["use", "id"],
+      "properties": {
+        "use": {
+          "enum": [
+            "SIMULTANEOUS_COMMIT",
+            "CONDITIONAL_RECOMMIT",
+            "REVEAL",
+            "ROUND_LOOP",
+            "ROLL",
+            "CHOOSE",
+            "ASSIGN",
+            "BAN",
+            "SELECT",
+            "REPORT_RESULT"
+          ]
+        },
+        "id": { "$ref": "#/$defs/moduleId" }
+      },
+      "allOf": [
+        { "$ref": "#/$defs/simultaneousCommit" },
+        { "$ref": "#/$defs/conditionalRecommit" },
+        { "$ref": "#/$defs/reveal" },
+        { "$ref": "#/$defs/roundLoop" },
+        { "$ref": "#/$defs/roundModuleShape" }
+      ]
+    },
+
+    "simultaneousCommit": {
+      "if": { "properties": { "use": { "const": "SIMULTANEOUS_COMMIT" } } },
+      "then": {
+        "additionalProperties": false,
+        "required": ["use", "id", "commits", "reveal"],
+        "properties": {
+          "use": true,
+          "id": true,
+          "commits": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "picks": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["count", "pool"],
+                "properties": {
+                  "count": { "$ref": "#/$defs/numberOrParam" },
+                  "pool": { "$ref": "#/$defs/poolName" },
+                  "crossSeatMirrors": { "enum": ["ALLOWED", "FORBIDDEN"] },
+                  "selfDuplicates": { "enum": ["ALLOWED", "FORBIDDEN"] }
+                }
+              },
+              "metaBan": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["count", "pool", "tier", "targets"],
+                "properties": {
+                  "count": { "const": 1 },
+                  "pool": { "$ref": "#/$defs/poolName" },
+                  "tier": { "const": "META" },
+                  "targets": { "const": "OPPONENT_ONLY" }
+                }
+              }
+            }
+          },
+          "reveal": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "picks": { "$ref": "#/$defs/revealTiming" },
+              "metaBan": { "$ref": "#/$defs/revealTiming" }
+            }
+          }
+        }
+      }
+    },
+
+    "conditionalRecommit": {
+      "if": { "properties": { "use": { "const": "CONDITIONAL_RECOMMIT" } } },
+      "then": {
+        "additionalProperties": false,
+        "required": ["use", "id", "trigger", "pool"],
+        "properties": {
+          "use": true,
+          "id": true,
+          "trigger": { "const": "repickTrigger" },
+          "pool": { "$ref": "#/$defs/poolName" },
+          "hidden": { "type": "boolean" }
+        }
+      }
+    },
+
+    "reveal": {
+      "if": { "properties": { "use": { "const": "REVEAL" } } },
+      "then": {
+        "additionalProperties": false,
+        "required": ["use", "id", "slices"],
+        "properties": {
+          "use": true,
+          "id": true,
+          "slices": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/sliceName" }
+          }
+        }
+      }
+    },
+
+    "roundLoop": {
+      "if": { "properties": { "use": { "const": "ROUND_LOOP" } } },
+      "then": {
+        "additionalProperties": false,
+        "required": ["use", "id", "count", "template"],
+        "properties": {
+          "use": true,
+          "id": true,
+          "count": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "template": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/module" }
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": { "^[0-2]$": { "$ref": "#/$defs/override" } }
+          }
+        }
+      }
+    },
+
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "remove": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/moduleId" },
+          "description": "Module **ids**, never types. §9.1 writes round 2's as `remove: [CHOOSE, BAN]`, but the template holds two CHOOSE modules — the privilege choice and D24's declareOrder — so removing by type deletes the wrong one."
+        },
+        "insert": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/module" }
+        },
+        "selectOrder": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/actorRef" }
+        },
+        "rollAssigns": { "const": "TURN_ORDER" },
+        "select": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "actor", "pool"],
+          "properties": {
+            "mode": { "const": "SIMULTANEOUS_HIDDEN" },
+            "actor": { "const": "BOTH" },
+            "pool": { "$ref": "#/$defs/poolName" }
+          }
+        }
+      }
+    },
+
+    "roundModuleShape": {
+      "allOf": [
+        {
+          "if": { "properties": { "use": { "const": "ROLL" } } },
+          "then": {
+            "additionalProperties": false,
+            "required": ["use", "id", "dice", "actors", "resolve", "onTie"],
+            "properties": {
+              "use": true,
+              "id": true,
+              "dice": { "type": "string", "pattern": "^[0-9]+d[0-9]+$" },
+              "actors": { "const": "BOTH" },
+              "resolve": { "const": "HIGHEST" },
+              "onTie": { "const": "REROLL" },
+              "assigns": { "enum": ["TURN_ORDER", null] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "use": { "const": "CHOOSE" } } },
+          "then": {
+            "additionalProperties": false,
+            "required": ["use", "id", "actor", "options"],
+            "properties": {
+              "use": true,
+              "id": true,
+              "actor": { "$ref": "#/$defs/actorRef" },
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "enum": ["DRAFT_PRIVILEGE", "TURN_ORDER", "SELF_FIRST", "OPPONENT_FIRST"]
+                }
+              },
+              "loserGets": { "enum": ["COMPLEMENT", null] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "use": { "const": "ASSIGN" } } },
+          "then": {
+            "additionalProperties": false,
+            "required": ["use", "id", "privilegeHolder", "turnOrderHolder"],
+            "properties": {
+              "use": true,
+              "id": true,
+              "privilegeHolder": { "const": "INVERT_PREVIOUS" },
+              "turnOrderHolder": { "const": "INVERT_PREVIOUS" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "use": { "const": "BAN" } } },
+          "then": {
+            "additionalProperties": false,
+            "required": ["use", "id", "tier", "actor", "pool"],
+            "properties": {
+              "use": true,
+              "id": true,
+              "tier": { "const": "ROUND" },
+              "actor": { "$ref": "#/$defs/actorRef" },
+              "pool": { "$ref": "#/$defs/poolName" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "use": { "const": "SELECT" } } },
+          "then": {
+            "additionalProperties": false,
+            "required": ["use", "id", "actor", "pool"],
+            "properties": {
+              "use": true,
+              "id": true,
+              "mode": { "enum": ["SEQUENTIAL", "SIMULTANEOUS_HIDDEN"] },
+              "actor": { "$ref": "#/$defs/actorRef" },
+              "pool": { "$ref": "#/$defs/poolName" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "use": { "const": "REPORT_RESULT" } } },
+          "then": {
+            "additionalProperties": false,
+            "required": ["use", "id", "allowTie"],
+            "properties": {
+              "use": true,
+              "id": true,
+              "allowTie": { "type": "boolean" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

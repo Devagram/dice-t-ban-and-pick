@@ -1,0 +1,781 @@
+/*
+ * Mobile-first, and that is not a slogan here.
+ *
+ * Exit criterion: "Usable at 390px width — this gets played on phones at a table." So the base
+ * styles ARE the phone styles and the only media query widens things, rather than the other way
+ * around. Nothing has a fixed width; the two slot rails stack until there is room.
+ *
+ * No framework: the whole UI is a dozen components, and a CSS dependency would outweigh them.
+ */
+
+:root {
+  --bg: #14161a;
+  --panel: #1c1f26;
+  --panel-2: #242833;
+  --line: #333947;
+  --text: #e8eaf0;
+  --muted: #9aa2b4;
+  --accent: #6ea8ff;
+  --danger: #ff8080;
+  --warn: #ffc46b;
+  --good: #7fdc9a;
+  --radius: 10px;
+  --tap: 44px; /* minimum comfortable touch target */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    16px/1.5 system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.screen {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 12px 12px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.screen--centred {
+  min-height: 70vh;
+  justify-content: center;
+  text-align: center;
+}
+
+.title {
+  font-size: 1.5rem;
+  margin: 8px 0 0;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 0;
+}
+
+.alert {
+  background: #3a1f24;
+  border: 1px solid var(--danger);
+  color: #ffd7d7;
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin: 0;
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+
+.btn {
+  min-height: var(--tap);
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1220;
+  font-weight: 600;
+  align-items: center;
+  text-align: center;
+}
+
+.btn--quiet {
+  background: transparent;
+  color: var(--muted);
+  min-height: 36px;
+}
+
+.btn--option {
+  width: 100%;
+}
+
+.btn__label {
+  font-weight: 600;
+}
+
+.btn__sub {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.btn--primary .btn__sub {
+  color: #24406e;
+}
+
+.chip {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.chip--on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b1220;
+}
+
+.chip--ban {
+  background: #4a2530;
+  border-color: var(--danger);
+  color: #ffd7d7;
+}
+
+.chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- Panels and forms ---------------------------------------------------- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.field__label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: 0;
+}
+
+.field__help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.field__input {
+  min-height: var(--tap);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  width: 100%;
+}
+
+.field__input--code {
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  font-size: 1.25rem;
+}
+
+.segmented,
+.banlist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* --- Match chrome -------------------------------------------------------- */
+
+.matchbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.matchbar__room {
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+.matchbar__seat {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.conn {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: #2a2f3d;
+  color: var(--warn);
+  font-size: 0.9rem;
+}
+
+.conn--closed {
+  color: var(--danger);
+}
+
+.resume {
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+.resume__summary {
+  color: var(--muted);
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.resume__warning {
+  color: var(--warn);
+  margin: 8px 0;
+}
+
+.resume__url {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 0.8rem;
+}
+
+/* --- Rounds and outcome -------------------------------------------------- */
+
+.rounds {
+  display: flex;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.round {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 0.8rem;
+}
+
+.round--now {
+  border-color: var(--accent);
+}
+
+.round--done {
+  opacity: 0.75;
+}
+
+.round__index {
+  display: block;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.round__detail {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.round__tie {
+  color: var(--warn);
+}
+
+.outcome {
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  text-align: center;
+}
+
+.outcome--won {
+  border-color: var(--good);
+}
+
+.outcome--lost {
+  border-color: var(--danger);
+}
+
+.outcome--draw {
+  border-color: var(--warn);
+}
+
+.outcome__headline {
+  margin: 0 0 4px;
+  font-size: 1.3rem;
+}
+
+.outcome__note,
+.outcome__score {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.outcome__score strong {
+  color: var(--text);
+  font-size: 1.2rem;
+}
+
+.outcome__scorenote {
+  display: block;
+  font-size: 0.8rem;
+}
+
+/* --- Slot rails ---------------------------------------------------------- */
+
+.rails {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 560px) {
+  .rails {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.rail__title {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.rail__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rail__note {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.slot {
+  width: 100%;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  text-align: left;
+}
+
+.slot--choosable {
+  border-color: var(--accent);
+  cursor: pointer;
+}
+
+.slot--spent {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.slot--banned {
+  border-color: var(--danger);
+  color: #ffd7d7;
+}
+
+.slot--sealed {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.slot__status {
+  font-size: 0.75rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.slot__name {
+  overflow-wrap: anywhere;
+}
+
+/* --- Prompts and actions ------------------------------------------------- */
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prompt {
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.prompt__title {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.prompt__help {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.prompt__options {
+  display: grid;
+  gap: 8px;
+}
+
+/* --- Draft --------------------------------------------------------------- */
+
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chosen {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.chosen__slot {
+  flex: 1 1 45%;
+  min-width: 0;
+}
+
+.chosen__empty {
+  display: block;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.chosen__button {
+  width: 100%;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+
+.chosen__name {
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.chosen__x {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.draft__commit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.draft__warning {
+  margin: 0;
+  color: var(--warn);
+  font-size: 0.9rem;
+}
+
+.banner {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.banner--warn {
+  border-color: var(--warn);
+}
+
+.banner__title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.banner__body {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* --- Character picker ---------------------------------------------------- */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.picker__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.picker__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.picker__count {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.picker__help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.picker__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  padding: 8px 0;
+  background: var(--bg);
+  z-index: 1;
+}
+
+.picker__search {
+  min-height: var(--tap);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  width: 100%;
+}
+
+.picker__filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  /* At ~75 characters this is a long list. Capped and scrolled so the commit button stays
+     reachable without a journey to the bottom of the page. */
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.picker__empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.card {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.card--on {
+  border-color: var(--accent);
+}
+
+.card__body {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--tap);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.card__name {
+  font-weight: 600;
+}
+
+.card__blurb {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.card__fav {
+  width: var(--tap);
+  flex-shrink: 0;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--line);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.card__fav--on {
+  color: var(--warn);
+}
+
+/* --- Ruleset card -------------------------------------------------------- */
+
+.ruleset {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.ruleset__mode {
+  margin: 0 0 4px;
+  font-size: 1.2rem;
+}
+
+.ruleset__blurb {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.ruleset__rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ruleset__row {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ruleset__row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ruleset__term {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ruleset__value {
+  margin: 0;
+  font-weight: 600;
+}
+
+.ruleset__detail {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.ruleset__bans {
+  margin: 0;
+  padding-left: 18px;
+  font-weight: 400;
+}
+
+.ruleset__fine {
+  margin: 12px 0 0;
+  color: var(--line);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.seatcta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seatcta__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}

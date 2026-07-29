@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The Worker serves the client as static assets, and its smoke test asks the Worker for
+      # a JSON route — so the build has to have happened before anything else runs.
+      - name: Build the client
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint (includes the engine's no-IO rule)
+        run: npm run lint
+
+      - name: Format
+        run: npm run format:check
+
+      # D18 / G5. Not a warning — the client never gets the rules engine.
+      - name: Package boundary
+        run: npm run boundaries
+
+      - name: Tests and coverage thresholds
+        run: npm run coverage

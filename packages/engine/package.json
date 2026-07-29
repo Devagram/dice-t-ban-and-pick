@@ -1,0 +1,14 @@
+{
+  "name": "@banpick/engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure ban/pick rules engine: reduce, legalActions, project. Imported by the Durable Object only (D18).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@banpick/types": "0.1.0"
+  }
+}

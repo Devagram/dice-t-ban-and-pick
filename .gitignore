@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.wrangler/
+.DS_Store
+apps/worker/public/

@@ -1,0 +1,39 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "banpick",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+
+  // No `compatibility_flags`. `nodejs_compat` was here with a comment claiming the WebSocket
+  // hibernation API needed it — it does not, and nothing else in the Worker does either: the
+  // engine is pure, the loader never ships, and everything here is a Web API. Verified by
+  // removing it and running all 48 worker tests plus a deploy dry run.
+
+  "durable_objects": {
+    "bindings": [{ "name": "MATCH", "class_name": "MatchDO" }],
+  },
+
+  // The client, served from the same origin as the API. §11 said Cloudflare Pages; static
+  // assets on the Worker do the same job and keep one origin, which matters because the Worker
+  // mints the resume link and the WebSocket URL from the request origin (D17/D20). A split
+  // origin would buy CORS and a cross-origin socket in exchange for nothing.
+  //
+  // `single-page-application` so /j/ABC123 and /r/ABC123 serve the app rather than 404ing.
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "single-page-application",
+    // API routes reach the Worker even though assets are served first.
+    "run_worker_first": ["/api/*"],
+  },
+
+  "migrations": [
+    {
+      "tag": "v1",
+      // SQLite is the only storage backend available on the free plan, and §11 notes it is the
+      // recommended one regardless.
+      "new_sqlite_classes": ["MatchDO"],
+    },
+  ],
+
+  "observability": { "enabled": true },
+}

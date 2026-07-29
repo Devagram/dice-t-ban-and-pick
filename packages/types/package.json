@@ -1,0 +1,12 @@
+{
+  "name": "@banpick/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Wire contract for the ban/pick app. The only package the client ever imports (D18).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {}
+}

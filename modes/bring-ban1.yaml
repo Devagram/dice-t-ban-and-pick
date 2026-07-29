@@ -1,0 +1,126 @@
+# Spec §9.2 — "Bring N, ban 1". Identical to base with three modules prepended.
+#
+# Sequence: commit picks and ban (hidden) -> gate one reveals bans only -> repick banned slots
+# (hidden, conditional) -> gate two reveals picks -> the round loop.
+#
+# On what this mode actually asks (open item O6). An opponent-only meta ban does not prevent a
+# mirror, it *steals* one: if both players drafted the same character and only one bans it, the
+# banner keeps theirs. And at the ~75-character target roster the chance a named character sits
+# in an opponent's draft is draftCount/75 — about 5.3% at 4, so the ban whiffs roughly nineteen
+# times in twenty under uniform drafting.
+#
+# Friends do not draft uniformly. They draft favourites, and you know theirs. So the honest
+# framing for UI copy is "what do they always play?" rather than "did they bring this?" — and
+# §15's meta-ban hit rate is what decides whether the mode earns its place. Do not compensate
+# by banning more: two bans reach ~10.4%, and a coin flip would take roughly fifteen.
+schemaVersion: 1
+mode: bring-ban1
+label: 'Bring ${draftCount}, Ban 1'
+
+parameters:
+  draftCount:
+    values: [3, 4]
+    default: 4
+    label: 'Characters drafted'
+
+modules:
+  - use: SIMULTANEOUS_COMMIT
+    id: draft
+    commits:
+      picks:
+        # The spec had this hardcoded at 4 while declaring the parameter — reconciled 2026-07-28.
+        count: ${draftCount}
+        pool: legalDraftPool
+        crossSeatMirrors: ALLOWED # D1
+        selfDuplicates: FORBIDDEN # D12
+      metaBan:
+        count: 1
+        pool: legalMetaBanPool # activeRoster \ globalBanned — so a meta ban cannot be
+        tier: META #             wasted on an already globally banned character
+        targets: OPPONENT_ONLY # D4 — scoped to one opponent seat, so no self-own is possible
+    reveal:
+      metaBan: IMMEDIATE # gate one
+      picks: DEFERRED # gate two, below
+
+  - use: CONDITIONAL_RECOMMIT
+    id: repick
+    trigger: repickTrigger
+    pool: legalDraftPool
+    hidden: true
+
+  - use: REVEAL
+    id: pickReveal
+    slices: [slots] # gate two
+
+  - use: ROUND_LOOP
+    id: rounds
+    count: 3
+    template:
+      - use: ROLL
+        id: roll
+        dice: 1d6
+        actors: BOTH
+        resolve: HIGHEST
+        onTie: REROLL
+
+      - use: CHOOSE
+        id: privilegeChoice
+        actor: rollWinner
+        options: [DRAFT_PRIVILEGE, TURN_ORDER]
+        loserGets: COMPLEMENT
+
+      - use: BAN
+        id: ban
+        tier: ROUND
+        actor: privilegeHolder
+        pool: legalRoundBan
+
+      - use: SELECT
+        id: selectFirst
+        mode: SEQUENTIAL
+        actor: opponent
+        pool: legalRoundPick
+
+      - use: SELECT
+        id: selectSecond
+        mode: SEQUENTIAL
+        actor: privilegeHolder
+        pool: legalRoundPick
+
+      - use: CHOOSE
+        id: declareOrder
+        actor: turnOrderHolder
+        options: [SELF_FIRST, OPPONENT_FIRST]
+
+      - use: REPORT_RESULT
+        id: report
+        allowTie: true
+
+    overrides:
+      1:
+        remove: [roll, privilegeChoice]
+        insert:
+          - use: ASSIGN
+            id: invert
+            privilegeHolder: INVERT_PREVIOUS
+            turnOrderHolder: INVERT_PREVIOUS
+        selectOrder: [privilegeHolder, opponent]
+
+      2:
+        remove: [privilegeChoice, ban]
+        rollAssigns: TURN_ORDER
+        select:
+          mode: SIMULTANEOUS_HIDDEN
+          actor: BOTH
+          pool: legalRoundPick
+
+onTie:
+  scoring: HALF_POINT
+  consumesCharacters: true
+
+match:
+  resolution: ALWAYS_3_ROUNDS
+  stopWhenDecided: true
+
+overtime:
+  enabled: false

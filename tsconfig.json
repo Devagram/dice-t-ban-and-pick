@@ -1,0 +1,32 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@banpick/types": ["./packages/types/src/index.ts"],
+      "@banpick/engine": ["./packages/engine/src/index.ts"],
+      "@banpick/loader": ["./packages/loader/src/index.ts"]
+    },
+
+    // Nothing is pulled in automatically. @types/node exists for the loader's test helpers and
+    // @cloudflare/workers-types for the Worker; a blanket include would put both in the same
+    // program, where their `fetch` and `URL` declarations conflict. Each file that needs one
+    // asks with a triple-slash reference.
+    "types": [],
+
+    "jsx": "react-jsx",
+
+    // DOM is here for `apps/web`. It does mean `packages/engine` can now *see* `fetch` and
+    // `WebSocket`, which is why eslint.config.js bans them there by name — TypeScript's lib is
+    // a whole-program setting, so the engine's purity boundary is the lint rule, not the lib.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/test/**/*.ts",
+    "apps/*/src/**/*.ts",
+    "apps/*/src/**/*.tsx",
+    "apps/*/test/**/*.ts",
+    "apps/*/test/**/*.tsx",
+    "*.config.ts"
+  ]
+}
