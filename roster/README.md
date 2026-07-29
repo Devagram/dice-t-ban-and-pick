@@ -58,22 +58,46 @@ Append to the array, bump the version:
 
 IDs are lowercase kebab-case slugs. Keep them readable — you will be reading them in raw event logs.
 
-## Replacing the placeholders wholesale
+## ~~Replacing the placeholders wholesale~~ — **spent, 2026-07-28**
 
-Since no real matches have been played yet, there are no logs to preserve. Delete all ten, add yours, reset `rosterVersion` to a fresh date. Do this **before** the first real match; after that, rule 2 applies and the escape hatch is gone.
+The ten placeholders are gone. `rosterVersion` is now `2026.07.28-3` and the roster holds **44**
+Dice Throne heroes — the 40 released, plus Vanguard's four (see below).
+
+**The escape hatch is closed.** From here, rule 2 applies without exception: retire, never
+delete, and never reuse an id.
+
+### Sources
+
+Compiled 2026-07-28 from the publisher and secondary sources rather than from memory, because
+an id is permanent and a wrong one is unrecoverable:
+
+- Season One and Season Two, and the Marvel eight — [Complete Dice Throne Buyer's Guide](https://www.geeksundergrace.com/tabletop/the-complete-dice-throne-buyers-guide/), corroborated by [Wikipedia](https://en.wikipedia.org/wiki/Dice_Throne)
+- X-Men, both boxes — [Marvel X-Men Dice Throne Box 1](https://theop.games/products/marvel-x-men-dice-throne-box-1-iceman-psylocke-storm-wolverine) and the [Battle Chest](https://shop.dicethrone.com/products/marvel-x-men-dice-throne-battle-chest)
+- Outcasts, with the publisher's own flavour text — [Outcasts Strongbox](https://shop.dicethrone.com/products/outcasts-strongbox-retail-edition)
+
+- Vanguard — Forgemaster, Duelist, Druid, Sun Elf — [Vanguard Single Heroes](https://shop.dicethrone.com/products/vanguard-single-heroes-minimalist-strongbox) and the [Dice Throne Wiki](https://dice-throne.fandom.com/wiki/Forgemaster). "Forgemaster" is one word in both
+
+### Vanguard is included, and it has not shipped yet
+
+Vanguard releases [August 2026](https://boardgamegeek.com/boardgame/453942/dice-throne-vanguard) — after this roster was written. Its four heroes are `ACTIVE` anyway, which means they are draftable today.
+
+That is deliberate, and it needs no new machinery: **a host who does not own Vanguard yet puts those four on the global ban list.** D5 exists for precisely this — "a host saying 'not tonight' is genuinely useful in casual play" — and "we have not bought that box" is the same sentence.
+
+The alternative would have been a third `status` beyond `ACTIVE` and `RETIRED`. It was not worth it: `RETIRED` means *was* draftable and is the wrong word, and a new state would ripple through the engine, the wire types, and the schema to express something the ban list already says.
 
 ---
 
 ## A note on size
 
-**Target is ~75 characters.** The ten here are placeholders.
+**The roster is 44.** That is what exists, not a target — and it is materially better for
+`bring-ban1` than the ~75 the spec was braced for.
 
 Roster size is a balance input, and it cuts both ways.
 
-**Too small** and drafting is not private. The §13 floor is `|activeRoster| - |globalBans| >= draftCount + 1`, which is **5** under D22 (4 drafted slots). That is a correctness bound, not a playability one — at 5, each seat drafts 4 of 5 and holdings are effectively public before any reveal.
+**Too small** and drafting is not private. The §13 floor is `|activeRoster| - |globalBans| >= draftCount + 1`, which is **5** under D22 (4 drafted slots). That is a correctness bound, not a playability one — at 5, each seat drafts 4 of 5 and holdings are effectively public before any reveal. At 44 there is no concern here at all, though a host with a long ban list can still walk into it, which is why the lobby re-checks.
 
-**Too large and the meta ban goes blind.** At 75 characters and 4 picks, the chance a named character sits in an opponent's draft is `4/75 ≈ 5.3%`. A `bring-ban1` meta ban whiffs roughly nineteen times in twenty under uniform drafting.
+**Too large and the meta ban goes blind.** At **44** characters and 4 picks, the chance a named character sits in an opponent's draft is `4/44 ≈ 9.1%` — still roughly **twice** the 5.3% the spec assumed at 75. The ban misses about nine times in ten against a stranger, so the mode is meaningfully less blind than O6 feared.
 
-That is survivable for the actual use case. Friends do not draft uniformly — they draft favourites, and you know theirs. The ban becomes a read on the _person_ rather than the _draft_, which is a legitimate mode and arguably a better one for casual play. It is just not what the spec's §9.2 copy currently describes. See open item O6.
+That is comfortably survivable for the actual use case. Friends do not draft uniformly — they draft favourites, and you know theirs. The ban is a read on the _person_ rather than the _draft_, which is a legitimate mode and arguably a better one for casual play. See open item O6.
 
-**Do not compensate with more bans.** Two bans reach about 10.4%; a coin flip would need roughly 15.
+**Do not compensate with more bans.** Two bans reach about 17.5%; a coin flip would still need eight.

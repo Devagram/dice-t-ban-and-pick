@@ -22,8 +22,8 @@
     "dev": "wrangler dev --config apps/worker/wrangler.jsonc --port 8787",
     "deploy": "npm run build && wrangler deploy --config apps/worker/wrangler.jsonc",
     "test": "vitest run",
-    "coverage": "vitest run --coverage",
-    "check": "npm run typecheck && npm run lint && npm run boundaries && npm run coverage"
+    "coverage": "vitest run --project=packages --coverage",
+    "check": "npm run typecheck && npm run lint && npm run boundaries && npm run test && npm run coverage"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.19.0",
@@ -43,5 +43,6 @@
     "vitest": "^4.1.10",
     "wrangler": "^4.115.0"
   },
-  "comment:typescript": "Pinned below 7 deliberately: typescript-eslint 8.x declares peer typescript >=4.8.4 <6.1.0, and the no-IO lint rule on packages/engine is a CI check we do not get to lose."
+  "comment:typescript": "Pinned below 7 deliberately: typescript-eslint 8.x declares peer typescript >=4.8.4 <6.1.0, and the no-IO lint rule on packages/engine is a CI check we do not get to lose.",
+  "comment:coverage": "`test` and `coverage` are separate steps in `check` on purpose. Enabling coverage makes @cloudflare/vitest-pool-workers run ZERO tests for the worker project — it does not warn, it reports 'no tests' — so a combined `vitest run --coverage` silently skipped all 48 worker tests, which are the Phase 3 exit criteria. `test` runs every project; `coverage` is scoped to packages, the only place the v8 provider can measure anything."
 }

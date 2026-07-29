@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { canonicalRuleset, rulesetHash, sha256Hex, variantFor } from '@banpick/loader'
 import type { Ruleset } from '@banpick/types'
 
-import { loadShipped, ROSTER_10 } from './helpers.js'
+import { loadShipped, GAME_ROSTER } from './helpers.js'
 
 /**
  * D20 — `modeContentHash`, and the canonical serialization it rests on.
@@ -92,10 +92,18 @@ describe('modeContentHash (D20)', () => {
 })
 
 describe('canonical ruleset serialization', () => {
+  /**
+   * Every field is a literal, including `rosterVersion` and the ban ids.
+   *
+   * A golden hash pinned against live game data is not a golden hash — adding a character to
+   * the roster would "fail" this test for a reason that has nothing to do with serialization,
+   * and the only available fix would be to re-pin, which is how a golden test quietly stops
+   * meaning anything. The ids below are deliberately not real characters.
+   */
   const ruleset = (over: Partial<Ruleset> = {}): Ruleset => ({
     modeId: 'base',
     parameters: { draftCount: 4 },
-    rosterVersion: ROSTER_10.rosterVersion,
+    rosterVersion: '2026.07.28-1',
     globalBanned: ['oracle', 'anvil', 'vagrant'],
     constraints: { crossSeatMirrors: 'ALLOWED', selfDuplicates: 'FORBIDDEN' },
     onTie: { scoring: 'HALF_POINT', consumesCharacters: true },
@@ -164,7 +172,7 @@ function loadModeWith(find: string, replace: string) {
   if (!source.includes(find)) {
     throw new Error(`hash fixture: '${find}' is not in modes/base.yaml — it has drifted`)
   }
-  return loadModeFromSource(source.replace(find, replace), 'base', { roster: ROSTER_10 })
+  return loadModeFromSource(source.replace(find, replace), 'base', { roster: GAME_ROSTER })
 }
 
 /**

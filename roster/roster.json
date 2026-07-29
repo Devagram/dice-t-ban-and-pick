@@ -1,65 +1,269 @@
 {
-  "$comment": "Placeholder roster. See roster/README.md before editing. IDs are permanent; never delete a character, retire it.",
-  "rosterVersion": "2026.07.28-1",
+  "$comment": "The Dice Throne hero roster. See roster/README.md before editing: ids are permanent identity, never reuse one, and retire rather than delete. Sources are listed in the README. Includes the four Vanguard heroes, which release August 2026 — a host who does not own them yet can put them on the global ban list (D5), which is exactly what that mechanism is for.",
+  "rosterVersion": "2026.07.28-3",
   "characters": [
     {
-      "id": "anvil",
-      "name": "The Anvil",
-      "blurb": "Placeholder. Absorbs pressure and gives ground slowly.",
+      "id": "barbarian",
+      "name": "Barbarian",
+      "blurb": "Dice Throne Season One.",
       "status": "ACTIVE"
     },
     {
-      "id": "cartographer",
-      "name": "The Cartographer",
-      "blurb": "Placeholder. Trades early tempo for board knowledge.",
+      "id": "moon-elf",
+      "name": "Moon Elf",
+      "blurb": "Dice Throne Season One.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "pyromancer",
+      "name": "Pyromancer",
+      "blurb": "Dice Throne Season One.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "monk",
+      "name": "Monk",
+      "blurb": "Dice Throne Season One.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "paladin",
+      "name": "Paladin",
+      "blurb": "Dice Throne Season One.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "shadow-thief",
+      "name": "Shadow Thief",
+      "blurb": "Dice Throne Season One.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "ninja",
+      "name": "Ninja",
+      "blurb": "Dice Throne Season One.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "treant",
+      "name": "Treant",
+      "blurb": "Dice Throne Season One.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "gunslinger",
+      "name": "Gunslinger",
+      "blurb": "Dice Throne Season Two.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "samurai",
+      "name": "Samurai",
+      "blurb": "Dice Throne Season Two.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "tactician",
+      "name": "Tactician",
+      "blurb": "Dice Throne Season Two.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "huntress",
+      "name": "Huntress",
+      "blurb": "Dice Throne Season Two.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "cursed-pirate",
+      "name": "Cursed Pirate",
+      "blurb": "Dice Throne Season Two.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "artificer",
+      "name": "Artificer",
+      "blurb": "Dice Throne Season Two.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "seraph",
+      "name": "Seraph",
+      "blurb": "Dice Throne Season Two.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "vampire-lord",
+      "name": "Vampire Lord",
+      "blurb": "Dice Throne Season Two.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "black-panther",
+      "name": "Black Panther",
+      "blurb": "Dice Throne Marvel.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "captain-marvel",
+      "name": "Captain Marvel",
+      "blurb": "Dice Throne Marvel.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "doctor-strange",
+      "name": "Doctor Strange",
+      "blurb": "Dice Throne Marvel.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "scarlet-witch",
+      "name": "Scarlet Witch",
+      "blurb": "Dice Throne Marvel.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "black-widow",
+      "name": "Black Widow",
+      "blurb": "Dice Throne Marvel.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "loki",
+      "name": "Loki",
+      "blurb": "Dice Throne Marvel.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "thor",
+      "name": "Thor",
+      "blurb": "Dice Throne Marvel.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "miles-morales",
+      "name": "Spider-Man (Miles Morales)",
+      "blurb": "Dice Throne Marvel.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "wolverine",
+      "name": "Wolverine",
+      "blurb": "Dice Throne X-Men.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "iceman",
+      "name": "Iceman",
+      "blurb": "Dice Throne X-Men.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "psylocke",
+      "name": "Psylocke",
+      "blurb": "Dice Throne X-Men.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "storm",
+      "name": "Storm",
+      "blurb": "Dice Throne X-Men.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "cyclops",
+      "name": "Cyclops",
+      "blurb": "Dice Throne X-Men.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "gambit",
+      "name": "Gambit",
+      "blurb": "Dice Throne X-Men.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "rogue",
+      "name": "Rogue",
+      "blurb": "Dice Throne X-Men.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "jean-grey",
+      "name": "Jean Grey",
+      "blurb": "Dice Throne X-Men.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "pale-lady",
+      "name": "Pale Lady",
+      "blurb": "Outcasts. Corners opponents by cunning manipulation, then turns savage in Werewolf form.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "raveness",
+      "name": "Raveness",
+      "blurb": "Outcasts. Swoops in with her raven Nevermore, on tell-tale tormenting tactics.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "headless-horseman",
+      "name": "Headless Horseman",
+      "blurb": "Outcasts. Terrorises with his haunted head, thundering hooves and swinging axes.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "necromancer",
+      "name": "Necromancer",
+      "blurb": "Outcasts. Summons Skeletal Warriors, Skeletal Mages and Bone Golems.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "santa",
+      "name": "Santa",
+      "blurb": "Dice Throne Santa vs Krampus.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "krampus",
+      "name": "Krampus",
+      "blurb": "Dice Throne Santa vs Krampus.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "alchemist",
+      "name": "Alchemist",
+      "blurb": "Dice Throne standalone.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "deadpool",
+      "name": "Deadpool",
+      "blurb": "Dice Throne standalone.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "forgemaster",
+      "name": "Forgemaster",
+      "blurb": "Dice Throne Vanguard.",
       "status": "ACTIVE"
     },
     {
       "id": "duelist",
-      "name": "The Duelist",
-      "blurb": "Placeholder. High variance, decides rounds quickly.",
+      "name": "Duelist",
+      "blurb": "Dice Throne Vanguard.",
       "status": "ACTIVE"
     },
     {
-      "id": "gambler",
-      "name": "The Gambler",
-      "blurb": "Placeholder. Rewards risk, punishes hesitation.",
+      "id": "druid",
+      "name": "Druid",
+      "blurb": "Dice Throne Vanguard.",
       "status": "ACTIVE"
     },
     {
-      "id": "herald",
-      "name": "The Herald",
-      "blurb": "Placeholder. Strong opener, fades late.",
-      "status": "ACTIVE"
-    },
-    {
-      "id": "magpie",
-      "name": "The Magpie",
-      "blurb": "Placeholder. Takes what the opponent leaves behind.",
-      "status": "ACTIVE"
-    },
-    {
-      "id": "oracle",
-      "name": "The Oracle",
-      "blurb": "Placeholder. Information over force.",
-      "status": "ACTIVE"
-    },
-    {
-      "id": "sentinel",
-      "name": "The Sentinel",
-      "blurb": "Placeholder. Denies options rather than creating them.",
-      "status": "ACTIVE"
-    },
-    {
-      "id": "tinker",
-      "name": "The Tinker",
-      "blurb": "Placeholder. Slow build, compounding advantage.",
-      "status": "ACTIVE"
-    },
-    {
-      "id": "vagrant",
-      "name": "The Vagrant",
-      "blurb": "Placeholder. No strong suit, no weak one either.",
+      "id": "sun-elf",
+      "name": "Sun Elf",
+      "blurb": "Dice Throne Vanguard.",
       "status": "ACTIVE"
     }
   ]

@@ -35,5 +35,10 @@ jobs:
       - name: Package boundary
         run: npm run boundaries
 
-      - name: Tests and coverage thresholds
+      # Two steps, not one. Coverage makes the Workers pool run zero tests — see the
+      # `comment:coverage` note in package.json.
+      - name: Tests (Node, workerd, and happy-dom)
+        run: npm test
+
+      - name: Coverage thresholds (packages only)
         run: npm run coverage

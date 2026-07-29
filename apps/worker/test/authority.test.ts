@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { env, runInDurableObject } from 'cloudflare:test'
 import type { EventEnvelope } from '@banpick/types'
 
-import { materialize, playToCompletion, seatedMatch } from './client.js'
+import { ids, materialize, playToCompletion, seatedMatch } from './client.js'
 import type { TestClient } from './client.js'
 
 /**
@@ -72,23 +72,27 @@ describe('redaction, asserted on the real frame off the wire (§7)', () => {
   it("A's frames never contain B's picks before gate two", async () => {
     const { a, b } = await seatedMatch({ modeId: 'bring-ban1', draftCount: 4 })
 
-    // Explicit, disjoint drafts. Letting both seats take the first legal option would make the
-    // two sides identical, and then B's *ban* — public at gate one — would coincide with one of
-    // B's *picks*, so the leak detector would fire on something that is legitimately visible.
-    const bPicks = ['herald', 'magpie', 'oracle', 'sentinel']
+    // Disjoint drafts, taken from the live roster rather than hardcoded. Letting both seats take
+    // the first legal option would make the two sides identical, and then B's *ban* — public at
+    // gate one — would coincide with one of B's *picks*, so the leak detector would fire on
+    // something that is legitimately visible.
+    const aPicks = await ids(0, 4)
+    const bPicks = await ids(4, 4)
+    const missesA = (await ids(8, 1))[0]!
+
     await a.act({
       type: 'COMMIT',
       moduleId: 'draft',
       seat: 'A',
-      picks: ['anvil', 'cartographer', 'duelist', 'gambler'],
-      metaBan: 'herald', // hits B, so the repick holds gate two open
+      picks: aPicks,
+      metaBan: bPicks[0]!, // hits B, so the repick holds gate two open
     })
     await b.act({
       type: 'COMMIT',
       moduleId: 'draft',
       seat: 'B',
       picks: bPicks,
-      metaBan: 'vagrant', // misses A
+      metaBan: missesA,
     })
 
     const bBan = b.view.you.metaBanPlaced!

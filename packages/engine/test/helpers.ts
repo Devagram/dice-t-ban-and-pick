@@ -23,7 +23,9 @@ import {
   type Seat,
 } from '@banpick/types'
 
-import rosterJson from '../../../roster/roster.json' with { type: 'json' }
+// The engine's own fixture, not the game roster. Rules are not roster data: a test that
+// breaks when a character is added is testing the wrong thing.
+import rosterJson from './fixtures/roster.json' with { type: 'json' }
 import roster75Json from '../../../roster/roster.75.fixture.json' with { type: 'json' }
 
 export const ROSTER_10 = rosterJson as Roster

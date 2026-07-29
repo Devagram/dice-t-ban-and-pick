@@ -5,6 +5,7 @@ import { SELF } from 'cloudflare:test'
 
 import {
   createMatch,
+  roster,
   materialize,
   playToCompletion,
   preview,
@@ -83,7 +84,8 @@ describe('a full match over WebSocket', () => {
 
 describe('the lobby (§12)', () => {
   it('renders the whole ruleset before a seat is taken — seating is the consent', async () => {
-    const { roomCode } = await createMatch({ draftCount: 3, globalBanned: ['anvil'] })
+    const banned = (await roster())[0]!
+    const { roomCode } = await createMatch({ draftCount: 3, globalBanned: [banned.id] })
     const lobby = await preview(roomCode)
 
     expect(lobby.status).toBe('LOBBY')
@@ -94,7 +96,7 @@ describe('the lobby (§12)', () => {
     expect(lobby.ruleset.onTie.scoring).toBe('HALF_POINT')
     expect(lobby.ruleset.match.resolution).toBe('ALWAYS_3_ROUNDS')
     // Bans are resolved to characters so the client never has to look one up by id.
-    expect(lobby.globalBannedCharacters.map((c) => c.name)).toEqual(['The Anvil'])
+    expect(lobby.globalBannedCharacters.map((c) => c.name)).toEqual([banned.name])
     expect(lobby.seatsAvailable).toEqual(['A', 'B'])
   })
 
@@ -150,14 +152,17 @@ describe('the host cannot ban a match into unplayability (Phase 2 finding F4)', 
     // The loader validates the roster alone supports the mode, but `globalBanned` is empty at
     // load time — the host has not chosen yet. This is the only place the real number is known,
     // and it has to be caught before a joiner consents by sitting down.
+    // Ban everything but four, whatever the roster size happens to be — drafting 4 with a meta
+    // ban needs 5. Computed rather than hardcoded so this keeps testing the *rule* as the game
+    // gains heroes, instead of quietly becoming a test that bans a fixed six of forty.
+    const all = (await roster()).map((c) => c.id)
     const response = await SELF.fetch('https://example.com/api/match', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         modeId: 'base',
         parameters: { draftCount: 4 },
-        // 10 characters minus 6 leaves 4, and drafting 4 with a meta ban needs 5.
-        globalBanned: ['anvil', 'cartographer', 'duelist', 'gambler', 'herald', 'magpie'],
+        globalBanned: all.slice(0, all.length - 4),
       }),
     })
 
@@ -167,11 +172,13 @@ describe('the host cannot ban a match into unplayability (Phase 2 finding F4)', 
     expect(body.detail).toContain('needs at least 5')
   })
 
-  it('allows a ban list that still clears the floor', async () => {
-    const { roomCode } = await createMatch({
-      globalBanned: ['anvil', 'cartographer', 'duelist', 'gambler', 'herald'],
-    })
-    expect((await preview(roomCode)).ruleset.globalBanned).toHaveLength(5)
+  it('allows a ban list that stops exactly one short of the floor', async () => {
+    // One fewer ban leaves five, which is exactly `draftCount + 1`. The boundary is the
+    // interesting case: off-by-one here would either block legal matches or allow unplayable
+    // ones, and both fail in front of two people who have already sat down.
+    const all = (await roster()).map((c) => c.id)
+    const { roomCode } = await createMatch({ globalBanned: all.slice(0, all.length - 5) })
+    expect((await preview(roomCode)).ruleset.globalBanned).toHaveLength(all.length - 5)
   })
 
   it('refuses parameters no variant was validated for (D25)', async () => {

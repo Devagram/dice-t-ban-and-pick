@@ -8,7 +8,7 @@ import {
 } from '@banpick/loader'
 import type { MatchRule, OvertimeRule, Roster, TieRule } from '@banpick/types'
 
-import { loadShipped, modeSource, mutate, removeModule, ROSTER_10 } from './helpers.js'
+import { loadShipped, modeSource, mutate, removeModule, GAME_ROSTER } from './helpers.js'
 
 /**
  * The failure fixture suite.
@@ -22,7 +22,11 @@ import { loadShipped, modeSource, mutate, removeModule, ROSTER_10 } from './help
  * naming the rule it broke — never at 1.5–1.5 in front of two players.
  */
 
-function expectLoadFailure(source: string, ref: string, roster: Roster = ROSTER_10): ModeLoadError {
+function expectLoadFailure(
+  source: string,
+  ref: string,
+  roster: Roster = GAME_ROSTER,
+): ModeLoadError {
   try {
     loadModeFromSource(source, ref, { roster })
   } catch (e) {
@@ -113,7 +117,7 @@ describe('ROSTER_VIABILITY', () => {
     // characters (D12) and has one denied to it. At draftCount 4 that is 5.
     const tiny: Roster = {
       rosterVersion: '2026.01.01-1',
-      characters: ROSTER_10.characters.slice(0, 4),
+      characters: GAME_ROSTER.characters.slice(0, 4),
     }
     const error = expectLoadFailure(modeSource('base'), 'modes/base.yaml', tiny)
     expect(error.has('ROSTER_VIABILITY')).toBe(true)
@@ -125,7 +129,7 @@ describe('ROSTER_VIABILITY', () => {
     // checks the binding case for *every* value rather than assuming the default is worst.
     const five: Roster = {
       rosterVersion: '2026.01.01-1',
-      characters: ROSTER_10.characters.slice(0, 5),
+      characters: GAME_ROSTER.characters.slice(0, 5),
     }
     expect(() => loadModeFromSource(modeSource('base'), 'base', { roster: five })).not.toThrow()
   })
@@ -197,7 +201,7 @@ describe('PARAMETER_SPACE', () => {
     // D25's validator exists to catch.
     const four: Roster = {
       rosterVersion: '2026.01.01-1',
-      characters: ROSTER_10.characters.slice(0, 4),
+      characters: GAME_ROSTER.characters.slice(0, 4),
     }
     const error = expectLoadFailure(modeSource('base'), 'modes/base.yaml', four)
     expect(error.has('ROSTER_VIABILITY')).toBe(true)

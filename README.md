@@ -49,6 +49,22 @@ npx wrangler login   # once, opens a browser
 npm run deploy       # builds the client, then one deploy for both halves
 ```
 
+### From Cloudflare Workers Builds (git integration)
+
+The wrangler config lives in `apps/worker/`, not the repo root, so the deploy command **must**
+name it. A bare `npx wrangler deploy` fails with _"The Cloudflare application detection logic
+has been run in the root of a workspace"_ — wrangler sees an npm workspace root with no project
+in it and refuses to guess.
+
+| Setting        | Value                                                     |
+| -------------- | --------------------------------------------------------- |
+| Root directory | `/` (the repo root — the build needs the workspace)       |
+| Build command  | `npm run build`                                           |
+| Deploy command | `npx wrangler deploy --config apps/worker/wrangler.jsonc` |
+
+Root directory stays at `/` because `npm run build` builds `apps/web` through the workspace;
+pointing it at `apps/worker` would put the install and the build in the wrong place.
+
 That prints `https://banpick.<your-subdomain>.workers.dev`. The Durable Object and its SQLite
 storage are declared in [wrangler.jsonc](apps/worker/wrangler.jsonc) and provisioned by the
 `v1` migration on first deploy — there is nothing to click in the dashboard.

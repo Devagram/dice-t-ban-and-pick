@@ -12,7 +12,14 @@ import { loadModeFromSource, type LoadedMode, type LoadOptions } from '@banpick/
 const repoFile = (relative: string): string =>
   readFileSync(fileURLToPath(new URL(`../../../${relative}`, import.meta.url)), 'utf8')
 
-export const ROSTER_10 = JSON.parse(repoFile('roster/roster.json')) as Roster
+/**
+ * The **real** game roster, on purpose.
+ *
+ * The engine keeps its own fixture, because rules are not roster data. The loader is the
+ * opposite case: §13 roster viability is a claim about the actual shipped roster, so a test
+ * that used a fixture would prove nothing about whether the game can be played.
+ */
+export const GAME_ROSTER = JSON.parse(repoFile('roster/roster.json')) as Roster
 export const ROSTER_75 = JSON.parse(repoFile('roster/roster.75.fixture.json')) as Roster
 
 export function modeSource(name: string): string {
@@ -22,7 +29,7 @@ export function modeSource(name: string): string {
 /** Loads a shipped mode from `modes/`, against the placeholder roster unless told otherwise. */
 export function loadShipped(name: string, opts?: Partial<LoadOptions>): LoadedMode {
   return loadModeFromSource(modeSource(name), `modes/${name}.yaml`, {
-    roster: opts?.roster ?? ROSTER_10,
+    roster: opts?.roster ?? GAME_ROSTER,
   })
 }
 

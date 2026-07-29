@@ -20,7 +20,7 @@ import {
   type Seat,
 } from '@banpick/types'
 
-import { loadShipped, ROSTER_10, ROSTER_75 } from './helpers.js'
+import { loadShipped, GAME_ROSTER, ROSTER_75 } from './helpers.js'
 
 /**
  * The whole path, end to end: **YAML file → validated mode → a played match → a replay.**
@@ -47,7 +47,7 @@ function rulesetFor(loaded: ReturnType<typeof loadShipped>, draftCount: 3 | 4, r
 }
 
 /** Creates and seats a match from a loaded mode, exactly as the Durable Object will in Phase 3. */
-function startFromYaml(name: string, draftCount: 3 | 4, roster: Roster = ROSTER_10): MatchState {
+function startFromYaml(name: string, draftCount: 3 | 4, roster: Roster = GAME_ROSTER): MatchState {
   const { variant, ruleset } = rulesetFor(loadShipped(name, { roster }), draftCount, roster)
 
   let state = ok(
@@ -210,7 +210,7 @@ describe('a mode file plays a match', () => {
 
 describe('the lobby sees what it is consenting to (§12.3)', () => {
   it('renders the mode, its parameters, and the tie rule before a seat is taken', () => {
-    const roster = ROSTER_10
+    const roster = GAME_ROSTER
     const { variant, ruleset } = rulesetFor(loadShipped('base'), 3, roster)
 
     const state = ok(

@@ -3,6 +3,7 @@
 import { SELF } from 'cloudflare:test'
 import type {
   Action,
+  Character,
   ClaimSeatResponse,
   ClientMessage,
   CreateMatchResponse,
@@ -226,6 +227,24 @@ export async function createMatch(opts: CreateOptions = {}): Promise<CreateMatch
   })
   if (!response.ok) throw new Error(`create failed: ${response.status} ${await response.text()}`)
   return (await response.json()) as CreateMatchResponse
+}
+
+/**
+ * The roster the Worker actually serves.
+ *
+ * Tests derive character ids from this rather than hardcoding them, so adding a hero to the
+ * game does not break the transport tests — which are about frames and races, not about who is
+ * in the box.
+ */
+export async function roster(): Promise<Character[]> {
+  const response = await SELF.fetch('https://example.com/api/roster')
+  if (!response.ok) throw new Error(`roster failed: ${response.status}`)
+  return ((await response.json()) as { characters: Character[] }).characters
+}
+
+/** `count` character ids starting at `from`, so two seats can be given disjoint drafts. */
+export async function ids(from: number, count: number): Promise<string[]> {
+  return (await roster()).slice(from, from + count).map((c) => c.id)
 }
 
 export async function preview(roomCode: string): Promise<LobbyPreview> {

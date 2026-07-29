@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { canonicalJson } from '@banpick/types'
 
-import { loadShipped, ROSTER_10 } from './helpers.js'
+import { loadShipped, GAME_ROSTER } from './helpers.js'
 
 /**
  * Generates the worker's bundled modes, and fails if they have drifted.
@@ -33,7 +33,7 @@ describe('generated worker modes', () => {
           'GENERATED — do not edit. Produced by packages/loader/test/generate-modes.test.ts ' +
           'from modes/*.yaml. Regenerate with `npm run build:modes`. Every mode here has ' +
           'passed all six §13 validators at every declared parameter combination (D25).',
-        rosterVersion: ROSTER_10.rosterVersion,
+        rosterVersion: GAME_ROSTER.rosterVersion,
         modes: bundle,
       },
       null,
