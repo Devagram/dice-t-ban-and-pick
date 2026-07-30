@@ -38,7 +38,18 @@ export interface RoundView {
   index: RoundIdx
   privilegeHolder: Seat | null
   turnOrderHolder: Seat | null
-  roll: { results: Record<Seat, number>; winner: Seat; attempts: number } | null
+  /**
+   * Every throw, so the client can play the reroll out rather than summarising it.
+   *
+   * Public in full: the roll is server-authored and already decided by the time any seat sees
+   * it, so there is nothing here to hide from anyone. The animation is a *reveal*, not a roll.
+   */
+  roll: {
+    results: Record<Seat, number>
+    winner: Seat
+    attempts: number
+    throws: Record<Seat, number>[]
+  } | null
   ban: { by: Seat; target: { seat: Seat; slotIndex: SlotIdx } } | null
   /** Keys absent while a selection is sealed (round 2's simultaneous hidden pick). */
   selection: Partial<Record<Seat, SlotIdx | null>>

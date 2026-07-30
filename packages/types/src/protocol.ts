@@ -29,6 +29,24 @@ export type ClientMessage =
   | { type: 'ACTION'; idempotencyKey: string; payload: PlayerActionPayload }
   /** Ask for a fresh frame. Reconnect does this automatically; this is for a client that drifts. */
   | { type: 'RESYNC' }
+  /**
+   * "I have filled `filled` of `of` slots so far." Relayed to the opponent so a hidden draft
+   * shows progress instead of a blank wait.
+   *
+   * **A count and nothing else — never which characters.** During a `SIMULTANEOUS_COMMIT` the
+   * picks are sealed (§7) and the whole point of the seal is that the opponent learns nothing
+   * about their content. A progress ping that named a character would defeat the mode.
+   *
+   * The server genuinely does not know this otherwise: a draft is *one* `COMMIT` carrying all
+   * picks at once, so until it arrives there is nothing on the server to report. That is why
+   * the client has to say so.
+   *
+   * It is **not** an event and never reaches the log. It is unverifiable — a client could lie
+   * about its own progress — and that is acceptable precisely because it decides nothing. §1's
+   * trust model grants friendly opponents, and the worst a liar achieves is a wrong progress
+   * bar.
+   */
+  | { type: 'PROGRESS'; filled: number; of: number }
 
 export type ServerMessage =
   /**
@@ -40,6 +58,15 @@ export type ServerMessage =
   | { type: 'REJECTED'; idempotencyKey: string; code: RejectionCode; detail: string }
   /** A protocol-level problem: malformed frame, rate limit, unknown message. */
   | { type: 'ERROR'; code: ProtocolErrorCode; detail: string }
+  /**
+   * The opponent's self-reported progress through a hidden commit. Cosmetic, ephemeral, and
+   * carries a count only — see the `PROGRESS` client message for why it exists and why it is
+   * safe.
+   *
+   * `seat` is whose progress this is, decided by the server from the sender's token rather than
+   * taken from the message.
+   */
+  | { type: 'OPPONENT_PROGRESS'; seat: Seat; filled: number; of: number }
 
 export type ProtocolErrorCode =
   'MALFORMED' | 'RATE_LIMITED' | 'UNKNOWN_MESSAGE' | 'NOT_YOUR_SEAT' | 'UNAUTHENTICATED'

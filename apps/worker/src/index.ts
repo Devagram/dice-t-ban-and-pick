@@ -68,7 +68,17 @@ export default {
  * has to exist before there is an object to ask for one.
  */
 async function createMatch(request: Request, env: Env, url: URL): Promise<Response> {
-  const body = await request.text()
+  // Parsed here rather than in the DO because this is where the room code is merged in — and a
+  // body that will not parse must fail as a 400 before a DO is ever addressed, not as an
+  // unhandled throw halfway through allocating one.
+  let body: object
+  try {
+    const parsed: unknown = JSON.parse(await request.text())
+    if (typeof parsed !== 'object' || parsed === null) throw new Error('not an object')
+    body = parsed
+  } catch {
+    return json({ error: 'MALFORMED_BODY', detail: 'body must be a JSON object' }, 400)
+  }
 
   // A collision would land on a match that already exists, which the DO rejects with 409. Six
   // characters from a 30-symbol alphabet is ~7×10^8 codes; at this scale retrying twice is
@@ -79,7 +89,7 @@ async function createMatch(request: Request, env: Env, url: URL): Promise<Respon
       new Request(`${url.origin}/create`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...(JSON.parse(body) as object), roomCode }),
+        body: JSON.stringify({ ...body, roomCode }),
       }),
     )
 

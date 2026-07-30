@@ -1,6 +1,6 @@
 {
-  "$comment": "The Dice Throne hero roster. See roster/README.md before editing: ids are permanent identity, never reuse one, and retire rather than delete. Sources are listed in the README. Includes the four Vanguard heroes, which release August 2026 — a host who does not own them yet can put them on the global ban list (D5), which is exactly what that mechanism is for.",
-  "rosterVersion": "2026.07.28-3",
+  "$comment": "The Dice Throne hero roster, 45 heroes. See roster/README.md before editing: ids are permanent identity, never reuse one, and retire rather than delete. Cross-checked against the publisher hero index at https://dicethrone.com/heroes/ — 44 of these appear there; Deadpool does not, though it is a playable hero from the X-Men/Missions campaign.",
+  "rosterVersion": "2026.07.29-1",
   "characters": [
     {
       "id": "barbarian",
@@ -234,6 +234,12 @@
       "id": "alchemist",
       "name": "Alchemist",
       "blurb": "Dice Throne standalone.",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "mystic-brawler",
+      "name": "Mystic Brawler",
+      "blurb": "Dice Throne Hero Pack.",
       "status": "ACTIVE"
     },
     {

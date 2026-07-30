@@ -4,6 +4,8 @@ import type { PlayerActionPayload, PlayerView, SlotIdx } from '@banpick/types'
 import { RESUME_LINK_WARNING, WAITING_NOTE } from '../copy.js'
 import { connect, type Transport, type TransportState } from '../transport.js'
 import { ActionBar, slotTargets } from '../components/ActionBar.js'
+import { DiceRoll } from '../components/DiceRoll.js'
+import { OpponentActivity } from '../components/OpponentActivity.js'
 import { DraftPanel, RecommitPanel } from '../components/DraftPanel.js'
 import { Outcome, RoundStrip } from '../components/RoundStrip.js'
 import { SlotRail } from '../components/SlotRail.js'
@@ -29,6 +31,7 @@ export function Match({
     view: null,
     rejection: null,
     error: null,
+    progress: null,
   })
   const [transport, setTransport] = useState<Transport | null>(null)
 
@@ -52,7 +55,14 @@ export function Match({
   return (
     <main className="screen">
       <ConnectionBanner status={state.status} />
-      <MatchBody view={state.view} onAct={act} roomCode={roomCode} seatToken={seatToken} />
+      <MatchBody
+        view={state.view}
+        onAct={act}
+        onProgress={(filled, of) => transport?.reportProgress(filled, of)}
+        progress={state.progress}
+        roomCode={roomCode}
+        seatToken={seatToken}
+      />
       {state.rejection ? (
         <p className="alert" role="alert">
           That did not go through: {state.rejection.detail}
@@ -70,17 +80,29 @@ export function Match({
 function MatchBody({
   view,
   onAct,
+  onProgress,
+  progress,
   roomCode,
   seatToken,
 }: {
   view: PlayerView
   onAct: (payload: PlayerActionPayload) => void
+  onProgress: (filled: number, of: number) => void
+  progress: { filled: number; of: number } | null
   roomCode: string
   seatToken: string
 }) {
   const targets = useMemo(() => slotTargets(view), [view])
   const commit = view.legalActions.find((a) => a.type === 'COMMIT')
   const recommit = view.legalActions.find((a) => a.type === 'RECOMMIT')
+
+  // The round's roll, shown once per round. Keyed by round so the animation replays when a new
+  // round rolls and *not* when some unrelated frame arrives — a die that re-tumbles every time
+  // the opponent moves would be maddening.
+  const round = view.phase?.roundIndex ?? null
+  const roll = round !== null ? (view.rounds[round]?.roll ?? null) : null
+  const [rollSeen, setRollSeen] = useState<number | null>(null)
+  const rollPlaying = roll !== null && round !== null && rollSeen !== round
 
   // "Are we waiting on me?" is answered by the server: `awaiting` names the seats a module is
   // blocked on. The undo is excluded because it is a standing offer, not a turn.
@@ -98,10 +120,23 @@ function MatchBody({
       <Outcome view={view} />
       <RoundStrip view={view} />
 
-      {commit ? <DraftPanel view={view} commit={commit} onAct={onAct} /> : null}
-      {recommit ? <RecommitPanel view={view} recommit={recommit} onAct={onAct} /> : null}
+      {roll && round !== null ? (
+        <DiceRoll key={`roll-${round}`} view={view} roll={roll} onDone={() => setRollSeen(round)} />
+      ) : null}
 
-      {!commit && !recommit ? (
+      {/* The rest of the round waits for the dice to land. Showing the ban buttons under a
+          still-tumbling die would answer the question the animation is asking. */}
+      {rollPlaying ? null : (
+        <>
+          <OpponentActivity view={view} progress={progress} />
+          {commit ? (
+            <DraftPanel view={view} commit={commit} onAct={onAct} onProgress={onProgress} />
+          ) : null}
+          {recommit ? <RecommitPanel view={view} recommit={recommit} onAct={onAct} /> : null}
+        </>
+      )}
+
+      {rollPlaying || commit || recommit ? null : (
         <>
           {targets.ban ? (
             <p className="prompt__title">Ban one of their characters for this round</p>
@@ -151,7 +186,7 @@ function MatchBody({
             />
           </div>
         </>
-      ) : null}
+      )}
 
       <ActionBar view={view} onAct={onAct} />
 

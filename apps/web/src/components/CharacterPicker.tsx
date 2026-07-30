@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Character, CharId } from '@banpick/types'
 
 import { getFavourites, getRecents, toggleFavourite } from '../favourites.js'
+import { Portrait } from './Portrait.js'
 
 /**
  * Picking from ~75 characters.
@@ -115,35 +116,39 @@ export function CharacterPicker({
           {query ? `Nothing matches “${query}”.` : 'Nothing available here.'}
         </p>
       ) : (
-        <ul className="picker__list">
+        // A grid, not a list. At 45 characters a single column is a scroll marathon, and the
+        // art is the fastest way to find someone you already have in mind — people recognise a
+        // face long before they read a name. Columns come from `auto-fill`, so the count follows
+        // the viewport rather than a breakpoint.
+        <ul className="picker__grid">
           {visible.map((character) => {
             const isSelected = selected.includes(character.id)
+            const isFavourite = favourites.includes(character.id)
             return (
-              <li key={character.id}>
-                <div className={`card ${isSelected ? 'card--on' : ''}`}>
-                  <button
-                    type="button"
-                    className="card__body"
-                    aria-pressed={isSelected}
-                    onClick={() => onSelect(character.id)}
-                  >
-                    <span className="card__name">{character.name}</span>
-                    <span className="card__blurb">{character.blurb}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`card__fav ${favourites.includes(character.id) ? 'card__fav--on' : ''}`}
-                    aria-label={
-                      favourites.includes(character.id)
-                        ? `Remove ${character.name} from favourites`
-                        : `Add ${character.name} to favourites`
-                    }
-                    aria-pressed={favourites.includes(character.id)}
-                    onClick={() => setFavourites(toggleFavourite(character.id))}
-                  >
-                    ★
-                  </button>
-                </div>
+              <li key={character.id} className="tile-shell">
+                <button
+                  type="button"
+                  className={`tile ${isSelected ? 'tile--on' : ''}`}
+                  aria-pressed={isSelected}
+                  onClick={() => onSelect(character.id)}
+                  title={character.blurb}
+                >
+                  <Portrait character={character} size="card" />
+                  <span className="tile__name">{character.name}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`tile__fav ${isFavourite ? 'tile__fav--on' : ''}`}
+                  aria-label={
+                    isFavourite
+                      ? `Remove ${character.name} from favourites`
+                      : `Add ${character.name} to favourites`
+                  }
+                  aria-pressed={isFavourite}
+                  onClick={() => setFavourites(toggleFavourite(character.id))}
+                >
+                  ★
+                </button>
               </li>
             )
           })}

@@ -87,6 +87,18 @@ export type EventPayload =
       roundIndex: RoundIdx
       results: Record<Seat, number>
       attempts: number
+      /**
+       * Every throw, in order, including the ties that forced a reroll. The last entry always
+       * equals `results`.
+       *
+       * Recorded because a tie is the most interesting thing that can happen here — at 1d6 it
+       * is about one roll in six — and without it the client can only say "after 2 attempts"
+       * rather than showing the tie that caused it. That is a real moment to lose.
+       *
+       * It is also strictly more honest as a log: `onTie: REROLL` is a rule with observable
+       * consequences, and an event that records only the outcome hides how it was reached.
+       */
+      throws: Record<Seat, number>[]
       winner: Seat
       /** D11 — in round 2 the roll assigns TURN_ORDER directly, with no CHOOSE. */
       assigns: 'TURN_ORDER' | null

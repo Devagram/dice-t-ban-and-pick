@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Action, CharId, PlayerActionPayload, PlayerView } from '@banpick/types'
 
 import { META_BAN_HELP, META_BAN_PROMPT, SEALED_NOTE } from '../copy.js'
@@ -24,9 +24,11 @@ export interface DraftPanelProps {
   view: PlayerView
   commit: Extract<Action, { type: 'COMMIT' }>
   onAct: (payload: PlayerActionPayload) => void
+  /** Reports how many slots are filled, so the opponent sees movement rather than a blank wait. */
+  onProgress?: (filled: number, of: number) => void
 }
 
-export function DraftPanel({ view, commit, onAct }: DraftPanelProps) {
+export function DraftPanel({ view, commit, onAct, onProgress }: DraftPanelProps) {
   const [picks, setPicks] = useState<CharId[]>([])
   const [metaBan, setMetaBan] = useState<CharId | null>(null)
 
@@ -40,6 +42,18 @@ export function DraftPanel({ view, commit, onAct }: DraftPanelProps) {
   const currentPool = wantsPicks
     ? (commit.picks!.poolBySlot[Math.min(picks.length, commit.picks!.poolBySlot.length - 1)] ?? [])
     : []
+
+  /**
+   * Total decisions in this commit, so the opponent's bar counts the same things you do — a
+   * `bring-ban1` draft is four picks *and* a ban, and a bar that reached "4 of 4" while you were
+   * still choosing a ban would read as stalled rather than in progress.
+   */
+  const totalSteps = (wantsPicks ? commit.picks!.count : 0) + (wantsBan ? 1 : 0)
+  const doneSteps = picks.length + (metaBan ? 1 : 0)
+
+  useEffect(() => {
+    onProgress?.(doneSteps, totalSteps)
+  }, [doneSteps, totalSteps, onProgress])
 
   const submit = (): void => {
     if (wantsPicks) noteDrafted(picks)

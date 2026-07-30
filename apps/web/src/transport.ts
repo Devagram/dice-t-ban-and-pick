@@ -18,11 +18,20 @@ export interface TransportState {
   /** The last action the server refused, cleared when the next one is accepted. */
   rejection: { code: string; detail: string } | null
   error: { code: string; detail: string } | null
+  /**
+   * The opponent's self-reported progress through a hidden commit, or `null`.
+   *
+   * Cleared on every new view, because a state change means the count it described is stale —
+   * a bar left showing "2 of 4" after the draft resolved would be worse than showing nothing.
+   */
+  progress: { filled: number; of: number } | null
 }
 
 export interface Transport {
   send(payload: PlayerActionPayload): void
   resync(): void
+  /** Tells the opponent how far along you are. Cosmetic; carries a count and nothing else. */
+  reportProgress(filled: number, of: number): void
   close(): void
 }
 
@@ -64,13 +73,18 @@ export function connect(
       const message = JSON.parse(event.data) as ServerMessage
       switch (message.type) {
         case 'VIEW':
-          onChange({ view: message.view, rejection: null, error: null })
+          // A new view supersedes any progress ping: the count described the state we have
+          // just replaced, so keeping it would leave a stale bar on screen.
+          onChange({ view: message.view, rejection: null, error: null, progress: null })
           break
         case 'REJECTED':
           onChange({ rejection: { code: message.code, detail: message.detail } })
           break
         case 'ERROR':
           onChange({ error: { code: message.code, detail: message.detail } })
+          break
+        case 'OPPONENT_PROGRESS':
+          onChange({ progress: { filled: message.filled, of: message.of } })
           break
       }
     })
@@ -107,6 +121,9 @@ export function connect(
     },
     resync() {
       post({ type: 'RESYNC' })
+    },
+    reportProgress(filled, of) {
+      post({ type: 'PROGRESS', filled, of })
     },
     close() {
       closedByUs = true

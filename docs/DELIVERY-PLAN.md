@@ -238,7 +238,45 @@ Deliberately thin (§14.4). The client's job is to render `PlayerView` and post 
 
 ### Do not build yet
 
-Animations beyond the reveal gates. Spectator mode. Theming.
+~~Animations beyond the reveal gates.~~ — **built in Phase 4.5, deliberately.** Spectator mode. Theming.
+
+---
+
+## Phase 4.5 — Cosmetic upgrade — **CLOSED (2026-07-29)**
+
+**Effort:** 1 day. **Depends on:** Phase 4. **Not in the original plan** — requested after playing the Phase 4 client, which is the right reason for a phase to exist.
+
+Phase 4 said "do not build animations yet." This builds them. The deferral was correct at the time: an animation over an unfinished protocol is wasted work. It stopped being correct once the thing was playable and the gaps were observable rather than theoretical.
+
+Three asks, and each turned out to need a change **below** the client.
+
+### Deliverables
+
+- **Hero art and a grid.** 45 heroes as a multicolumn grid of portraits rather than a list. `scripts/fetch-hero-art.mjs` fetches once from the publisher's index, honouring `Crawl-delay: 10`; see `roster/README.md` for what it does deliberately and for the licensing position
+- **The roll as a reveal.** `DiceRoll` plays each throw: tumble, land, hold — and on a tie, name it and roll again. Honours `prefers-reduced-motion` by skipping to the result
+- **Opponent progress.** `OpponentActivity` shows what the opponent is doing and, during a hidden draft, how many slots they have filled
+
+### Findings
+
+| #       | Finding                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **F11** | **The roll animation needed an event-schema change.** `ROLL` recorded `attempts: 2` but not what was thrown, so the client could only narrate "after 2 attempts" — it could not _show_ the tie. `throws: Record<Seat, number>[]` was added. A tie is ~1 in 6 at 1d6 and is the most dramatic moment in a match; a cosmetic ask reached into the event log because the data to be cosmetic about was never recorded            |
+| **F12** | **Progress genuinely cannot be server-derived.** A draft is **one** `COMMIT` carrying every pick, so until it lands the DO knows nothing to report. Progress is therefore client-reported: `PROGRESS` → `OPPONENT_PROGRESS`, ephemeral, **count only**, never logged, never state. It is the one message in the protocol that is neither authoritative nor verifiable — acceptable precisely because it decides nothing       |
+| **F13** | **A malformed create body was a 500.** Found by hand-posting `{modeId, draftCount}` (a plausible wrong shape) at `wrangler dev`: `findVariant` read a property of `undefined` and the stack trace went out over HTTP. Create is unauthenticated by design, so its body is fully untrusted. Now 400s, with `apps/worker/test/match.test.ts` covering eight malformed shapes. Unrelated to the cosmetic work; found by doing it |
+| **F14** | **The tie path had no test at all.** `throws` was added, the client animated it, and nothing anywhere exercised a reroll — the seeded RNG made it a coin flip whether any test hit one. `packages/engine/test/roll-tie.test.ts` now _searches_ for seeds that tie once, twice, and never, so the assertions cannot pass vacuously. It also pins the ~1/6 tie rate, which is what makes the feature worth having               |
+
+### Exit criteria
+
+- `npm run check` green; 330 tests across 29 files ✔
+- Art is optional at every layer — a missing manifest entry **and** a failed image load both fall back to initials, so deleting `apps/web/public/art/` strips the licensed imagery without breaking the app ✔ (`apps/web/test/cosmetic.test.tsx`)
+- `throws` survives engine → DO → projection → wire, agrees with the event log, and is identical for both seats ✔ (`apps/worker/test/roll-reveal.test.ts`)
+- Progress relays a count, attributes the seat from the socket, clamps nonsense, appends no event, and **carries no character id** ✔ (`apps/worker/test/progress.test.ts`)
+- Static assets serve under `wrangler dev` — `/art/*.png` returns 200 `image/png` ✔ (still not testable in the Workers pool, per F10)
+- Two humans see the same animation on two devices — **not automated; needs you**, same as Phase 4's top criterion
+
+### Do not build yet
+
+Sound. Per-hero colour theming. Animating anything that is not a reveal of something the server already decided — that direction ends in a client with an opinion, which D18 exists to prevent.
 
 ---
 

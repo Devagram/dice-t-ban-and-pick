@@ -49,6 +49,30 @@ export function sendRejection(
   deliver(target.socket, { type: 'REJECTED', idempotencyKey, code, detail })
 }
 
+/**
+ * Relays one seat's self-reported progress to the other.
+ *
+ * It lives in this file for the same reason everything else does: this is the only module that
+ * may touch the socket, and the rule is worth more than the exception would save. It carries a
+ * **count and nothing else** — never a character id — because during a hidden commit that is
+ * exactly what the seal is protecting (§7). The count is not projected because it is not state;
+ * it never entered the log and never will.
+ *
+ * `seat` comes from the sender's authenticated socket, not from the message body, so a client
+ * cannot report progress on its opponent's behalf.
+ */
+export function relayProgress(
+  targets: Iterable<SeatSocket>,
+  from: Seat,
+  filled: number,
+  of: number,
+): void {
+  for (const target of targets) {
+    if (target.seat === from) continue // you already know your own progress
+    deliver(target.socket, { type: 'OPPONENT_PROGRESS', seat: from, filled, of })
+  }
+}
+
 /** A protocol-level problem. Also carries no state. */
 export function sendProtocolError(
   socket: WebSocket,

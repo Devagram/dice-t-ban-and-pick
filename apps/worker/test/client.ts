@@ -30,6 +30,8 @@ export class TestClient {
   private views: PlayerView[] = []
   private rejections: Extract<ServerMessage, { type: 'REJECTED' }>[] = []
   private errors: Extract<ServerMessage, { type: 'ERROR' }>[] = []
+  /** Opponent progress pings — cosmetic, ephemeral, and asserted on for what they must NOT carry. */
+  readonly progress: Extract<ServerMessage, { type: 'OPPONENT_PROGRESS' }>[] = []
 
   private constructor(
     readonly seatToken: string,
@@ -95,6 +97,7 @@ export class TestClient {
       const message = JSON.parse(raw) as ServerMessage
       if (message.type === 'VIEW') this.views.push(message.view)
       else if (message.type === 'REJECTED') this.rejections.push(message)
+      else if (message.type === 'OPPONENT_PROGRESS') this.progress.push(message)
       else this.errors.push(message)
     })
 

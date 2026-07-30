@@ -200,3 +200,46 @@ describe('the host cannot ban a match into unplayability (Phase 2 finding F4)', 
     expect(response.status).toBe(400)
   })
 })
+
+/**
+ * Create is unauthenticated by design — anyone with the URL can open a room — so its body is
+ * fully untrusted. Found by hand-posting a plausible-but-wrong shape (`{modeId, draftCount}`
+ * rather than `{modeId, parameters}`) against a dev server and getting a 500 with a stack trace.
+ */
+describe('a malformed create body is a 400, not a 500', () => {
+  const post = (body: string) =>
+    SELF.fetch('https://example.com/api/match', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    })
+
+  it.each([
+    ['no parameters at all', '{"modeId":"base"}'],
+    ['parameters as a string', '{"modeId":"base","parameters":"draftCount=4"}'],
+    ['parameters null', '{"modeId":"base","parameters":null}'],
+    [
+      'globalBanned not an array',
+      '{"modeId":"base","parameters":{"draftCount":4},"globalBanned":7}',
+    ],
+    ['not JSON', 'not json at all'],
+    ['a bare number', '42'],
+    ['null', 'null'],
+    ['empty', ''],
+  ])('%s', async (_label, body) => {
+    const response = await post(body)
+    expect(response.status).toBeGreaterThanOrEqual(400)
+    expect(response.status).toBeLessThan(500)
+  })
+
+  it('drops non-string entries from globalBanned rather than snapshotting them', async () => {
+    // The ban list is snapshotted into the creation event and replayed forever (§11
+    // non-negotiable 2), so a stray number in it outlives the request that sent it.
+    const response = await post(
+      '{"modeId":"base","parameters":{"draftCount":4},"globalBanned":["barbarian",7,null]}',
+    )
+    expect(response.status).toBe(201)
+    const { roomCode } = (await response.json()) as { roomCode: string }
+    expect((await preview(roomCode)).ruleset.globalBanned).toEqual(['barbarian'])
+  })
+})

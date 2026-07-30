@@ -52,14 +52,18 @@ export function findMode(modeId: string): BundledMode | null {
  * Returns `null` rather than resolving on the fly, deliberately: every offerable combination
  * was enumerated and validated at build time (D25), so a miss means the caller is asking for
  * something nobody checked.
+ *
+ * Takes `unknown`, because its argument is a field of a parsed request body and the type
+ * annotation on that body is an assertion rather than a check. A caller that omits `parameters`
+ * entirely must get the same 400 as one that asks for `draftCount: 9` — not a 500.
  */
-export function findVariant(
-  mode: BundledMode,
-  parameters: Record<string, string | number>,
-): BundledVariant | null {
+export function findVariant(mode: BundledMode, parameters: unknown): BundledVariant | null {
+  if (typeof parameters !== 'object' || parameters === null) return null
+  const given = parameters as Record<string, unknown>
+
   return (
     mode.variants.find((v) =>
-      Object.entries(v.parameters).every(([k, value]) => parameters[k] === value),
+      Object.entries(v.parameters).every(([k, value]) => given[k] === value),
     ) ?? null
   )
 }

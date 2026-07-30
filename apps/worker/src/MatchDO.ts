@@ -35,6 +35,7 @@ import {
 } from './persistence.js'
 import {
   broadcastView,
+  relayProgress,
   sendProtocolError,
   sendRejection,
   sendView,
@@ -104,7 +105,19 @@ export class MatchDO extends DurableObject<Env> {
       return json({ error: 'ALREADY_CREATED', detail: 'this room code is in use' }, 409)
     }
 
-    const body = (await request.json()) as CreateMatchRequest & { roomCode?: string }
+    // Everything below treats the body as untrusted. The `as` is an assertion, not a check —
+    // this endpoint is reachable by anyone with the URL, and a malformed body has to come back
+    // as a 400 rather than a 500 with a stack trace in it.
+    let body: CreateMatchRequest & { roomCode?: string }
+    try {
+      body = (await request.json()) as CreateMatchRequest & { roomCode?: string }
+    } catch {
+      return json({ error: 'MALFORMED_BODY', detail: 'body is not valid JSON' }, 400)
+    }
+    if (typeof body !== 'object' || body === null) {
+      return json({ error: 'MALFORMED_BODY', detail: 'body must be an object' }, 400)
+    }
+
     const mode = findMode(body.modeId)
     if (!mode) return json({ error: 'UNKNOWN_MODE', detail: `no mode '${body.modeId}'` }, 400)
 
@@ -118,7 +131,13 @@ export class MatchDO extends DurableObject<Env> {
       )
     }
 
-    const globalBanned = [...new Set(body.globalBanned ?? [])].sort()
+    if (body.globalBanned !== undefined && !Array.isArray(body.globalBanned)) {
+      return json({ error: 'MALFORMED_BODY', detail: 'globalBanned must be an array' }, 400)
+    }
+    const globalBanned = [...new Set(body.globalBanned ?? [])].filter(
+      (id) => typeof id === 'string',
+    )
+    globalBanned.sort()
     const viability = this.checkRosterViability(variant, globalBanned)
     if (viability) return json(viability, 400)
 
@@ -313,6 +332,15 @@ export class MatchDO extends DurableObject<Env> {
         this.applyAction(target, state, message.idempotencyKey, message.payload)
         this.touch()
         return
+      case 'PROGRESS': {
+        // Cosmetic and ephemeral: relayed, never appended, never stored. Clamped rather than
+        // validated because it decides nothing — a nonsense count should not cost a round trip
+        // to reject, and the seat is taken from the socket rather than the message.
+        const of = Math.max(0, Math.min(16, Math.floor(message.of) || 0))
+        const filled = Math.max(0, Math.min(of, Math.floor(message.filled) || 0))
+        relayProgress(this.sockets(), seat, filled, of)
+        return
+      }
       default:
         sendProtocolError(socket, 'UNKNOWN_MESSAGE', 'unrecognized message type')
     }

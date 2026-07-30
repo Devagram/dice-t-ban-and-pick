@@ -43,12 +43,18 @@ export const roll: PhaseModule<RollModule> = {
     // REROLL is unbounded in the spec. It terminates with probability 1 and, at 1d6, the
     // chance of reaching 64 consecutive ties is about 10^-50 — but an unbounded loop inside a
     // reducer is a hang, not a bug report, so it is capped and made loud.
+    //
+    // Every throw is kept, not just the last. A tie happens about one roll in six at 1d6, and
+    // it is the moment worth watching; an event that recorded only the winner would leave the
+    // client narrating "after 2 attempts" over a story it cannot tell.
+    const throws: Record<Seat, number>[] = []
     let attempt = 0
     let a: number
     let b: number
     do {
       a = rollDice({ seed: state.seed, seq, actor: 'A', attempt }, mod.dice.count, mod.dice.sides)
       b = rollDice({ seed: state.seed, seq, actor: 'B', attempt }, mod.dice.count, mod.dice.sides)
+      throws.push({ A: a, B: b })
       attempt++
     } while (a === b && attempt < 64)
 
@@ -60,6 +66,7 @@ export const roll: PhaseModule<RollModule> = {
       roundIndex: findRoundIndex(mod),
       results: { A: a, B: b },
       attempts: attempt,
+      throws,
       winner: a > b ? 'A' : 'B',
       assigns: mod.assigns,
     })
@@ -73,7 +80,14 @@ export const roll: PhaseModule<RollModule> = {
 
     const next = cloneState(state)
     const round = roundOf(next, mod)
-    round.roll = { results: p.results, winner: p.winner, attempts: p.attempts }
+    round.roll = {
+      results: p.results,
+      winner: p.winner,
+      attempts: p.attempts,
+      // Tolerates a log written before `throws` existed: an older event replays with the final
+      // result as its only throw, which is exactly what it recorded.
+      throws: p.throws ?? [p.results],
+    }
 
     // D11 — in round 2 the roll assigns turn order directly. There is no draft privilege left
     // to alternate, and a CHOOSE with one real option is a dominated action wearing a costume.

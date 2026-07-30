@@ -46,10 +46,10 @@ describe('drafting at ~75 characters', () => {
     fireEvent.change(screen.getByLabelText('Search characters'), {
       target: { value: 'Character 7' },
     })
-    // 7, 70..79 — a real narrowing from 75, which is the whole point.
-    const shown = screen
-      .getAllByRole('button', { pressed: false })
-      .filter((b) => /^Character \d+/.test(b.textContent ?? ''))
+    // 7, 70..79 — a real narrowing from 75, which is the whole point. Counted from the grid
+    // tiles rather than by matching button text: a tile now contains a portrait as well as a
+    // name, so its textContent is not the name alone.
+    const shown = screen.getAllByRole('listitem')
     expect(shown.length).toBeGreaterThan(0)
     expect(shown.length).toBeLessThan(BIG_ROSTER.length)
   })
@@ -114,11 +114,11 @@ describe('drafting at ~75 characters', () => {
       />,
     )
 
-    // Scoped to the character list: the filter chips are aria-pressed too, and an unscoped
-    // role query would rank "★ Favourites" as the first result.
+    // Scoped to the grid tiles: the filter chips are aria-pressed too, and an unscoped role
+    // query would rank "★ Favourites" as the first result.
     const listed = screen
       .getAllByRole('listitem')
-      .map((li) => li.querySelector('.card__name')?.textContent ?? '')
+      .map((li) => li.querySelector('.tile__name')?.textContent ?? '')
     expect(listed).toEqual(['Character 9', 'Character 1'])
   })
 

@@ -158,6 +158,10 @@ export default tseslint.config(
         process: 'readonly',
         URL: 'readonly',
         Object: 'readonly',
+        // scripts/fetch-hero-art.mjs reaches the network, on purpose and outside the build.
+        fetch: 'readonly',
+        Buffer: 'readonly',
+        setTimeout: 'readonly',
       },
     },
     rules: {

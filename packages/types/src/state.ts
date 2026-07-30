@@ -24,7 +24,13 @@ export interface RoundState {
   privilegeHolder: Seat | null
   /** D23 — the right to *decide* play order, not automatic first play. */
   turnOrderHolder: Seat | null
-  roll: { results: Record<Seat, number>; winner: Seat; attempts: number } | null
+  /** `throws` carries every attempt including ties; the last always equals `results`. */
+  roll: {
+    results: Record<Seat, number>
+    winner: Seat
+    attempts: number
+    throws: Record<Seat, number>[]
+  } | null
   ban: { by: Seat; target: { seat: Seat; slotIndex: SlotIdx } } | null
   /**
    * Sliced because round 2 selects simultaneously and hidden, while rounds 0–1 select
