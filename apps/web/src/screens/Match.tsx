@@ -121,6 +121,15 @@ function MatchBody({
     metaBan: null,
   })
 
+  /**
+   * A request to take one of your picks back, raised by clicking it on the board.
+   *
+   * Carries a counter as well as an id so that removing, re-picking, and removing the *same*
+   * character again is still a distinct request — without it the second click is indistinguishable
+   * from the first and `DraftPanel` would ignore it.
+   */
+  const [removeRequest, setRemoveRequest] = useState<{ id: CharId; n: number }>({ id: '', n: 0 })
+
   // Cleared once the commit lands, so the real slots take over from the local guess rather than
   // both being drawn.
   useEffect(() => {
@@ -203,6 +212,7 @@ function MatchBody({
                 reason: null,
               })
             }}
+            onRemoveOwn={(id) => setRemoveRequest({ id, n: removeRequest.n + 1 })}
             onSelectOpponent={(index) => {
               const ban = targets.ban
               if (!ban) return
@@ -224,7 +234,7 @@ function MatchBody({
           ) : null}
           {targets.select ? <p className="prompt__title">Choose who you play this round</p> : null}
 
-          <OpponentActivity view={view} progress={progress} />
+          <OpponentActivity view={view} />
 
           {/* Under the board: the roster while there is drafting to do, and nothing at all once
               the rounds start — at which point the ActionBar's result buttons take its place. */}
@@ -235,6 +245,7 @@ function MatchBody({
               onAct={onAct}
               onProgress={onProgress}
               onDraftChange={(picks, metaBan) => setMine({ picks, metaBan })}
+              removeRequest={removeRequest}
             />
           ) : null}
           {recommit ? <RecommitPanel view={view} recommit={recommit} onAct={onAct} /> : null}

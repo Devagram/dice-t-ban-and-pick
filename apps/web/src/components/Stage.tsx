@@ -42,6 +42,14 @@ export interface StageProps {
   selectableOpponent?: SlotIdx[]
   onSelectOwn?: (index: SlotIdx) => void
   onSelectOpponent?: (index: SlotIdx) => void
+  /**
+   * Undo one of your own not-yet-committed picks, by clicking it on the board.
+   *
+   * This is where taking a pick back lives now. It used to be a separate "slot 1 / slot 2 / …"
+   * strip under the picker, which restated the same four boxes the board was already drawing —
+   * two places showing one thing, and the removal affordance stranded in the wrong one.
+   */
+  onRemoveOwn?: (id: CharId) => void
   /** Plays the staggered flip once, when a side opens. */
   revealing?: boolean
 }
@@ -57,6 +65,7 @@ export function Stage({
   selectableOpponent = [],
   onSelectOwn,
   onSelectOpponent,
+  onRemoveOwn,
   revealing = false,
 }: StageProps) {
   const byId = new Map(view.roster.map((c) => [c.id, c]))
@@ -77,6 +86,7 @@ export function Stage({
           currentRound={round}
           selectable={selectableOwn}
           onSelect={onSelectOwn}
+          onRemove={onRemoveOwn}
           revealing={revealing}
           own
         />
@@ -93,6 +103,7 @@ export function Stage({
           currentRound={round}
           selectable={selectableOpponent}
           onSelect={onSelectOpponent}
+          onRemove={undefined}
           revealing={revealing}
           own={false}
         />
@@ -172,6 +183,7 @@ function Side({
   currentRound,
   selectable,
   onSelect,
+  onRemove,
   revealing,
   own,
 }: {
@@ -184,6 +196,7 @@ function Side({
   currentRound: number | null
   selectable: SlotIdx[]
   onSelect: ((index: SlotIdx) => void) | undefined
+  onRemove: ((id: CharId) => void) | undefined
   revealing: boolean
   own: boolean
 }) {
@@ -206,7 +219,11 @@ function Side({
       <ul className="side__row">
         {Array.from({ length: boxes }, (_, i) => {
           const slot = revealed ? slots[i] : undefined
-          const localPick = !revealed && own ? pending.picks?.[i] : undefined
+          // Your locally-held picks stop being *yours to edit* the moment the commit lands, so
+          // a sealed side falls back to sealed cells. Without the `hasCommitted` term a committed
+          // draft kept drawing the local copy and kept offering to remove it — which §12 forbids.
+          const localPick =
+            !revealed && own && !seatView.hasCommitted ? pending.picks?.[i] : undefined
           const character = slot
             ? byId.get(slot.characterId)
             : localPick
@@ -215,6 +232,8 @@ function Side({
 
           const bannedNow = slot ? slot.bannedInRound === currentRound : false
           const choosable = slot ? selectable.includes(slot.index) : false
+          // Only your own, only before it is committed — §12 forbids withdrawing a sealed one.
+          const removable = !revealed && own && localPick !== undefined && onRemove !== undefined
           const state = revealed
             ? 'revealed'
             : i >= filled
@@ -228,6 +247,7 @@ function Side({
           const classes = [
             'cell',
             `cell--${state}`,
+            removable ? 'cell--removable' : '',
             slot?.consumed ? 'cell--spent' : '',
             bannedNow ? 'cell--banned' : '',
             choosable ? 'cell--choosable' : '',
@@ -266,7 +286,9 @@ function Side({
           return (
             <li
               key={slot ? slot.index : i}
-              className={choosable ? undefined : classes}
+              // The classes go on whichever element is the cell — the wrapper when it is inert,
+              // the button when there is one. Both would nest two bordered boxes.
+              className={choosable || removable ? undefined : classes}
               style={
                 revealing && revealed
                   ? ({ '--flip-delay': `${i * FLIP_STAGGER_MS}ms` } as React.CSSProperties)
@@ -281,6 +303,18 @@ function Side({
                   onClick={() => onSelect?.(slot.index)}
                 >
                   {body}
+                </button>
+              ) : removable ? (
+                <button
+                  type="button"
+                  className={classes}
+                  aria-label={`Remove ${character?.name ?? localPick}`}
+                  onClick={() => onRemove(localPick!)}
+                >
+                  {body}
+                  <span className="cell__remove" aria-hidden="true">
+                    Remove
+                  </span>
                 </button>
               ) : (
                 body

@@ -198,12 +198,33 @@ describe('the hidden commit', () => {
     expect(getRecents()).toEqual(['anvil', 'cartographer', 'duelist', 'gambler'])
   })
 
-  it('lets a pick be taken back before the seal, and not after', () => {
-    render(<DraftPanel view={view()} commit={COMMIT_ACTION} onAct={vi.fn()} />)
+  it('lets a pick be taken back before the seal, driven from the board', () => {
+    // Taking a pick back used to live in a "Slot 1 / Slot 2 / …" strip under the picker, which
+    // redrew the same four boxes the board was already showing. The strip is gone; the board
+    // raises the request and the panel applies it. See `stage-remove.test.tsx` for the click.
+    const onDraftChange = vi.fn()
+    const { rerender } = render(
+      <DraftPanel
+        view={view()}
+        commit={COMMIT_ACTION}
+        onAct={vi.fn()}
+        onDraftChange={onDraftChange}
+        removeRequest={{ id: '', n: 0 }}
+      />,
+    )
     fireEvent.click(screen.getByText('The Anvil'))
-    fireEvent.click(screen.getByLabelText('Remove The Anvil'))
-    // Back to an empty slot 1 — nothing has been sent, so nothing has been sealed.
-    expect(screen.getByText('Slot 1')).toBeTruthy()
+    expect(onDraftChange).toHaveBeenLastCalledWith(['anvil'], null)
+
+    rerender(
+      <DraftPanel
+        view={view()}
+        commit={COMMIT_ACTION}
+        onAct={vi.fn()}
+        onDraftChange={onDraftChange}
+        removeRequest={{ id: 'anvil', n: 1 }}
+      />,
+    )
+    expect(onDraftChange).toHaveBeenLastCalledWith([], null)
   })
 })
 

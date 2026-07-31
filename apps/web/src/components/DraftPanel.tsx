@@ -34,9 +34,18 @@ export interface DraftPanelProps {
    * rather than one object makes it hard to send the wrong one by accident.
    */
   onDraftChange?: (picks: CharId[], metaBan: CharId | null) => void
+  /** A take-it-back raised from the board. The counter makes a repeat of the same id distinct. */
+  removeRequest?: { id: CharId; n: number }
 }
 
-export function DraftPanel({ view, commit, onAct, onProgress, onDraftChange }: DraftPanelProps) {
+export function DraftPanel({
+  view,
+  commit,
+  onAct,
+  onProgress,
+  onDraftChange,
+  removeRequest,
+}: DraftPanelProps) {
   const [picks, setPicks] = useState<CharId[]>([])
   const [metaBan, setMetaBan] = useState<CharId | null>(null)
 
@@ -91,6 +100,17 @@ export function DraftPanel({ view, commit, onAct, onProgress, onDraftChange }: D
     reportLocal.current?.(picks, metaBan)
   }, [picks, metaBan])
 
+  // Removal is driven from the board, so the panel listens for it rather than owning a control.
+  // Keyed on the counter, not the id: clicking the same character twice must register twice.
+  const removeCount = removeRequest?.n ?? 0
+  const removeId = removeRequest?.id ?? ''
+  useEffect(() => {
+    if (removeCount === 0) return
+    setPicks((p) => p.filter((x) => x !== removeId))
+    setMetaBan((b) => (b === removeId ? null : b))
+    // `removeId` is deliberately not a dependency: the counter is what marks a *new* request.
+  }, [removeCount])
+
   const submit = (): void => {
     if (wantsPicks) noteDrafted(picks)
     onAct({
@@ -106,12 +126,6 @@ export function DraftPanel({ view, commit, onAct, onProgress, onDraftChange }: D
     <div className="draft">
       {wantsPicks ? (
         <>
-          <SelectedStrip
-            picks={picks}
-            count={commit.picks!.count}
-            roster={view.roster}
-            onRemove={(id) => setPicks((p) => p.filter((x) => x !== id))}
-          />
           {!picksDone ? (
             <CharacterPicker
               label="Your draft"
@@ -218,46 +232,5 @@ export function RecommitPanel({
         </div>
       ) : null}
     </div>
-  )
-}
-
-function SelectedStrip({
-  picks,
-  count,
-  roster,
-  onRemove,
-}: {
-  picks: CharId[]
-  count: number
-  roster: PlayerView['roster']
-  onRemove: (id: CharId) => void
-}) {
-  const byId = new Map(roster.map((c) => [c.id, c]))
-
-  return (
-    <ol className="chosen" aria-label="Your picks so far">
-      {Array.from({ length: count }, (_, i) => {
-        const id = picks[i]
-        return (
-          <li key={i} className={`chosen__slot ${id ? 'chosen__slot--filled' : ''}`}>
-            {id ? (
-              <button
-                type="button"
-                className="chosen__button"
-                onClick={() => onRemove(id)}
-                aria-label={`Remove ${byId.get(id)?.name ?? id}`}
-              >
-                <span className="chosen__name">{byId.get(id)?.name ?? id}</span>
-                <span className="chosen__x" aria-hidden="true">
-                  ×
-                </span>
-              </button>
-            ) : (
-              <span className="chosen__empty">Slot {i + 1}</span>
-            )}
-          </li>
-        )
-      })}
-    </ol>
   )
 }

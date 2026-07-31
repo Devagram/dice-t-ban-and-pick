@@ -213,51 +213,62 @@ describe('you can see the opponent working', () => {
     })
 
   it('names what they are doing, from the phase rather than the round', () => {
-    render(<OpponentActivity view={awaiting(['B'], 'BAN')} progress={null} />)
+    render(<OpponentActivity view={awaiting(['B'], 'BAN')} />)
     expect(screen.getByText(/choosing which of your characters to ban/i)).toBeTruthy()
   })
 
-  it('shows a pip bar as they fill their draft', () => {
-    render(<OpponentActivity view={awaiting(['B'])} progress={{ filled: 3, of: 5 }} />)
-
-    expect(screen.getByText('They have chosen 3 of 5.')).toBeTruthy()
-    const bar = screen.getByRole('progressbar')
-    expect(bar.getAttribute('aria-valuenow')).toBe('3')
-    expect(bar.getAttribute('aria-valuemax')).toBe('5')
-    expect(bar.querySelectorAll('.activity__pip--on')).toHaveLength(3)
+  it('no longer narrates a count the board already shows', () => {
+    // "They have chosen 2 of 4" and its pip bar are gone. The board fills a slot as each pick
+    // lands, in the place you are already looking; a number restating that is noise.
+    const { container } = render(<OpponentActivity view={awaiting(['B'])} />)
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(container.textContent).not.toMatch(/\d+ of \d+/)
+    expect(container.textContent).not.toMatch(/have chosen/i)
   })
 
-  it('switches to sealed once they commit, and drops the bar', () => {
+  it('still says the thing the board cannot — that picks stay hidden until the reveal', () => {
+    // Only while *you* are drafting too: the hint explains the seal, and there is no seal to
+    // explain once your own commit is in.
+    const drafting = view({
+      phase: {
+        moduleId: 'draft',
+        type: 'SIMULTANEOUS_COMMIT',
+        roundIndex: 0,
+        awaiting: ['A', 'B'],
+      },
+      opponent: { seat: 'B', score: 0, hasCommitted: false, slotCount: 4 },
+      legalActions: [
+        { type: 'COMMIT', moduleId: 'draft', picks: { count: 4, poolBySlot: [] }, metaBan: null },
+      ],
+    })
+    render(<OpponentActivity view={drafting} />)
+    expect(screen.getByText(/will not see what they pick until the reveal/i)).toBeTruthy()
+  })
+
+  it('switches to sealed once they commit', () => {
     render(
       <OpponentActivity
         view={view({
           phase: { moduleId: 'draft', type: 'SIMULTANEOUS_COMMIT', roundIndex: 0, awaiting: ['B'] },
           opponent: { seat: 'B', score: 0, hasCommitted: true, slotCount: 4 },
         })}
-        progress={{ filled: 5, of: 5 }}
       />,
     )
     expect(screen.getByText('They have sealed their choice.')).toBeTruthy()
-    expect(screen.queryByRole('progressbar')).toBeNull()
   })
 
   it('says nothing when the opponent is not being waited on', () => {
-    const { container } = render(<OpponentActivity view={awaiting(['A'])} progress={null} />)
+    const { container } = render(<OpponentActivity view={awaiting(['A'])} />)
     expect(container.innerHTML).toBe('')
   })
 
   it('says nothing once the match is over', () => {
-    const { container } = render(
-      <OpponentActivity view={view({ status: 'COMPLETE' })} progress={null} />,
-    )
+    const { container } = render(<OpponentActivity view={view({ status: 'COMPLETE' })} />)
     expect(container.innerHTML).toBe('')
   })
 
-  it('never names a character, only a count', () => {
-    // The seal is the whole mode (§7). A progress panel that leaked a pick would defeat it.
-    const { container } = render(
-      <OpponentActivity view={awaiting(['B'])} progress={{ filled: 2, of: 4 }} />,
-    )
+  it('never names a character', () => {
+    const { container } = render(<OpponentActivity view={awaiting(['B'])} />)
     for (const character of ROSTER) {
       expect(container.textContent).not.toContain(character.name)
     }

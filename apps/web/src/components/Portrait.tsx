@@ -17,7 +17,7 @@ export function Portrait({
   dimmed = false,
 }: {
   character: Character
-  size?: 'card' | 'chip' | 'slot'
+  size?: 'card' | 'head' | 'chip' | 'slot'
   dimmed?: boolean
 }) {
   const src = artFor(character.id)

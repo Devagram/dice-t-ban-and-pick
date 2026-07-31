@@ -1,6 +1,6 @@
 {
   "$comment": "GENERATED — do not edit. Produced by packages/loader/test/generate-modes.test.ts from modes/*.yaml. Regenerate with `npm run build:modes`. Every mode here has passed all six §13 validators at every declared parameter combination (D25).",
-  "rosterVersion": "2026.07.29-1",
+  "rosterVersion": "2026.07.31-1",
   "modes": {
     "base": {
       "modeId": "base",

@@ -959,6 +959,23 @@ select {
   border: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
 }
 
+/*
+ * The roster portrait, cropped to the top of the card.
+ *
+ * The source art is a full 199×300 character card; at 92px wide the body is a smear and the face
+ * is what anyone actually recognises. Cropping to roughly the top half nearly halves the height
+ * of every row, which is most of what stops the roster needing its own scrollbar.
+ */
+.portrait--head {
+  width: 100%;
+  aspect-ratio: 199 / 150;
+  border-radius: 8px;
+}
+
+.portrait--head .portrait__img {
+  object-position: top center;
+}
+
 .portrait--chip {
   width: 34px;
   height: 34px;
@@ -1471,10 +1488,55 @@ select {
   text-decoration: line-through;
 }
 
+/*
+ * One line, always.
+ *
+ * The names were shortened where there was something redundant to cut ("Spider-Man (Miles
+ * Morales)" → "Miles Morales", "Doctor" → "Dr."), but a roster gains characters and the next one
+ * may not have a short form. Truncation is the guarantee; the full name stays in the tooltip, and
+ * the board above always shows it in full.
+ */
+.tile__name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.62rem;
+  line-height: 1.3;
+  max-width: 100%;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cell--flip,
   .cell--choosing,
   .cell--mine {
     animation: none;
+  }
+}
+
+/* The take-it-back affordance on your own uncommitted picks. Quiet until hovered: the board is
+   for reading, and a permanent "Remove" on every slot would compete with the portraits. */
+.cell--removable {
+  cursor: pointer;
+  position: relative;
+}
+
+.cell__remove {
+  font-size: 0.6rem;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.cell--removable:hover .cell__remove,
+.cell--removable:focus-visible .cell__remove {
+  opacity: 1;
+  color: var(--danger);
+}
+
+/* Touch has no hover, so the label stays visible where that is the only input. */
+@media (hover: none) {
+  .cell__remove {
+    opacity: 1;
   }
 }

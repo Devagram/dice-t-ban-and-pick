@@ -1,28 +1,22 @@
 import type { PlayerView } from '@banpick/types'
 
 /**
- * What the opponent is doing, right now.
+ * What the opponent is doing, right now — in words.
  *
- * The complaint this answers: *"rather than just blindly proceeding and having no indication of
- * progress."* Two different signals, from two different places, and it matters which is which:
+ * This used to carry the count as well ("They have chosen 2 of 4") plus a pip bar. Both are gone:
+ * the board above now fills a slot as each pick lands, which says the same thing in the place
+ * you are already looking. A number narrating a picture you can see is noise.
  *
- *   - **Whose turn it is** comes from `phase.awaiting`, which the server computes. It is
- *     authoritative and always correct.
- *   - **How far through a hidden draft they are** comes from the opponent's own client, relayed
- *     as a bare count. The server cannot know it — a draft is one `COMMIT` carrying every pick
- *     at once, so until it lands there is nothing on the server to report.
- *
- * The second is unverifiable and deliberately so. It carries a number and never a character
- * (§7), it is never logged, and the worst a dishonest client achieves is a wrong progress bar.
+ * What is left is the part the board cannot show — *which phase* they are in, and that you will
+ * not see their picks until the reveal. That comes from `phase.awaiting`, which the server
+ * computes and is therefore authoritative, unlike the relayed count that drives the board.
  */
 
 export interface OpponentActivityProps {
   view: PlayerView
-  /** Latest relayed count, or `null` if they have not reported since the last state change. */
-  progress: { filled: number; of: number } | null
 }
 
-export function OpponentActivity({ view, progress }: OpponentActivityProps) {
+export function OpponentActivity({ view }: OpponentActivityProps) {
   if (view.status !== 'IN_PROGRESS') return null
 
   const opponentSeat = view.seat === 'A' ? 'B' : 'A'
@@ -32,7 +26,6 @@ export function OpponentActivity({ view, progress }: OpponentActivityProps) {
   if (!waitingOnThem) return null
 
   const drafting = view.legalActions.some((a) => a.type === 'COMMIT' || a.type === 'RECOMMIT')
-  const showBar = progress !== null && progress.of > 0
 
   return (
     <section
@@ -44,32 +37,12 @@ export function OpponentActivity({ view, progress }: OpponentActivityProps) {
         <p className="activity__text">
           {view.opponent.hasCommitted
             ? 'They have sealed their choice.'
-            : showBar
-              ? `They have chosen ${progress.filled} of ${progress.of}.`
-              : waitingOnYou
-                ? 'They are still deciding too.'
-                : describe(view)}
+            : waitingOnYou
+              ? 'They are still deciding too.'
+              : describe(view)}
         </p>
 
-        {showBar && !view.opponent.hasCommitted ? (
-          <div
-            className="activity__bar"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={progress.of}
-            aria-valuenow={progress.filled}
-            aria-label="Opponent draft progress"
-          >
-            {Array.from({ length: progress.of }, (_, i) => (
-              <span
-                key={i}
-                className={`activity__pip ${i < progress.filled ? 'activity__pip--on' : ''}`}
-              />
-            ))}
-          </div>
-        ) : null}
-
-        {drafting && !showBar && !view.opponent.hasCommitted ? (
+        {drafting && !view.opponent.hasCommitted ? (
           <p className="activity__hint">You will not see what they pick until the reveal.</p>
         ) : null}
       </div>

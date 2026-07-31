@@ -1,6 +1,6 @@
 {
   "$comment": "The Dice Throne hero roster, 45 heroes. See roster/README.md before editing: ids are permanent identity, never reuse one, and retire rather than delete. Cross-checked against the publisher hero index at https://dicethrone.com/heroes/ — 44 of these appear there; Deadpool does not, though it is a playable hero from the X-Men/Missions campaign.",
-  "rosterVersion": "2026.07.29-1",
+  "rosterVersion": "2026.07.31-1",
   "characters": [
     {
       "id": "barbarian",
@@ -106,13 +106,13 @@
     },
     {
       "id": "captain-marvel",
-      "name": "Captain Marvel",
+      "name": "Capt. Marvel",
       "blurb": "Dice Throne Marvel.",
       "status": "ACTIVE"
     },
     {
       "id": "doctor-strange",
-      "name": "Doctor Strange",
+      "name": "Dr. Strange",
       "blurb": "Dice Throne Marvel.",
       "status": "ACTIVE"
     },
@@ -142,7 +142,7 @@
     },
     {
       "id": "miles-morales",
-      "name": "Spider-Man (Miles Morales)",
+      "name": "Miles Morales",
       "blurb": "Dice Throne Marvel.",
       "status": "ACTIVE"
     },

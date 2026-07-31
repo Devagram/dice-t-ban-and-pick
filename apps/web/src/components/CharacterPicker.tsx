@@ -151,9 +151,14 @@ export function CharacterPicker({
                   aria-pressed={isSelected}
                   disabled={isBlocked}
                   onClick={() => onSelect(character.id)}
-                  title={isBlocked ? `${character.name} — banned` : character.blurb}
+                  // The full name is in the tooltip, because the tile itself truncates to one line.
+                  title={
+                    isBlocked
+                      ? `${character.name} — banned`
+                      : `${character.name} — ${character.blurb}`
+                  }
                 >
-                  <Portrait character={character} size="card" dimmed={isBlocked} />
+                  <Portrait character={character} size="head" dimmed={isBlocked} />
                   <span className="tile__name">{character.name}</span>
                 </button>
                 <button
