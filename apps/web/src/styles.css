@@ -1341,6 +1341,10 @@ select {
 }
 
 .stage__vs {
+  /* Fixed, so `Stage` can size the lock-in ring without measuring anything. `VS_WIDTH_PX`
+     mirrors this; `sizing.test.tsx` asserts they agree. */
+  width: 44px;
+  text-align: center;
   align-self: center;
   font-size: 0.75rem;
   color: var(--muted);
@@ -1717,5 +1721,93 @@ select {
 
   .side--won .cell {
     box-shadow: 0 0 0 2px #f2c14e;
+  }
+}
+
+/* --- Locking in together -------------------------------------------------- */
+
+/*
+ * One ring around the pair, replacing the two that announced them separately.
+ *
+ * The individual rings say "I have chosen". This says "we are locked in" — a different statement,
+ * so it gets a different shape rather than more of the same glow. It sits behind the cards and is
+ * purely decorative, which is why it is `aria-hidden` and carries no text: the fact it represents
+ * is already on the board twice over.
+ */
+.stage__sides {
+  position: relative;
+}
+
+.lockin {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  border-radius: 14px;
+  pointer-events: none;
+  z-index: 0;
+  animation:
+    lockin-arrive 320ms ease-out,
+    lockin-pulse 1.8s ease-in-out 320ms infinite;
+}
+
+@keyframes lockin-arrive {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@keyframes lockin-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 18px 4px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px #b9e4ff,
+      0 0 42px 14px color-mix(in srgb, var(--accent) 60%, transparent);
+  }
+}
+
+/* Two rings become one: the individual glow stands down when the pair ring appears. */
+.stage__sides--locked .cell--chosen {
+  animation: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* --- The winning side keeps its colour ------------------------------------ */
+
+/*
+ * A played character is `spent`, which greys it — correct all match, and exactly backwards on the
+ * final screen. It left the winner's board showing their three winning characters dim and the one
+ * they never played bright, which is the opposite of what the result says.
+ */
+.side--won .cell--spent {
+  opacity: 1;
+  text-decoration: none;
+}
+
+.side--won .portrait--dim {
+  filter: none;
+}
+
+/* The loser greys whole — played or not, it is all over. */
+.side--lost .cell--spent {
+  opacity: 1;
+  text-decoration: line-through;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lockin {
+    animation: none;
+    box-shadow: 0 0 0 3px var(--accent);
   }
 }

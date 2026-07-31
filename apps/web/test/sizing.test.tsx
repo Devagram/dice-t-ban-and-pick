@@ -42,6 +42,18 @@ describe('the drafted row reads larger than the roster', () => {
     expect(CSS).toContain('minmax(var(--roster-tile), 1fr)')
   })
 
+  it('keeps the vs column width agreed between the CSS and the lock-in ring', () => {
+    // The joined ring is sized in TypeScript from the two cards, the gaps, and this column. If
+    // the column changes in CSS alone the ring stops lining up with what it encloses — the same
+    // two-statements-of-one-number trap as CELL_PX below.
+    const STAGE = readFileSync('apps/web/src/components/Stage.tsx', 'utf8')
+    const declared = /^const VS_WIDTH_PX = (\d+)$/m.exec(STAGE)
+    expect(declared, 'no VS_WIDTH_PX in Stage.tsx').toBeTruthy()
+    const css = /\.stage__vs \{[^}]*width:\s*(\d+)px/.exec(CSS)
+    expect(css, 'no width on .stage__vs').toBeTruthy()
+    expect(Number(declared![1])).toBe(Number(css![1]))
+  })
+
   it('keeps the stage cell width agreed between the CSS token and the layout maths', () => {
     // Stage cells are absolutely positioned and moved by `transform`, so their pitch is computed
     // in TypeScript rather than by a grid. That makes `CELL_PX` and `--stage-cell` two

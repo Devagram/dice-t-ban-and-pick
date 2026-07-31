@@ -1,8 +1,10 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import type { PlayerView, Slot } from '@banpick/types'
 
 import { readFileSync } from 'node:fs'
+
+const CSS_TEXT = readFileSync('apps/web/src/styles.css', 'utf8')
 
 import { Stage, revealDurationMs } from '../src/components/Stage.js'
 import { view } from './fixtures.js'
@@ -620,5 +622,112 @@ describe('played cards remember their result', () => {
     )
     expect(container.querySelector('.cell--win')).toBeNull()
     expect(container.querySelector('.cell--loss')).toBeNull()
+  })
+})
+
+/**
+ * Locking in together.
+ *
+ * Two rings say "I have chosen", twice. One ring around the pair says "we are locked in", which
+ * is a different statement — so it arrives after a beat, and the individual glows stand down when
+ * it does.
+ */
+describe('the pair locks in', () => {
+  const both = (a: number | null, b: number | null) =>
+    view({
+      phase: { moduleId: 'rounds.0.report', type: 'REPORT_RESULT', roundIndex: 0, awaiting: ['A'] },
+      you: {
+        seat: 'A',
+        score: 0,
+        hasCommitted: true,
+        slotCount: 2,
+        slots: [slot(0, 'anvil'), slot(1, 'cartographer')],
+      },
+      opponent: {
+        seat: 'B',
+        score: 0,
+        hasCommitted: true,
+        slotCount: 2,
+        slots: [slot(0, 'duelist'), slot(1, 'gambler')],
+      },
+      rounds: [
+        {
+          index: 0,
+          privilegeHolder: 'A',
+          turnOrderHolder: null,
+          roll: null,
+          ban: null,
+          selection: { ...(a === null ? {} : { A: a }), ...(b === null ? {} : { B: b }) } as never,
+          selectionCommitted: { A: a !== null, B: b !== null },
+          playOrder: null,
+          result: null,
+        },
+      ],
+    })
+
+  const render2 = (v: PlayerView) =>
+    render(<Stage view={v} expected={2} mine={{ filled: 2 }} theirs={{ filled: 2 }} />)
+
+  it('shows no joined ring while only one side has picked', () => {
+    vi.useFakeTimers()
+    const { container } = render2(both(0, null))
+    act(() => void vi.advanceTimersByTime(3000))
+    expect(container.querySelector('.lockin')).toBeNull()
+    vi.useRealTimers()
+  })
+
+  it('holds the joined ring back for a beat after the second pick', () => {
+    vi.useFakeTimers()
+    const { container } = render2(both(0, 0))
+    // The second card arrives and pulses on its own first — that beat is what makes the join
+    // read as a transition rather than a third state that was always there.
+    expect(container.querySelector('.lockin')).toBeNull()
+
+    act(() => void vi.advanceTimersByTime(1000))
+    expect(container.querySelector('.lockin')).toBeTruthy()
+    vi.useRealTimers()
+  })
+
+  it('stands the individual glows down once the pair ring is up', () => {
+    vi.useFakeTimers()
+    const { container } = render2(both(0, 0))
+    act(() => void vi.advanceTimersByTime(1000))
+    // Two rings become one, rather than three things glowing at once.
+    expect(container.querySelector('.stage__sides--locked')).toBeTruthy()
+    vi.useRealTimers()
+  })
+
+  it('joins immediately under prefers-reduced-motion', () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: true, media: q }))
+    const { container } = render2(both(0, 0))
+    expect(container.querySelector('.lockin')).toBeTruthy()
+  })
+
+  it('sizes the ring from the same arithmetic that places the cards', () => {
+    vi.useFakeTimers()
+    const { container } = render2(both(0, 0))
+    act(() => void vi.advanceTimersByTime(1000))
+    const ring = container.querySelector('.lockin') as HTMLElement
+    // Two blown-up cells, the gap either side of the "vs", and the "vs" column itself.
+    expect(parseInt(ring.style.width, 10)).toBe(Math.round(132 * 1.5) * 2 + 6 * 2 + 44)
+    vi.useRealTimers()
+  })
+})
+
+/**
+ * The final screen says who won, in colour.
+ */
+describe('the winner keeps its colour at the end', () => {
+  it('does not grey the characters that did the winning', () => {
+    // A played character is `spent`, which greys it — right all match, and exactly backwards
+    // here. It left the winner showing its winning characters dim and the one it never played
+    // bright, which is the opposite of what the result says.
+    expect(CSS_TEXT).toMatch(/\.side--won \.cell--spent \{[^}]*opacity:\s*1/)
+    expect(CSS_TEXT).toMatch(/\.side--won \.cell--spent \{[^}]*text-decoration:\s*none/)
+    expect(CSS_TEXT).toMatch(/\.side--won \.portrait--dim \{[^}]*filter:\s*none/)
+  })
+
+  it('greys the losing side whole', () => {
+    expect(CSS_TEXT).toMatch(/\.side--lost \.cell \{[^}]*filter:\s*saturate/)
   })
 })

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { Character, CharId, PlayerView, Seat, Slot, SlotIdx } from '@banpick/types'
 
 import { Portrait } from './Portrait.js'
@@ -67,10 +68,15 @@ export interface StageProps {
 const CELL_PX = 132
 const GAP_PX = 6
 const PITCH = CELL_PX + GAP_PX
+/** Fixed so the lock-in ring can be sized without measuring the DOM. */
+const VS_WIDTH_PX = 44
 /** The character being played this round, blown up next to the "vs". */
 const CHOSEN_SCALE = 1.5
 
 const FLIP_STAGGER_MS = 150
+
+/** How long the two cards pulse separately before the joined border takes over. */
+const LOCK_IN_DELAY_MS = 900
 
 /**
  * Where a slot sits, measured out from the centre line.
@@ -179,11 +185,49 @@ export function Stage({
   const anyChosen = chosenOwn !== null || chosenOpponent !== null
   const rowHeight = Math.round(CELL_PX * (300 / 199) * (anyChosen ? CHOSEN_SCALE : 1)) + 26
 
+  /**
+   * Both cards are at centre stage — so after a beat, one border replaces two.
+   *
+   * The individual rings say "I have chosen"; a single ring around the pair says "we are locked
+   * in", which is a different statement and wants a different shape. The delay is what makes it
+   * read as a *transition* rather than as a third state that was always there: the second player
+   * commits, their card arrives and pulses on its own, and only then do the two become one.
+   */
+  const bothChosen = chosenOwn !== null && chosenOpponent !== null
+  const [lockedIn, setLockedIn] = useState(false)
+
+  useEffect(() => {
+    if (!bothChosen) {
+      setLockedIn(false)
+      return
+    }
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setLockedIn(true)
+      return
+    }
+    const t = setTimeout(() => setLockedIn(true), LOCK_IN_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [bothChosen])
+
   return (
     <section className="stage" aria-label="Draft board">
       <BanBar view={view} byId={byId} mine={mine} theirs={theirs} />
 
-      <div className="stage__sides">
+      <div className={`stage__sides ${lockedIn ? 'stage__sides--locked' : ''}`}>
+        {/*
+          One ring around the pair, sized from the same arithmetic that places the cards: two
+          blown-up cells, the gaps either side of the "vs", and the "vs" column itself.
+        */}
+        {lockedIn ? (
+          <span
+            className="lockin"
+            aria-hidden="true"
+            style={{
+              width: `${Math.round(CELL_PX * CHOSEN_SCALE) * 2 + GAP_PX * 2 + VS_WIDTH_PX}px`,
+              height: `${Math.round(CELL_PX * CHOSEN_SCALE * (300 / 199)) + 8}px`,
+            }}
+          />
+        ) : null}
         <Side
           title="You"
           seat={view.seat}
