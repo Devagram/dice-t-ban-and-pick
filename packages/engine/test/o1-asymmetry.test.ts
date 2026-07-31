@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { baseMode, slotPool } from '@banpick/engine'
+import { baseMode } from '@banpick/engine'
 import type { MatchState, Seat } from '@banpick/types'
 
 import { apply, atModule, currentAction, driveUntil, otherSeat, startMatch } from './helpers.js'
@@ -38,7 +38,22 @@ function readBan(draftCount: 3 | 4, roundIndex: 0 | 1): Reading {
   const banner = state.rounds[roundIndex]!.privilegeHolder!
   const victim: Seat = otherSeat(banner)
 
+  /*
+   * Counted *before* the ban is applied, and by arithmetic rather than by reading the pool
+   * afterwards.
+   *
+   * `apply` drains the system step, and since 2026-07-31 the banned seat picks first — so at
+   * draftCount 3 the ban leaves it exactly one option and D26 auto-commits that option inside the
+   * same call. Reading the pool after the ban therefore measures zero, not because the victim had
+   * no choice but because the choice was already taken for it. The quantity §9.3 states is "how
+   * many did the ban leave", which is a fact about the moment of the ban.
+   */
   const ban = currentAction(state, banner, 'BAN')!
+  const unconsumedBefore = state.seats[victim].slots.value.filter((s) => !s.consumed)
+  const optionsAfterBan = unconsumedBefore.filter(
+    (s) => s.index !== ban.targets[0]!.slotIndex,
+  ).length
+
   state = apply(state, banner, {
     type: 'BAN',
     moduleId: ban.moduleId,
@@ -47,17 +62,6 @@ function readBan(draftCount: 3 | 4, roundIndex: 0 | 1): Reading {
     tier: 'ROUND',
     target: ban.targets[0]!,
   })
-
-  // Read the pool rather than the offered action, because select *order* differs by round:
-  // R1's override hands the privilege holder the first pick, so the victim is not being asked
-  // yet at this instant. The pool is the order-independent quantity §9.3's table states, and
-  // the banner's own pick cannot change it — it draws from the other seat's slots.
-  const optionsAfterBan = slotPool('legalRoundPick', {
-    state,
-    seat: victim,
-    slotIndex: null,
-    roundIndex,
-  }).length
 
   // D26 auto-commits a one-option select as SYSTEM, so playing the round out is how we confirm
   // that "one option" really did mean "no decision was ever put to the player".
@@ -102,23 +106,28 @@ describe('O1 — round-1 privilege strength, at draftCount 4', () => {
   })
 })
 
-describe('the §9.3 counterweight', () => {
-  it('hands the opponent the last pick in round 1, and the privilege holder it in round 0', () => {
-    // R1's selectOrder override is deliberate compensation for R1's stronger ban: the
-    // *opponent* picks second, with full information. At draftCount 3 the opponent is forced
-    // and the counterweight is dead on arrival; at 4 it does the job it was written to do.
+describe('the ban is answered before it is exploited', () => {
+  it('gives the banned seat the first pick in every round that has a ban', () => {
+    /*
+     * **§9.3's counterweight was removed on 2026-07-31.**
+     *
+     * Round 1 used to invert the select order so the *banner* chose first, as compensation for
+     * round 1's stronger ban. It was dropped after play: the rule a table expects is the simple
+     * one — you ban, they answer, you counter-pick — and reversing it in the middle round read as
+     * a bug rather than as balance. A counterweight nobody can feel is not balancing anything.
+     *
+     * Asserted on both rounds together, because the point is that they now agree.
+     */
     const program = startMatch({ mode: baseMode, draftCount: 4 }).mode.program
     const selects = (round: number) =>
       program.filter((m) => m.type === 'SELECT' && m.roundIndex === round)
 
-    expect(selects(0).map((m) => (m as { actor: string }).actor)).toEqual([
-      'opponent',
-      'privilegeHolder',
-    ])
-    expect(selects(1).map((m) => (m as { actor: string }).actor)).toEqual([
-      'privilegeHolder',
-      'opponent',
-    ])
+    for (const round of [0, 1]) {
+      expect(selects(round).map((m) => (m as { actor: string }).actor)).toEqual([
+        'opponent',
+        'privilegeHolder',
+      ])
+    }
     // R2 has no privilege at all, so both pick at once and neither holds information.
     expect(selects(2)).toHaveLength(1)
     expect((selects(2)[0] as { mode: string }).mode).toBe('SIMULTANEOUS_HIDDEN')

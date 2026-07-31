@@ -71,10 +71,18 @@ export const ROUND_OVERRIDES: Partial<Record<RoundIdx, RoundOverride>> = {
         turnOrderHolder: 'INVERT_PREVIOUS',
       },
     ],
-    // §9.3 — the *opponent* gets the last-pick information advantage, as deliberate
-    // compensation for R1's stronger ban. At draftCount 3 the opponent is forced and the
-    // counterweight is dead on arrival; at 4 it does the job it was written to do.
-    selectOrder: ['privilegeHolder', 'opponent'],
+    /**
+     * **The banned player picks first, in every round.**
+     *
+     * This used to read `['privilegeHolder', 'opponent']`, inverting round 0 so the *banner*
+     * chose first here — §9.3 argued it as a counterweight, since round 1's ban bites harder.
+     *
+     * Changed 2026-07-31 on the owner's call, after playing it. The rule the table expects is
+     * the simple one — you ban, they answer, you counter-pick — and having it reverse in the
+     * middle round read as a bug rather than as compensation. Kept as an explicit override
+     * rather than deleted, because saying it out loud is what stops it drifting back.
+     */
+    selectOrder: ['opponent', 'privilegeHolder'],
   },
 
   // D11 — no draft privilege exists in round 2, so the roll assigns turn order directly and

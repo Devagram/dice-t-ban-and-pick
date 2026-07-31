@@ -92,10 +92,17 @@ modules:
             id: invert
             privilegeHolder: INVERT_PREVIOUS
             turnOrderHolder: INVERT_PREVIOUS
-        # §9.3 — the *opponent* gets the last-pick information advantage, as deliberate
-        # compensation for round 1's stronger ban. At draftCount 3 the opponent is forced and
-        # the counterweight is dead on arrival; at 4 it does the job it was written to do.
-        selectOrder: [privilegeHolder, opponent]
+        # **The banned player picks first, in every round.**
+        #
+        # This used to read `[privilegeHolder, opponent]`, inverting round 0 so that the *banner*
+        # chose first here. §9.3 argued that as a counterweight: round 1's ban bites harder, so
+        # the last-pick information advantage moved to the other seat to compensate.
+        #
+        # Changed 2026-07-31 on the owner's call, after playing it. The rule the table expects is
+        # the simple one — you ban, they answer, you counter-pick — and having that reverse in the
+        # middle round read as a bug rather than as compensation. A counterweight nobody can feel
+        # is not balancing anything; it is just an inconsistency with a footnote.
+        selectOrder: [opponent, privilegeHolder]
 
       # D11 — no draft privilege exists in round 2, so the roll assigns turn order directly and
       # CHOOSE is removed rather than narrowed to a single option that grants nothing.

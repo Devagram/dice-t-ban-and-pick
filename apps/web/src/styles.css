@@ -1567,11 +1567,6 @@ select {
  * else has to move to make room, and `transform-origin` sends the growth toward the centre line
  * rather than into its neighbour.
  */
-.cell--chosen .cell {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
 .cell--chosen .cell__name {
   font-weight: 600;
 }
@@ -1635,7 +1630,7 @@ select {
  * border, because a border would change the box and shove the row sideways every time a pick
  * lands.
  */
-.cell--chosen .cell {
+.cell--chosen {
   border-color: transparent;
   animation: arc-ring 1.6s ease-in-out infinite;
 }
@@ -1714,7 +1709,7 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cell--chosen .cell,
+  .cell--chosen,
   .side--won .cell {
     animation: none;
     box-shadow: 0 0 0 2px var(--accent);

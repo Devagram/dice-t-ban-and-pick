@@ -115,8 +115,8 @@
                   }
                 ],
                 "selectOrder": [
-                  "privilegeHolder",
-                  "opponent"
+                  "opponent",
+                  "privilegeHolder"
                 ]
               },
               "2": {
@@ -262,7 +262,7 @@
                 "type": "SELECT",
                 "id": "rounds.1.selectFirst",
                 "mode": "SEQUENTIAL",
-                "actor": "privilegeHolder",
+                "actor": "opponent",
                 "pool": "legalRoundPick",
                 "roundIndex": 1
               },
@@ -270,7 +270,7 @@
                 "type": "SELECT",
                 "id": "rounds.1.selectSecond",
                 "mode": "SEQUENTIAL",
-                "actor": "opponent",
+                "actor": "privilegeHolder",
                 "pool": "legalRoundPick",
                 "roundIndex": 1
               },
@@ -342,7 +342,7 @@
               "enabled": false
             }
           },
-          "modeContentHash": "e3d9ca218e2a"
+          "modeContentHash": "c6985e696c87"
         },
         {
           "parameters": {
@@ -459,7 +459,7 @@
                 "type": "SELECT",
                 "id": "rounds.1.selectFirst",
                 "mode": "SEQUENTIAL",
-                "actor": "privilegeHolder",
+                "actor": "opponent",
                 "pool": "legalRoundPick",
                 "roundIndex": 1
               },
@@ -467,7 +467,7 @@
                 "type": "SELECT",
                 "id": "rounds.1.selectSecond",
                 "mode": "SEQUENTIAL",
-                "actor": "opponent",
+                "actor": "privilegeHolder",
                 "pool": "legalRoundPick",
                 "roundIndex": 1
               },
@@ -539,7 +539,7 @@
               "enabled": false
             }
           },
-          "modeContentHash": "8827f9d3d38c"
+          "modeContentHash": "33afd51b56ca"
         }
       ]
     },
@@ -680,8 +680,8 @@
                   }
                 ],
                 "selectOrder": [
-                  "privilegeHolder",
-                  "opponent"
+                  "opponent",
+                  "privilegeHolder"
                 ]
               },
               "2": {
@@ -857,7 +857,7 @@
                 "type": "SELECT",
                 "id": "rounds.1.selectFirst",
                 "mode": "SEQUENTIAL",
-                "actor": "privilegeHolder",
+                "actor": "opponent",
                 "pool": "legalRoundPick",
                 "roundIndex": 1
               },
@@ -865,7 +865,7 @@
                 "type": "SELECT",
                 "id": "rounds.1.selectSecond",
                 "mode": "SEQUENTIAL",
-                "actor": "opponent",
+                "actor": "privilegeHolder",
                 "pool": "legalRoundPick",
                 "roundIndex": 1
               },
@@ -937,7 +937,7 @@
               "enabled": false
             }
           },
-          "modeContentHash": "90e89e63ccf0"
+          "modeContentHash": "d3e0f22018cb"
         },
         {
           "parameters": {
@@ -1084,7 +1084,7 @@
                 "type": "SELECT",
                 "id": "rounds.1.selectFirst",
                 "mode": "SEQUENTIAL",
-                "actor": "privilegeHolder",
+                "actor": "opponent",
                 "pool": "legalRoundPick",
                 "roundIndex": 1
               },
@@ -1092,7 +1092,7 @@
                 "type": "SELECT",
                 "id": "rounds.1.selectSecond",
                 "mode": "SEQUENTIAL",
-                "actor": "opponent",
+                "actor": "privilegeHolder",
                 "pool": "legalRoundPick",
                 "roundIndex": 1
               },
@@ -1164,7 +1164,7 @@
               "enabled": false
             }
           },
-          "modeContentHash": "a410b3e1d1a7"
+          "modeContentHash": "c4c1f2758235"
         }
       ]
     }

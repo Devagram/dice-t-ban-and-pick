@@ -116,7 +116,17 @@ modules:
             id: invert
             privilegeHolder: INVERT_PREVIOUS
             turnOrderHolder: INVERT_PREVIOUS
-        selectOrder: [privilegeHolder, opponent]
+        # **The banned player picks first, in every round.**
+        #
+        # This used to read `[privilegeHolder, opponent]`, inverting round 0 so that the *banner*
+        # chose first here. §9.3 argued that as a counterweight: round 1's ban bites harder, so
+        # the last-pick information advantage moved to the other seat to compensate.
+        #
+        # Changed 2026-07-31 on the owner's call, after playing it. The rule the table expects is
+        # the simple one — you ban, they answer, you counter-pick — and having that reverse in the
+        # middle round read as a bug rather than as compensation. A counterweight nobody can feel
+        # is not balancing anything; it is just an inconsistency with a footnote.
+        selectOrder: [opponent, privilegeHolder]
 
       2:
         remove: [privilegeChoice, ban]
