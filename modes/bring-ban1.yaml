@@ -1,18 +1,28 @@
 # Spec §9.2 — "Bring N, ban 1". Identical to base with three modules prepended.
 #
-# Sequence: commit picks and ban (hidden) -> gate one reveals bans only -> repick banned slots
-# (hidden, conditional) -> gate two reveals picks -> the round loop.
+# Sequence: **ban first**, both blind -> reveal both bans -> draft against that knowledge
+# (hidden) -> reveal picks -> the round loop.
 #
-# On what this mode actually asks (open item O6). An opponent-only meta ban does not prevent a
-# mirror, it *steals* one: if both players drafted the same character and only one bans it, the
-# banner keeps theirs. And at the ~75-character target roster the chance a named character sits
-# in an opponent's draft is draftCount/75 — about 5.3% at 4, so the ban whiffs roughly nineteen
-# times in twenty under uniform drafting.
+# **The ban moved in front of the draft (2026-07-31), and that resolves O6.** It used to sit
+# alongside the draft: you committed picks and a ban together, so the ban was a guess about what
+# the opponent had brought. At a 45-character roster that guess landed about `draftCount/45` of
+# the time — roughly 9% at 4, so it whiffed nine times in ten and the mode's headline mechanic
+# was mostly a coin that came up tails. Banning first makes it certain: the character is gone
+# from their pool before they choose, so the ban always does something.
 #
-# Friends do not draft uniformly. They draft favourites, and you know theirs. So the honest
-# framing for UI copy is "what do they always play?" rather than "did they bring this?" — and
-# §15's meta-ban hit rate is what decides whether the mode earns its place. Do not compensate
-# by banning more: two bans reach ~10.4%, and a coin flip would take roughly fifteen.
+# Two consequences worth stating, because neither is obvious:
+#
+#   - **CONDITIONAL_RECOMMIT is gone.** It existed only to repair a draft that a blind ban had
+#     hit. Ban before drafting and there is nothing to repair — the module had no reason left to
+#     exist, so it was removed rather than left in as a no-op.
+#   - **The pool needed no change at all.** `legalDraftPool` already reads
+#     `activeRoster \ globalBanned \ metaBannedAgainst[seat] \ selfHeld`, so the ban term was
+#     there the whole time and simply evaluated empty at draft time. §6's bet — "every draft rule
+#     is a set expression, adding a mode should never require new pool code" — collected here.
+#
+# The ban stays `OPPONENT_ONLY` (D4). It does not remove a character from the match, it removes
+# it from *them*: with mirrors allowed (D1) you may still draft the character you just banned,
+# which is the "steal" line and is now a live option rather than a coincidence.
 schemaVersion: 1
 mode: bring-ban1
 label: 'Bring ${draftCount}, Ban 1'
@@ -24,6 +34,20 @@ parameters:
     label: 'Characters drafted'
 
 modules:
+  # Phase one: the ban, blind on both sides, revealed the moment both are in.
+  - use: SIMULTANEOUS_COMMIT
+    id: ban
+    commits:
+      metaBan:
+        count: 1
+        pool: legalMetaBanPool # activeRoster \ globalBanned — so a meta ban cannot be
+        tier: META #             wasted on an already globally banned character
+        targets: OPPONENT_ONLY # D4 — scoped to one opponent seat, so no self-own is possible
+    reveal:
+      metaBan: IMMEDIATE
+
+  # Phase two: the draft, now played against a known ban. `legalDraftPool` subtracts
+  # `metaBannedAgainst[seat]` on its own — see the note above.
   - use: SIMULTANEOUS_COMMIT
     id: draft
     commits:
@@ -33,24 +57,12 @@ modules:
         pool: legalDraftPool
         crossSeatMirrors: ALLOWED # D1
         selfDuplicates: FORBIDDEN # D12
-      metaBan:
-        count: 1
-        pool: legalMetaBanPool # activeRoster \ globalBanned — so a meta ban cannot be
-        tier: META #             wasted on an already globally banned character
-        targets: OPPONENT_ONLY # D4 — scoped to one opponent seat, so no self-own is possible
     reveal:
-      metaBan: IMMEDIATE # gate one
-      picks: DEFERRED # gate two, below
-
-  - use: CONDITIONAL_RECOMMIT
-    id: repick
-    trigger: repickTrigger
-    pool: legalDraftPool
-    hidden: true
+      picks: DEFERRED # opened by pickReveal, below
 
   - use: REVEAL
     id: pickReveal
-    slices: [slots] # gate two
+    slices: [slots]
 
   - use: ROUND_LOOP
     id: rounds

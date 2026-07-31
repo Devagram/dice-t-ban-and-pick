@@ -5,6 +5,7 @@ import { otherSeat, type EventPayload, type MatchState, type Seat } from '@banpi
 import {
   apply,
   atModule,
+  blindBanMode,
   currentAction,
   driveUntil,
   expectRejected,
@@ -61,14 +62,16 @@ describe('SIMULTANEOUS_COMMIT', () => {
   })
 
   it('requires the meta ban a mode does declare', () => {
+    // `bring-ban1` opens on a ban-only commit, so omitting the ban is the wrong shape — and
+    // sending picks it never asked for is wrong for the same reason.
     const state = startMatch({ mode: bringBan1Mode, draftCount: 4 })
     expect(
       expectRejected(
         send(state, 'A', {
           type: 'COMMIT',
-          moduleId: 'draft',
+          moduleId: 'ban',
           seat: 'A',
-          picks: ['anvil', 'cartographer', 'duelist', 'gambler'],
+          picks: [],
           metaBan: null,
         }),
       ).code,
@@ -80,7 +83,7 @@ describe('CONDITIONAL_RECOMMIT', () => {
   /** A repick where A's ban hits B's slot 0. */
   function atRepick(constraints?: { selfDuplicates: 'ALLOWED' | 'FORBIDDEN' }) {
     let state = startMatch({
-      mode: bringBan1Mode,
+      mode: blindBanMode,
       draftCount: 4,
       ...(constraints ? { constraints } : {}),
     })
@@ -173,7 +176,7 @@ describe('CONDITIONAL_RECOMMIT', () => {
     // slots at once" — so the guard is written for the constraint being a *parameter*, and
     // this test reaches it the only way the shipped rules allow: by relaxing D12.
     let state = startMatch({
-      mode: bringBan1Mode,
+      mode: blindBanMode,
       draftCount: 4,
       constraints: { selfDuplicates: 'ALLOWED' },
     })

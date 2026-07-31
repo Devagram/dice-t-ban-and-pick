@@ -125,7 +125,9 @@ describe('progress leaks nothing and changes nothing', () => {
 
     expect(a.lastError?.code, 'the flood locked the seat out of acting').not.toBe('RATE_LIMITED')
     expect(a.lastRejection).toBeUndefined()
-    expect(b.view.opponent.hasCommitted).toBe(true)
+    // The first commit is the ban phase, which creates no slots — so `hasCommitted` (derived
+    // from slots) is the wrong question. "Is the server still waiting on A?" is the right one.
+    expect(b.view.phase!.awaiting).toEqual(['B'])
   })
 
   it('does not disturb a match played alongside it', async () => {

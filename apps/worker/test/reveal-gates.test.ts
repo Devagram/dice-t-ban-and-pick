@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { materialize, seatedMatch } from './client.js'
+import { commitPhase, materialize, seatedMatch } from './client.js'
 
 /**
  * The two reveal gates, as the rail sees them.
@@ -17,14 +17,20 @@ import { materialize, seatedMatch } from './client.js'
 describe('gate one opens the bans and nothing else', () => {
   it('shows what they banned while their picks stay sealed', async () => {
     const { a, b } = await seatedMatch({ modeId: 'bring-ban1', draftCount: 4 })
-    await a.act(materialize(a.action('COMMIT')!, 'A'))
-    await b.act(materialize(b.action('COMMIT')!, 'B'))
+    await commitPhase(a, b) // the ban phase
     await a.settle(20)
 
     // Gate one: the ban is out in the open...
     expect(a.view.opponent.metaBanPlaced).toBeDefined()
     expect(typeof a.view.opponent.metaBanPlaced).toBe('string')
-    // ...and the draft behind it is not.
+    // ...and nobody has drafted yet, so there is nothing behind it to hide. Slots are present
+    // and empty rather than absent — absence is what sealing looks like, and nothing is sealed.
+    expect(a.view.opponent.slots).toEqual([])
+    expect(a.view.opponent.hasCommitted).toBe(false)
+
+    // Now B drafts and A does not: *that* is the sealed window.
+    await b.act(materialize(b.action('COMMIT')!, 'B'))
+    await a.settle(20)
     expect(a.view.opponent.slots).toBeUndefined()
     expect(a.view.opponent.hasCommitted).toBe(true)
     expect(a.view.opponent.slotCount).toBe(4)
@@ -32,8 +38,11 @@ describe('gate one opens the bans and nothing else', () => {
 
   it('does not leak their picks in the frame that carries the ban', async () => {
     const { a, b } = await seatedMatch({ modeId: 'bring-ban1', draftCount: 4 })
+    await commitPhase(a, b) // the ban phase, which reveals both bans
+    await a.settle(20)
+
+    // B drafts; A has not, so B's picks are sealed.
     const bPicks = materialize(b.action('COMMIT')!, 'B')
-    await a.act(materialize(a.action('COMMIT')!, 'A'))
     await b.act(bPicks)
     await a.settle(20)
 

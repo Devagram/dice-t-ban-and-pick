@@ -1240,3 +1240,197 @@ select {
 .activity__pip--on {
   background: var(--accent);
 }
+
+/* --- The stage: a fixed board, like a fighting game's select screen ------- */
+
+/*
+ * The arrangement never changes — your side, "vs", their side, and whatever the phase puts
+ * underneath. Only cell *state* changes. That is what makes it readable at a glance, and it is
+ * the thing the old vertical rails could not do because they appeared and vanished with panels.
+ */
+.stage {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+
+.stage__sides {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: 8px;
+}
+
+.stage__vs {
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.side__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.side__title {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.side__seat {
+  font-size: 0.7rem;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.side__score {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* The row. `[1][2][3] vs [1][2][3]` — one column per slot, never wrapping to a list. */
+.side__row {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+}
+
+.side--opponent .side__row {
+  direction: rtl; /* their slot 1 sits nearest the centre, mirroring your side */
+}
+.side--opponent .cell {
+  direction: ltr;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font-size: 0.65rem;
+  text-align: center;
+}
+
+/* Dashed while unverified, solid once the server has it. See the note in Stage.tsx. */
+.cell--empty {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--line) 60%, transparent);
+  color: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+
+.cell--choosing,
+.cell--mine {
+  border-style: dashed;
+  border-color: var(--accent);
+  animation: slot-arrive 220ms ease-out;
+}
+
+.cell--sealed {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.cell--choosable {
+  border-color: var(--accent);
+  cursor: pointer;
+}
+
+.cell--spent {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.cell--banned {
+  border-color: var(--danger);
+}
+
+.cell__face {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.cell__name {
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+/* The staggered reveal. Delay is set per cell in Stage.tsx. */
+.cell--flip {
+  animation: slot-flip 420ms ease-out backwards;
+  animation-delay: var(--flip-delay, 0ms);
+}
+
+/* --- The ban bar, above the teams ---------------------------------------- */
+
+.banbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bancell {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+
+.bancell__label {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.65rem;
+}
+
+.bancell--placed .bancell__name {
+  color: var(--danger);
+  text-decoration: line-through;
+}
+
+.bancell__name--pending {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* A banned character stays in the roster, greyed — a ban you cannot see is information lost. */
+.tile--blocked {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+.tile--blocked .tile__name {
+  text-decoration: line-through;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell--flip,
+  .cell--choosing,
+  .cell--mine {
+    animation: none;
+  }
+}

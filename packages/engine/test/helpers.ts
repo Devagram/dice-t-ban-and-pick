@@ -1,4 +1,5 @@
 import {
+  bringBan1Mode,
   ENGINE_VERSION,
   legalActions,
   reduce,
@@ -34,6 +35,51 @@ export const ROSTER_75 = roster75Json as Roster
 const CONSTRAINTS: DraftConstraints = {
   crossSeatMirrors: 'ALLOWED', // D1
   selfDuplicates: 'FORBIDDEN', // D12
+}
+
+/**
+ * A mode that bans **blind, alongside the draft**, and therefore needs a repick.
+ *
+ * This was `bring-ban1`'s shape until 2026-07-31, when the ban moved in front of the draft and
+ * took `CONDITIONAL_RECOMMIT`'s reason for existing with it. No shipped mode uses that module
+ * now — but it is one of §8's nine, and the whole architectural bet (D25, Phase 6) is that
+ * modules are composable pieces a *future* mode can pick up. Deleting a documented capability
+ * because today's two modes happen not to use it would be quietly narrowing the system.
+ *
+ * So the module keeps its implementation and its tests, and the tests own a mode to run it
+ * against. That is also more honest than what came before: these were always tests of
+ * `CONDITIONAL_RECOMMIT`, and they only looked like tests of `bring-ban1`.
+ */
+export const blindBanMode: ModeDefinition = {
+  modeId: 'blind-ban-fixture',
+  label: 'Blind ban, then repick',
+  parameters: { draftCount: { values: [3, 4], default: 4, label: 'Characters drafted' } },
+  modules: [
+    {
+      type: 'SIMULTANEOUS_COMMIT',
+      id: 'draft',
+      commits: {
+        picks: { count: { param: 'draftCount' }, pool: 'legalDraftPool' },
+        metaBan: { count: 1, pool: 'legalMetaBanPool', tier: 'META', targets: 'OPPONENT_ONLY' },
+      },
+      reveal: { picks: 'DEFERRED', metaBan: 'IMMEDIATE' },
+    },
+    {
+      type: 'CONDITIONAL_RECOMMIT',
+      id: 'repick',
+      trigger: 'repickTrigger',
+      pool: 'legalDraftPool',
+      hidden: true,
+    },
+    { type: 'REVEAL', id: 'pickReveal', slices: ['slots'] },
+    // Borrowed from the shipped mode rather than copied, so this fixture cannot drift into
+    // testing a round loop the real game does not play.
+    bringBan1Mode.modules[bringBan1Mode.modules.length - 1]!,
+  ],
+  // Same values as the shipped modes' shared constants, which the engine barrel does not export.
+  onTie: { scoring: 'HALF_POINT', consumesCharacters: true },
+  match: { resolution: 'ALWAYS_3_ROUNDS', stopWhenDecided: true },
+  overtime: { enabled: false },
 }
 
 export interface MatchOptions {
@@ -145,6 +191,40 @@ export function playFirstLegal(state: MatchState, seat: Seat): MatchState {
   const action = legalActions(state, seat).find((a) => a.type !== 'UNDO_LAST_RESULT')
   if (!action) throw new Error(`seat ${seat} has no legal action`)
   return apply(state, seat, materialize(action, seat))
+}
+
+/**
+ * Plays the current `SIMULTANEOUS_COMMIT` for both seats, whatever it happens to ask for.
+ *
+ * Named by intent rather than by module id on purpose. `bring-ban1` used to have one commit
+ * carrying picks *and* a ban; it now has two — ban, then draft — and a test that hardcoded
+ * `moduleId: 'draft'` was really asserting the shape of the mode file from across the codebase.
+ * Anything that genuinely cares which phase it is in should say so by asserting, not by naming.
+ */
+export function commitPhase(
+  state: MatchState,
+  offsets: Partial<Record<Seat, number>> = {},
+): MatchState {
+  let current = state
+  for (const seat of SEATS) {
+    const action = currentAction(current, seat, 'COMMIT')
+    if (!action) continue
+    current = apply(current, seat, materialize(action, seat, offsets[seat] ?? 0))
+  }
+  return current
+}
+
+/** Drains every consecutive commit phase — one call to get from match start to a full draft. */
+export function commitAll(
+  state: MatchState,
+  offsets: Partial<Record<Seat, number>> = {},
+): MatchState {
+  let current = state
+  for (let guard = 0; guard < 8; guard++) {
+    if (!SEATS.some((s) => currentAction(current, s, 'COMMIT'))) return current
+    current = commitPhase(current, offsets)
+  }
+  throw new Error('commitAll: still committing after 8 phases')
 }
 
 /**

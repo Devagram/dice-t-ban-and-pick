@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CharId, PlayerActionPayload, PlayerView, SlotIdx } from '@banpick/types'
 
 import { RESUME_LINK_WARNING, WAITING_NOTE } from '../copy.js'
@@ -8,7 +8,7 @@ import { DiceRoll } from '../components/DiceRoll.js'
 import { OpponentActivity } from '../components/OpponentActivity.js'
 import { DraftPanel, RecommitPanel } from '../components/DraftPanel.js'
 import { Outcome, RoundStrip } from '../components/RoundStrip.js'
-import { SlotRail } from '../components/SlotRail.js'
+import { Stage } from '../components/Stage.js'
 
 /**
  * The match.
@@ -136,6 +136,28 @@ function MatchBody({
    */
   const expectedSlots = Number(view.ruleset.parameters.draftCount) || 0
 
+  /**
+   * True for one beat when the opponent's draft opens, so the flip plays exactly once.
+   *
+   * Keyed on the *transition* rather than on the state: this component re-renders on every
+   * frame, and a reveal that replayed each time would be unwatchable. Honours reduced motion by
+   * never starting.
+   */
+  const opponentOpen = (view.opponent.slots?.length ?? 0) > 0
+  const wasOpen = useRef(opponentOpen)
+  const [revealing, setRevealing] = useState(false)
+
+  useEffect(() => {
+    if (opponentOpen === wasOpen.current) return
+    wasOpen.current = opponentOpen
+    if (!opponentOpen) return
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    setRevealing(true)
+    const done = setTimeout(() => setRevealing(false), expectedSlots * 150 + 600)
+    return () => clearTimeout(done)
+  }, [opponentOpen, expectedSlots])
+
   return (
     <>
       <header className="matchbar">
@@ -155,67 +177,57 @@ function MatchBody({
           still-tumbling die would answer the question the animation is asking. */}
       {rollPlaying ? null : (
         <>
+          {/* The board, always in the same place and always the same shape. Only what sits
+              *under* it changes: the roster while drafting, the result buttons once a round is
+              being played. That fixed frame is the whole idea — a select screen you can read at
+              a glance because nothing moves. */}
+          <Stage
+            view={view}
+            expected={expectedSlots}
+            mine={{ filled: mine.picks.length, picks: mine.picks, ban: mine.metaBan !== null }}
+            // Their count comes from their own browser, so the stage draws it as "choosing"
+            // rather than as fact. No ids: there are none to have (§7).
+            theirs={progress ? { filled: progress.filled, ban: progress.ban } : { filled: 0 }}
+            revealing={revealing}
+            selectableOwn={targets.own as SlotIdx[]}
+            selectableOpponent={targets.opponent as SlotIdx[]}
+            onSelectOwn={(index) => {
+              const select = targets.select
+              if (!select) return
+              onAct({
+                type: 'SELECT',
+                moduleId: select.moduleId,
+                roundIndex: select.roundIndex,
+                seat: view.seat,
+                slotIndex: index,
+                reason: null,
+              })
+            }}
+            onSelectOpponent={(index) => {
+              const ban = targets.ban
+              if (!ban) return
+              const target = ban.targets.find((t) => t.slotIndex === index)
+              if (!target) return
+              onAct({
+                type: 'BAN',
+                moduleId: ban.moduleId,
+                roundIndex: ban.roundIndex,
+                seat: view.seat,
+                tier: 'ROUND',
+                target,
+              })
+            }}
+          />
+
           {targets.ban ? (
             <p className="prompt__title">Ban one of their characters for this round</p>
           ) : null}
           {targets.select ? <p className="prompt__title">Choose who you play this round</p> : null}
 
-          {/* Both rails, for the whole match — including *during* the draft, which is the point.
-              They used to be hidden whenever a commit panel was open, so the draft happened
-              behind a blank screen and four slots appeared at once at the end. */}
-          <div className="rails">
-            <SlotRail
-              title="Yours"
-              // D4 — your ban lands on one of *their* characters, and theirs on one of yours.
-              banLabel="You banned"
-              view={view.you}
-              roster={view.roster}
-              currentRound={view.phase?.roundIndex ?? null}
-              expected={expectedSlots}
-              pending={{ filled: mine.picks.length, picks: mine.picks, ban: mine.metaBan !== null }}
-              selectable={targets.own as SlotIdx[]}
-              onSelect={(index) => {
-                const select = targets.select
-                if (!select) return
-                onAct({
-                  type: 'SELECT',
-                  moduleId: select.moduleId,
-                  roundIndex: select.roundIndex,
-                  seat: view.seat,
-                  slotIndex: index,
-                  reason: null,
-                })
-              }}
-            />
-            <SlotRail
-              title="Theirs"
-              banLabel="They banned"
-              view={view.opponent}
-              roster={view.roster}
-              currentRound={view.phase?.roundIndex ?? null}
-              expected={expectedSlots}
-              // Their count comes from their browser, so the rail draws it as "choosing" rather
-              // than as fact. No ids: there are none to have (§7).
-              pending={progress ? { filled: progress.filled, ban: progress.ban } : { filled: 0 }}
-              selectable={targets.opponent as SlotIdx[]}
-              onSelect={(index) => {
-                const ban = targets.ban
-                if (!ban) return
-                const target = ban.targets.find((t) => t.slotIndex === index)
-                if (!target) return
-                onAct({
-                  type: 'BAN',
-                  moduleId: ban.moduleId,
-                  roundIndex: ban.roundIndex,
-                  seat: view.seat,
-                  tier: 'ROUND',
-                  target,
-                })
-              }}
-            />
-          </div>
-
           <OpponentActivity view={view} progress={progress} />
+
+          {/* Under the board: the roster while there is drafting to do, and nothing at all once
+              the rounds start — at which point the ActionBar's result buttons take its place. */}
           {commit ? (
             <DraftPanel
               view={view}

@@ -62,6 +62,14 @@ export function DraftPanel({ view, commit, onAct, onProgress, onDraftChange }: D
   const banChosen = wantsBan && metaBan !== null
 
   /**
+   * What the opponent's meta ban closed off to you.
+   *
+   * Read off the view rather than derived: `opponent.metaBanPlaced` is *their* ban, and D4 scopes
+   * it to you. It is public from gate one, which is exactly why it can be drawn.
+   */
+  const bannedAgainstYou = view.opponent.metaBanPlaced ? [view.opponent.metaBanPlaced] : []
+
+  /**
    * Reported on **change**, not on render.
    *
    * The callbacks are deliberately not dependencies, and the refs are why they can safely not be:
@@ -109,6 +117,9 @@ export function DraftPanel({ view, commit, onAct, onProgress, onDraftChange }: D
               label="Your draft"
               help="Nobody sees these until both of you have committed."
               pool={currentPool.filter((id) => !picks.includes(id))}
+              // Bans are shown greyed rather than hidden: the point of banning before the draft
+              // is that you choose knowing what is gone. Handed in, never computed (§11.4).
+              unavailable={bannedAgainstYou}
               roster={view.roster}
               selected={picks}
               remaining={commit.picks!.count - picks.length}

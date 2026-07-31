@@ -192,8 +192,12 @@ describe('mode resolution', () => {
   })
 
   it('applies the parameter to bring-ban1 too, which the spec had hardcoded at 4', () => {
+    // Found by id, not by position: bring-ban1 opens on its ban phase now, and `program[0]`
+    // silently became the wrong module rather than a missing one.
     const resolved = resolveMode(bringBan1Mode, { draftCount: 3 })
-    const draft = resolved.program[0] as { commits: { picks: { count: number } } }
+    const draft = resolved.program.find((m) => m.id === 'draft') as {
+      commits: { picks: { count: number } }
+    }
     expect(draft.commits.picks.count).toBe(3)
   })
 
@@ -203,11 +207,18 @@ describe('mode resolution', () => {
       'draft:reveal',
     )
 
-    // bring-ban1 defers picks to gate two, which is a different module entirely.
+    // bring-ban1 splits the two across three modules: the ban opens at its own gate, the draft
+    // defers to a later REVEAL. Each commit still seals itself with the tag that will open it,
+    // which is the invariant — the module it belongs to is incidental.
     const hidden = resolveMode(bringBan1Mode, { draftCount: 4 })
-    const draft = hidden.program[0] as { revealTags: { picks: string; metaBan: string } }
-    expect(draft.revealTags.metaBan).toBe('draft:reveal') // gate one
-    expect(draft.revealTags.picks).toBe('pickReveal:reveal') // gate two
+    const ban = hidden.program.find((m) => m.id === 'ban') as {
+      revealTags: { metaBan: string }
+    }
+    const hiddenDraft = hidden.program.find((m) => m.id === 'draft') as {
+      revealTags: { picks: string }
+    }
+    expect(ban.revealTags.metaBan).toBe('ban:reveal') // gate one
+    expect(hiddenDraft.revealTags.picks).toBe('pickReveal:reveal') // gate two
   })
 
   it('refuses a parameter value outside the declared space (D25)', () => {

@@ -111,13 +111,16 @@ describe('golden replay — bring-ban1 (hidden mode)', () => {
       const final = playMatch(startMatch({ mode: bringBan1Mode, draftCount }), ['A', 'B', 'A'])
 
       expect(final.status).toBe('COMPLETE')
-      expect(final.log.some((e) => e.tag === 'draft:reveal')).toBe(true) // gate one
+      expect(final.log.some((e) => e.tag === 'ban:reveal')).toBe(true) // gate one
       expect(final.log.some((e) => e.tag === 'pickReveal:reveal')).toBe(true) // gate two
 
-      // Gate one strictly precedes gate two, and the repick sits between them.
-      const gate1 = final.log.findIndex((e) => e.tag === 'draft:reveal')
+      // Gate one strictly precedes gate two, and the *draft* sits between them — which is the
+      // whole point of the reordering: you choose knowing what was banned.
+      const gate1 = final.log.findIndex((e) => e.tag === 'ban:reveal')
       const gate2 = final.log.findIndex((e) => e.tag === 'pickReveal:reveal')
-      expect(gate1).toBeLessThan(gate2)
+      const draft = final.log.findIndex((e) => e.tag === 'draft:COMMIT')
+      expect(gate1).toBeLessThan(draft)
+      expect(draft).toBeLessThan(gate2)
     })
 
     it(`replays byte for byte at draftCount ${draftCount}`, () => {
@@ -126,16 +129,18 @@ describe('golden replay — bring-ban1 (hidden mode)', () => {
     })
   }
 
-  it('triggers a repick when the meta ban lands', () => {
-    // Both seats take the first legal characters, so both drafts start identically and each
-    // seat's meta ban necessarily hits the opponent. Not representative play — deliberately
-    // the case the repick module exists for.
+  it('makes the ban bite the draft instead of needing a repick', () => {
+    // **This test inverted when the ban moved in front of the draft.** It used to assert that a
+    // RECOMMIT happened — a blind ban hit a drafted character and the seat had to swap it out.
+    // Now the ban lands before anyone drafts, so the character is simply never draftable and
+    // there is nothing to repair. Same guarantee, reached without the repair step.
     const final = playMatch(startMatch({ mode: bringBan1Mode, draftCount: 4 }), ['A', 'B', 'A'])
 
-    const recommits = final.log.filter((e) => e.payload.type === 'RECOMMIT')
-    expect(recommits.length).toBeGreaterThan(0)
+    expect(final.log.filter((e) => e.payload.type === 'RECOMMIT')).toHaveLength(0)
+    expect(final.metaBannedAgainst.A.length + final.metaBannedAgainst.B.length).toBeGreaterThan(0)
 
-    // Nobody ends up holding a character banned against them. That is the whole job.
+    // Nobody ends up holding a character banned against them. That is the whole job, and it is
+    // now enforced by the pool rather than by a correction after the fact.
     for (const seat of ['A', 'B'] as const) {
       const held = final.seats[seat].slots.value.map((s) => s.characterId)
       for (const banned of final.metaBannedAgainst[seat]) {
@@ -153,16 +158,16 @@ describe('golden replay — bring-ban1 (hidden mode)', () => {
 
     state = apply(state, 'A', {
       type: 'COMMIT',
-      moduleId: 'draft',
+      moduleId: 'ban',
       seat: 'A',
-      picks: ['anvil', 'cartographer', 'duelist', 'gambler'],
+      picks: [],
       metaBan: banA,
     })
     state = apply(state, 'B', {
       type: 'COMMIT',
-      moduleId: 'draft',
+      moduleId: 'ban',
       seat: 'B',
-      picks: ['herald', 'magpie', 'oracle', 'sentinel'],
+      picks: [],
       metaBan: banB,
     })
 
@@ -171,18 +176,18 @@ describe('golden replay — bring-ban1 (hidden mode)', () => {
     expect(state.metaBannedAgainst.A).toEqual([banB])
     expect(state.metaBannedAgainst.A).not.toContain(banA)
 
-    // B holds both `oracle` and `sentinel`, but only *A's* ban reaches B. B repicks slot 2
-    // and keeps slot 3 — B banned `sentinel` and still plays their own. That is D4's "no
-    // self-own is possible", and it is why the blast radius question in G3 mattered.
-    const repick = currentAction(state, 'B', 'RECOMMIT')
-    expect(repick).not.toBeNull()
-    expect(repick!.slots.map((s) => s.index)).toEqual([2])
-    expect(state.seats.B.slots.value[3]!.characterId).toBe(banB)
-    expect(currentAction(state, 'A', 'RECOMMIT')).toBeNull()
+    // The direction is now visible in the *pools*, which is stronger than seeing it in a repick:
+    // A banned `oracle`, so it is gone from B's draft and still available to A.
+    const bPool = currentAction(state, 'B', 'COMMIT')!.picks!.poolBySlot[0]!
+    const aPool = currentAction(state, 'A', 'COMMIT')!.picks!.poolBySlot[0]!
+    expect(bPool).not.toContain(banA)
+    expect(aPool).toContain(banA)
+    // And symmetrically for B's ban.
+    expect(aPool).not.toContain(banB)
+    expect(bPool).toContain(banB)
 
-    // §9.2's real point: the ban *steals* a mirror, it does not prevent one. A banned `oracle`
-    // while never holding it, so A loses nothing and B loses the slot.
-    expect(state.seats.A.slots.value.map((s) => s.characterId)).not.toContain(banA)
+    // §9.2's real point survives the reordering: the ban *steals* a mirror rather than
+    // preventing one — A may still draft the character A banned, and now knowingly.
   })
 
   it('forbids a meta ban on an already globally banned character', () => {
@@ -191,24 +196,23 @@ describe('golden replay — bring-ban1 (hidden mode)', () => {
     const banned = ROSTER_10.characters[0]!.id
     const state = startMatch({ mode: bringBan1Mode, draftCount: 4, globalBanned: [banned] })
 
+    // The opening commit is the ban phase, so it offers a meta ban and no picks.
     const commit = currentAction(state, 'A', 'COMMIT')
     expect(commit).not.toBeNull()
+    expect(commit!.picks).toBeNull()
     expect(commit!.metaBan!.pool).not.toContain(banned)
-    for (const pool of commit!.picks!.poolBySlot) {
-      expect(pool).not.toContain(banned)
-    }
 
     const rejection = expectRejected(
       reduce(state, {
         v: 1,
         seq: state.log.length,
-        tag: 'draft:COMMIT',
+        tag: 'ban:COMMIT',
         actor: 'A',
         payload: {
           type: 'COMMIT',
-          moduleId: 'draft',
+          moduleId: 'ban',
           seat: 'A',
-          picks: commit!.picks!.poolBySlot.map((p, i) => p[i]!),
+          picks: [],
           metaBan: banned,
         },
       }),

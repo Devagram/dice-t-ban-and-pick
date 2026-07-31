@@ -42,14 +42,26 @@ export const baseMode: ModeDefinition = {
 /**
  * Spec §9.2 — identical to base with three modules prepended.
  *
- * Sequence: commit picks and ban (hidden) → **gate one** reveals bans only → repick banned
- * slots (hidden, conditional) → **gate two** reveals picks → round loop.
+ * Sequence: **ban first**, both blind → reveal both bans → draft against that knowledge (hidden)
+ * → reveal picks → round loop.
  *
- * On what the mode actually asks (O6): an opponent-only meta ban does not prevent a mirror, it
- * steals one — and at a ~75-character roster it hits about 5.3% of the time under uniform
- * drafting. Friends do not draft uniformly, so the real question is *"what do they always
- * play?"* rather than *"did they bring this?"*. §15's meta-ban hit rate is what decides whether
- * the mode earns its place.
+ * **The ban moved in front of the draft (2026-07-31), and that resolves O6.** It used to be
+ * committed alongside the picks, which made it a guess about what the opponent had brought — at
+ * a 45-character roster, `draftCount/45`, so roughly nine whiffs in ten. Banning first makes it
+ * certain: the character leaves their pool before they choose.
+ *
+ * Two consequences, neither obvious:
+ *
+ *   - **`CONDITIONAL_RECOMMIT` is gone.** It existed only to repair a draft a blind ban had hit.
+ *     Ban first and there is nothing to repair, so the module was removed rather than left as a
+ *     no-op that would still have to be reasoned about.
+ *   - **The pool needed no change.** `legalDraftPool` already subtracts `metaBannedAgainst[seat]`
+ *     (see `pools.ts`); the term simply evaluated empty at draft time. §6's claim that "adding a
+ *     mode should never require new pool code" held for a reordering it never anticipated.
+ *
+ * The ban stays `OPPONENT_ONLY` (D4): it removes the character from *them*, not from the match.
+ * With mirrors allowed (D1) you may still draft what you banned, which is now a deliberate line
+ * rather than an accident.
  */
 export const bringBan1Mode: ModeDefinition = {
   modeId: 'bring-ban1',
@@ -58,22 +70,24 @@ export const bringBan1Mode: ModeDefinition = {
   modules: [
     {
       type: 'SIMULTANEOUS_COMMIT',
+      id: 'ban',
+      commits: {
+        picks: null,
+        metaBan: { count: 1, pool: 'legalMetaBanPool', tier: 'META', targets: 'OPPONENT_ONLY' },
+      },
+      reveal: { picks: 'NONE', metaBan: 'IMMEDIATE' },
+    },
+    {
+      type: 'SIMULTANEOUS_COMMIT',
       id: 'draft',
       commits: {
         // The spec hardcoded 4 here while declaring the parameter — reconciled 2026-07-28.
         picks: { count: { param: 'draftCount' }, pool: 'legalDraftPool' },
-        metaBan: { count: 1, pool: 'legalMetaBanPool', tier: 'META', targets: 'OPPONENT_ONLY' },
+        metaBan: null,
       },
-      reveal: { picks: 'DEFERRED', metaBan: 'IMMEDIATE' }, // gate one
+      reveal: { picks: 'DEFERRED', metaBan: 'NONE' },
     },
-    {
-      type: 'CONDITIONAL_RECOMMIT',
-      id: 'repick',
-      trigger: 'repickTrigger',
-      pool: 'legalDraftPool',
-      hidden: true,
-    },
-    { type: 'REVEAL', id: 'pickReveal', slices: ['slots'] }, // gate two
+    { type: 'REVEAL', id: 'pickReveal', slices: ['slots'] },
     ROUND_LOOP,
   ],
   onTie: TIE_RULE,

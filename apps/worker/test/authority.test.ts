@@ -50,7 +50,7 @@ describe('simultaneous commits produce one reveal, not two', () => {
     // Exactly one commit each, and exactly one gate-one reveal. Two reveals would mean both
     // seats read a pre-commit state and both concluded they were the second to arrive.
     expect(events.filter((e) => e.payload.type === 'COMMIT')).toHaveLength(2)
-    expect(events.filter((e) => e.tag === 'draft:reveal')).toHaveLength(1)
+    expect(events.filter((e) => e.tag === 'ban:reveal')).toHaveLength(1)
 
     // And the log is a clean sequence with no gaps or repeats.
     expect(events.map((e) => e.seq)).toEqual(events.map((_, i) => i))
@@ -79,24 +79,18 @@ describe('redaction, asserted on the real frame off the wire (§7)', () => {
     const aPicks = await ids(0, 4)
     const bPicks = await ids(4, 4)
     const missesA = (await ids(8, 1))[0]!
+    const missesB = (await ids(9, 1))[0]!
 
-    await a.act({
-      type: 'COMMIT',
-      moduleId: 'draft',
-      seat: 'A',
-      picks: aPicks,
-      metaBan: bPicks[0]!, // hits B, so the repick holds gate two open
-    })
-    await b.act({
-      type: 'COMMIT',
-      moduleId: 'draft',
-      seat: 'B',
-      picks: bPicks,
-      metaBan: missesA,
-    })
+    // Phase one: both bans, aimed away from either draft so nothing collides with the leak scan.
+    await a.act({ type: 'COMMIT', moduleId: 'ban', seat: 'A', picks: [], metaBan: missesB })
+    await b.act({ type: 'COMMIT', moduleId: 'ban', seat: 'B', picks: [], metaBan: missesA })
+
+    // Phase two: B drafts, A does not — the sealed window.
+    await b.act({ type: 'COMMIT', moduleId: 'draft', seat: 'B', picks: bPicks, metaBan: null })
 
     const bBan = b.view.you.metaBanPlaced!
     expect('slots' in a.view.opponent).toBe(false) // gate two has not fired
+    expect(aPicks.length).toBe(4) // A's draft is still ahead of it
 
     // §7 warns that "an object test passes while a `toJSON` leaks", so this searches the actual
     // serialized frames. It searches the *sealed region* rather than the whole frame, because

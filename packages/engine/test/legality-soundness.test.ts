@@ -154,8 +154,11 @@ describe('legality soundness — not offered implies rejected', () => {
           action: legalActions(state, s).find((a) => a.type === 'COMMIT'),
         })).find((c) => c.action)
         if (!commit?.action || commit.action.type !== 'COMMIT') continue
+        // The ban phase offers no picks, so there is no pick to forge — this assertion is about
+        // the draft, and skipping keeps it from silently passing on the wrong module.
+        if (!commit.action.picks) continue
 
-        const picks = commit.action.picks!.poolBySlot.map((pool, i) => pool[i]!)
+        const picks = commit.action.picks.poolBySlot.map((pool, i) => pool[i]!)
         picks[0] = 'definitely-not-a-character'
 
         const result = reduce(state, {

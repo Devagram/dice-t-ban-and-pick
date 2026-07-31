@@ -17,8 +17,20 @@ import { Portrait } from './Portrait.js'
  */
 
 export interface CharacterPickerProps {
-  /** Legal choices, from the server. Everything outside this is not shown as disabled — it is absent. */
+  /** Legal choices, from the server. Nothing outside this is ever selectable. */
   pool: CharId[]
+  /**
+   * Characters to show **greyed and unselectable** alongside the pool.
+   *
+   * Normally the pool is the whole story: what the server does not offer simply is not drawn.
+   * Bans are the exception, because a ban you cannot see is information you have lost — the
+   * point of banning before the draft is that both players choose knowing what is gone.
+   *
+   * This is display, not legality (§11.4/D18). The pool still decides what can be clicked; these
+   * ids are drawn dimmed and inert, and the client never computes which ones they are — it is
+   * handed them.
+   */
+  unavailable?: CharId[]
   roster: Character[]
   selected: CharId[]
   onSelect: (id: CharId) => void
@@ -32,6 +44,7 @@ type Filter = 'all' | 'favourites' | 'recents'
 
 export function CharacterPicker({
   pool,
+  unavailable = [],
   roster,
   selected,
   onSelect,
@@ -46,9 +59,11 @@ export function CharacterPicker({
 
   const byId = useMemo(() => new Map(roster.map((c) => [c.id, c])), [roster])
 
+  const blocked = useMemo(() => new Set(unavailable), [unavailable])
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    return pool
+    return [...pool, ...unavailable]
       .map((id) => byId.get(id))
       .filter((c): c is Character => c !== undefined)
       .filter((c) => {
@@ -64,10 +79,13 @@ export function CharacterPicker({
         )
       })
       .sort((a, b) => {
+        // Banned characters sink, so the top of the grid is always something you can take.
+        const blockDelta = Number(blocked.has(a.id)) - Number(blocked.has(b.id))
+        if (blockDelta !== 0) return blockDelta
         const favDelta = Number(favourites.includes(b.id)) - Number(favourites.includes(a.id))
         return favDelta !== 0 ? favDelta : a.name.localeCompare(b.name)
       })
-  }, [pool, byId, query, filter, favourites, recents])
+  }, [pool, unavailable, blocked, byId, query, filter, favourites, recents])
 
   return (
     <section className="picker" aria-label={label}>
@@ -124,16 +142,18 @@ export function CharacterPicker({
           {visible.map((character) => {
             const isSelected = selected.includes(character.id)
             const isFavourite = favourites.includes(character.id)
+            const isBlocked = blocked.has(character.id)
             return (
               <li key={character.id} className="tile-shell">
                 <button
                   type="button"
-                  className={`tile ${isSelected ? 'tile--on' : ''}`}
+                  className={`tile ${isSelected ? 'tile--on' : ''} ${isBlocked ? 'tile--blocked' : ''}`}
                   aria-pressed={isSelected}
+                  disabled={isBlocked}
                   onClick={() => onSelect(character.id)}
-                  title={character.blurb}
+                  title={isBlocked ? `${character.name} — banned` : character.blurb}
                 >
-                  <Portrait character={character} size="card" />
+                  <Portrait character={character} size="card" dimmed={isBlocked} />
                   <span className="tile__name">{character.name}</span>
                 </button>
                 <button

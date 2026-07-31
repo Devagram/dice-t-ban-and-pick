@@ -74,16 +74,26 @@ describe('the flattened program', () => {
     for (const r of [0, 1, 2]) expect(ids).toContain(`rounds.${r}.declareOrder`)
   })
 
-  it('prepends bring-ban1’s two gates and its conditional repick', () => {
+  it('prepends bring-ban1’s ban phase, its draft, and the pick reveal', () => {
     const program = variantFor(loadShipped('bring-ban1'), { draftCount: 4 }).mode.program
-    expect(program.slice(0, 3).map((m) => m.id)).toEqual(['draft', 'repick', 'pickReveal'])
+    expect(program.slice(0, 3).map((m) => m.id)).toEqual(['ban', 'draft', 'pickReveal'])
 
-    const draft = program[0]!
+    // Gate one: the ban, alone, opening at its own module.
+    const ban = program[0]!
+    expect(ban.type).toBe('SIMULTANEOUS_COMMIT')
+    if (ban.type !== 'SIMULTANEOUS_COMMIT') return
+    expect(ban.commits.metaBan).not.toBeNull()
+    expect(ban.commits.picks).toBeNull()
+    expect(ban.revealTags.metaBan).toBe('ban:reveal')
+
+    // Gate two: the draft, sealed until a later REVEAL — and carrying no ban of its own, so the
+    // ban cannot be re-placed once it is public.
+    const draft = program[1]!
     expect(draft.type).toBe('SIMULTANEOUS_COMMIT')
     if (draft.type !== 'SIMULTANEOUS_COMMIT') return
-    expect(draft.commits.metaBan).not.toBeNull()
-    expect(draft.revealTags.metaBan).toBe('draft:reveal') // gate one
-    expect(draft.revealTags.picks).toBe('pickReveal:reveal') // gate two
+    expect(draft.commits.picks).not.toBeNull()
+    expect(draft.commits.metaBan).toBeNull()
+    expect(draft.revealTags.picks).toBe('pickReveal:reveal')
   })
 
   it('resolves ${draftCount} in the label and the pick count', () => {

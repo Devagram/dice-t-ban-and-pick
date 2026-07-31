@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { baseMode, bringBan1Mode, project } from '@banpick/engine'
 import type { MatchState, PlayerView, Seat } from '@banpick/types'
 
-import { apply, currentAction, playFirstLegal, startMatch, ROSTER_75 } from './helpers.js'
+import {
+  apply,
+  commitPhase,
+  currentAction,
+  playFirstLegal,
+  startMatch,
+  ROSTER_75,
+} from './helpers.js'
 
 /**
  * Phase 1 gate — **redaction (§7, required).**
@@ -22,8 +29,7 @@ import { apply, currentAction, playFirstLegal, startMatch, ROSTER_75 } from './h
  * while a `toJSON` leaks.
  */
 
-const PICKS_A = ['anvil', 'cartographer', 'duelist', 'gambler']
-const PICKS_B = ['herald', 'magpie', 'sentinel', 'tinker']
+const PICKS_B = ['magpie', 'oracle', 'sentinel', 'tinker']
 
 /** Everything in a frame that purports to describe the opponent. */
 function sealedRegion(view: PlayerView): string {
@@ -31,36 +37,49 @@ function sealedRegion(view: PlayerView): string {
 }
 
 /**
- * Commits both drafts. `banA` hitting one of B's picks is what holds gate two open — with no
- * repick pending the recommit module completes instantly and both gates fire back to back,
- * which is correct behaviour and useless for observing the gap between them.
+ * Plays the ban phase for both seats, then B's draft only.
+ *
+ * **The observable window changed when the ban moved in front of the draft.** There used to be a
+ * gap between the two gates held open by a pending repick. There is no repick now, so the moment
+ * both seats draft, `pickReveal` fires and everything opens — correct, and useless for watching a
+ * seal. The gap that remains is the real one and is the one players actually sit in: bans public,
+ * one side still drafting.
  */
-function commitBoth(banA: string, banB: string): MatchState {
+function banBothThenBDrafts(banA: string, banB: string): MatchState {
   let state = startMatch({ mode: bringBan1Mode, draftCount: 4 })
   state = apply(state, 'A', {
     type: 'COMMIT',
-    moduleId: 'draft',
+    moduleId: 'ban',
     seat: 'A',
-    picks: PICKS_A,
+    picks: [],
     metaBan: banA,
+  })
+  state = apply(state, 'B', {
+    type: 'COMMIT',
+    moduleId: 'ban',
+    seat: 'B',
+    picks: [],
+    metaBan: banB,
   })
   return apply(state, 'B', {
     type: 'COMMIT',
     moduleId: 'draft',
     seat: 'B',
     picks: PICKS_B,
-    metaBan: banB,
+    metaBan: null,
   })
 }
 
 describe('redaction — after gate one, before gate two', () => {
-  // A bans one of B's picks (holds gate two open); B bans a character A does not hold.
+  // A bans `herald`, which B may therefore not draft at all — the ban now removes a character
+  // from the pool rather than knocking one out of an already-chosen draft. B bans `vagrant`,
+  // which closes it to A.
   const banA = 'herald'
   const banB = 'vagrant'
 
   it("gives A B's meta ban and zero of B's character IDs", () => {
-    const state = commitBoth(banA, banB)
-    expect(state.log.some((e) => e.tag === 'draft:reveal')).toBe(true) // gate one fired
+    const state = banBothThenBDrafts(banA, banB)
+    expect(state.log.some((e) => e.tag === 'ban:reveal')).toBe(true) // gate one fired
     expect(state.log.some((e) => e.tag === 'pickReveal:reveal')).toBe(false) // gate two has not
 
     const sealed = sealedRegion(project(state, 'A'))
@@ -72,25 +91,20 @@ describe('redaction — after gate one, before gate two', () => {
   })
 
   it('opens B to A once gate two fires', () => {
-    let state = commitBoth(banA, banB)
-    const repick = currentAction(state, 'B', 'RECOMMIT')!
-    state = apply(state, 'B', {
-      type: 'RECOMMIT',
-      moduleId: repick.moduleId,
-      seat: 'B',
-      replacements: repick.slots.map((s) => ({ index: s.index, characterId: s.pool[0]! })),
-    })
+    // A drafts too, which completes the module and fires the reveal with no gap.
+    const state = commitPhase(banBothThenBDrafts(banA, banB))
 
     expect(state.log.some((e) => e.tag === 'pickReveal:reveal')).toBe(true)
     const view = project(state, 'A')
     expect(view.opponent.slots).toBeDefined()
-    // Everything B kept is now visible; the banned pick is gone, replaced.
     expect(view.opponent.slots!.map((s) => s.characterId)).toContain('magpie')
+    // And A's ban really removed `herald` from B's pool rather than merely being recorded —
+    // the whole point of moving the ban in front of the draft.
     expect(view.opponent.slots!.map((s) => s.characterId)).not.toContain(banA)
   })
 
   it('omits the field entirely rather than sending null or a flag', () => {
-    const view = project(commitBoth(banA, banB), 'A')
+    const view = project(banBothThenBDrafts(banA, banB), 'A')
 
     // §7: "The client must never receive a redacted value with a flag; it must receive
     // nothing." Absent, not null — which `exactOptionalPropertyTypes` makes a type error to
@@ -103,7 +117,7 @@ describe('redaction — after gate one, before gate two', () => {
   })
 
   it('still reports that the opponent has committed', () => {
-    const view = project(commitBoth(banA, banB), 'A')
+    const view = project(banBothThenBDrafts(banA, banB), 'A')
     // The seal hides the contents, not the fact. Otherwise "waiting for opponent" is
     // unrenderable and the UI has to guess.
     expect(view.opponent.hasCommitted).toBe(true)
@@ -116,13 +130,13 @@ describe('redaction — before gate one (negative)', () => {
     let state = startMatch({ mode: bringBan1Mode, draftCount: 4 })
     state = apply(state, 'B', {
       type: 'COMMIT',
-      moduleId: 'draft',
+      moduleId: 'ban',
       seat: 'B',
-      picks: PICKS_B,
+      picks: [],
       metaBan: 'vagrant',
     })
     // A has not committed, so no gate has fired.
-    expect(state.log.some((e) => e.tag === 'draft:reveal')).toBe(false)
+    expect(state.log.some((e) => e.tag === 'ban:reveal')).toBe(false)
 
     const sealed = sealedRegion(project(state, 'A'))
     for (const id of [...PICKS_B, 'vagrant']) {
@@ -134,20 +148,23 @@ describe('redaction — before gate one (negative)', () => {
   it('leaks nothing at the ~75-character target scale either', () => {
     let state = startMatch({ mode: bringBan1Mode, draftCount: 4, roster: ROSTER_75 })
     const offer = currentAction(state, 'B', 'COMMIT')!
-    const bPicks = offer.picks!.poolBySlot.map((pool, i) => pool[i * 7]!)
     state = apply(state, 'B', {
       type: 'COMMIT',
-      moduleId: 'draft',
+      moduleId: 'ban',
       seat: 'B',
-      picks: bPicks,
+      picks: [],
       metaBan: offer.metaBan!.pool[40]!,
     })
 
     const view = project(state, 'A')
-    expect('slots' in view.opponent).toBe(false)
+    // Only one seat has banned, so the gate has not fired and B's ban is the single secret in
+    // play. At 75 characters the sealed region must not contain it.
     expect('metaBanPlaced' in view.opponent).toBe(false)
-    const sealed = sealedRegion(view)
-    for (const id of bPicks) expect(sealed).not.toContain(id)
+    expect(sealedRegion(view)).not.toContain(offer.metaBan!.pool[40]!)
+    // Slots are *present and empty* here, not absent — nothing has been drafted, so there is
+    // nothing to seal. Absence means "sealed"; emptiness means "not yet". Asserting absence at
+    // this point would be asserting that the engine hides something that does not exist.
+    expect(view.opponent.slots).toEqual([])
     // The public roster is intact — redaction hides holdings, not the game's contents.
     expect(view.roster).toHaveLength(75)
   })

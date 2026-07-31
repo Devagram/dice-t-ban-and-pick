@@ -223,11 +223,12 @@ describe('projection reports who is being waited on', () => {
     let state = startMatch({ mode: bringBan1Mode, draftCount: 4 })
     expect(project(state, 'A').phase!.awaiting.sort()).toEqual(['A', 'B'])
 
+    // The ban phase is the first simultaneous commit now.
     state = apply(state, 'A', {
       type: 'COMMIT',
-      moduleId: 'draft',
+      moduleId: 'ban',
       seat: 'A',
-      picks: ['anvil', 'cartographer', 'duelist', 'gambler'],
+      picks: [],
       metaBan: 'oracle',
     })
     expect(project(state, 'A').phase!.awaiting).toEqual(['B'])

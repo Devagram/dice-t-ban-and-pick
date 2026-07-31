@@ -562,14 +562,9 @@
         "modules": [
           {
             "type": "SIMULTANEOUS_COMMIT",
-            "id": "draft",
+            "id": "ban",
             "commits": {
-              "picks": {
-                "count": {
-                  "param": "draftCount"
-                },
-                "pool": "legalDraftPool"
-              },
+              "picks": null,
               "metaBan": {
                 "count": 1,
                 "pool": "legalMetaBanPool",
@@ -578,16 +573,26 @@
               }
             },
             "reveal": {
-              "picks": "DEFERRED",
+              "picks": "NONE",
               "metaBan": "IMMEDIATE"
             }
           },
           {
-            "type": "CONDITIONAL_RECOMMIT",
-            "id": "repick",
-            "trigger": "repickTrigger",
-            "pool": "legalDraftPool",
-            "hidden": true
+            "type": "SIMULTANEOUS_COMMIT",
+            "id": "draft",
+            "commits": {
+              "picks": {
+                "count": {
+                  "param": "draftCount"
+                },
+                "pool": "legalDraftPool"
+              },
+              "metaBan": null
+            },
+            "reveal": {
+              "picks": "DEFERRED",
+              "metaBan": "NONE"
+            }
           },
           {
             "type": "REVEAL",
@@ -720,13 +725,10 @@
             "program": [
               {
                 "type": "SIMULTANEOUS_COMMIT",
-                "id": "draft",
+                "id": "ban",
                 "roundIndex": null,
                 "commits": {
-                  "picks": {
-                    "count": 3,
-                    "pool": "legalDraftPool"
-                  },
+                  "picks": null,
                   "metaBan": {
                     "count": 1,
                     "pool": "legalMetaBanPool",
@@ -735,22 +737,33 @@
                   }
                 },
                 "reveal": {
-                  "picks": "DEFERRED",
+                  "picks": "NONE",
                   "metaBan": "IMMEDIATE"
                 },
                 "revealTags": {
-                  "picks": "pickReveal:reveal",
-                  "metaBan": "draft:reveal"
+                  "picks": null,
+                  "metaBan": "ban:reveal"
                 }
               },
               {
-                "type": "CONDITIONAL_RECOMMIT",
-                "id": "repick",
-                "trigger": "repickTrigger",
-                "pool": "legalDraftPool",
-                "hidden": true,
+                "type": "SIMULTANEOUS_COMMIT",
+                "id": "draft",
                 "roundIndex": null,
-                "revealTag": "pickReveal:reveal"
+                "commits": {
+                  "picks": {
+                    "count": 3,
+                    "pool": "legalDraftPool"
+                  },
+                  "metaBan": null
+                },
+                "reveal": {
+                  "picks": "DEFERRED",
+                  "metaBan": "NONE"
+                },
+                "revealTags": {
+                  "picks": "pickReveal:reveal",
+                  "metaBan": null
+                }
               },
               {
                 "type": "REVEAL",
@@ -924,7 +937,7 @@
               "enabled": false
             }
           },
-          "modeContentHash": "22fd9099408d"
+          "modeContentHash": "90e89e63ccf0"
         },
         {
           "parameters": {
@@ -939,13 +952,10 @@
             "program": [
               {
                 "type": "SIMULTANEOUS_COMMIT",
-                "id": "draft",
+                "id": "ban",
                 "roundIndex": null,
                 "commits": {
-                  "picks": {
-                    "count": 4,
-                    "pool": "legalDraftPool"
-                  },
+                  "picks": null,
                   "metaBan": {
                     "count": 1,
                     "pool": "legalMetaBanPool",
@@ -954,22 +964,33 @@
                   }
                 },
                 "reveal": {
-                  "picks": "DEFERRED",
+                  "picks": "NONE",
                   "metaBan": "IMMEDIATE"
                 },
                 "revealTags": {
-                  "picks": "pickReveal:reveal",
-                  "metaBan": "draft:reveal"
+                  "picks": null,
+                  "metaBan": "ban:reveal"
                 }
               },
               {
-                "type": "CONDITIONAL_RECOMMIT",
-                "id": "repick",
-                "trigger": "repickTrigger",
-                "pool": "legalDraftPool",
-                "hidden": true,
+                "type": "SIMULTANEOUS_COMMIT",
+                "id": "draft",
                 "roundIndex": null,
-                "revealTag": "pickReveal:reveal"
+                "commits": {
+                  "picks": {
+                    "count": 4,
+                    "pool": "legalDraftPool"
+                  },
+                  "metaBan": null
+                },
+                "reveal": {
+                  "picks": "DEFERRED",
+                  "metaBan": "NONE"
+                },
+                "revealTags": {
+                  "picks": "pickReveal:reveal",
+                  "metaBan": null
+                }
               },
               {
                 "type": "REVEAL",
@@ -1143,7 +1164,7 @@
               "enabled": false
             }
           },
-          "modeContentHash": "c42a0a24e10d"
+          "modeContentHash": "a410b3e1d1a7"
         }
       ]
     }

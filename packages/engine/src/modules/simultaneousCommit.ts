@@ -35,12 +35,12 @@ export const simultaneousCommit: PhaseModule<ResolvedSimultaneousCommit> = {
   /** The draft is where slots come from; with none, nothing can be selected. */
   essential: true,
 
-  awaiting({ state }: Ctx): Seat[] {
-    return SEATS.filter((s) => !hasCommitted(state, s))
+  awaiting({ state, mod }: Ctx): Seat[] {
+    return SEATS.filter((s) => !hasCommitted(state, s, mod.id))
   },
 
   legalActions({ state, mod }: Ctx, seat: Seat): Action[] {
-    if (hasCommitted(state, seat)) return []
+    if (hasCommitted(state, seat, mod.id)) return []
 
     const picks = mod.commits.picks
     const metaBan = mod.commits.metaBan
@@ -76,7 +76,7 @@ export const simultaneousCommit: PhaseModule<ResolvedSimultaneousCommit> = {
   },
 
   systemEvent({ state, mod }: Ctx, seq: number): EventEnvelope | null {
-    if (!SEATS.every((s) => hasCommitted(state, s))) return null
+    if (!SEATS.every((s) => hasCommitted(state, s, mod.id))) return null
 
     const slices = revealedNow(mod)
     if (slices.length === 0) return null
@@ -112,7 +112,7 @@ export const simultaneousCommit: PhaseModule<ResolvedSimultaneousCommit> = {
     if (p.type !== 'COMMIT') {
       return reject('WRONG_PHASE', `${mod.id} expects COMMIT, got ${p.type}`)
     }
-    if (hasCommitted(state, p.seat)) {
+    if (hasCommitted(state, p.seat, mod.id)) {
       return reject('DUPLICATE_COMMIT', `seat ${p.seat} has already committed to ${mod.id}`)
     }
 
@@ -195,15 +195,31 @@ export const simultaneousCommit: PhaseModule<ResolvedSimultaneousCommit> = {
   },
 
   isComplete({ state, mod }: Ctx): boolean {
-    if (!SEATS.every((s) => hasCommitted(state, s))) return false
+    if (!SEATS.every((s) => hasCommitted(state, s, mod.id))) return false
     if (revealedNow(mod).length === 0) return true
     return state.log.some((e) => e.tag === revealTag(mod.id))
   },
 }
 
-function hasCommitted(state: Ctx['state'], seat: Seat): boolean {
+/**
+ * Has this seat committed **to this module**?
+ *
+ * The `moduleId` check is load-bearing and was not always here. While every mode had exactly one
+ * commit, "has this seat committed" and "has this seat committed to this module" were the same
+ * question, so the log search omitted the id. `bring-ban1` then split into two commits — ban,
+ * then draft — and the ban silently satisfied the draft's completion check: both seats banned,
+ * the draft module declared itself finished, and the match skipped the entire draft to arrive at
+ * round one with empty rosters.
+ *
+ * The general shape: a predicate that reads the whole log has to say which part of it it means.
+ */
+function hasCommitted(state: Ctx['state'], seat: Seat, moduleId: string): boolean {
   return state.log.some(
-    (e) => e.payload.type === 'COMMIT' && e.payload.seat === seat && e.actor === seat,
+    (e) =>
+      e.payload.type === 'COMMIT' &&
+      e.payload.moduleId === moduleId &&
+      e.payload.seat === seat &&
+      e.actor === seat,
   )
 }
 

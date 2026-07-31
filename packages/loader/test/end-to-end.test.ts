@@ -122,7 +122,9 @@ function act(state: MatchState, seat: Seat, results: RoundOutcome[]): EventEnvel
         type: 'COMMIT',
         moduleId: action.moduleId,
         seat,
-        picks: action.picks!.poolBySlot.map((pool, i) => pool[i]!),
+        // A commit may declare picks, a meta ban, or both — `bring-ban1` now opens with a
+        // ban-only phase, so neither side can be assumed present.
+        picks: action.picks ? action.picks.poolBySlot.map((pool, i) => pool[i]!) : [],
         metaBan: action.metaBan ? action.metaBan.pool[0]! : null,
       })
     case 'RECOMMIT':

@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { materialize, seatedMatch } from './client.js'
+import { commitPhase, materialize, seatedMatch } from './client.js'
 
 /**
  * What the rail can know, and when.
@@ -36,6 +36,7 @@ describe('the rail can size itself from the wire', () => {
 
   it('goes absent once they commit, and stays absent until the reveal', async () => {
     const { a, b } = await seatedMatch({ modeId: 'bring-ban1', draftCount: 4 })
+    await commitPhase(a, b) // past the ban phase, into the draft
     await b.act(materialize(b.action('COMMIT')!, 'B'))
     await a.settle(10)
 

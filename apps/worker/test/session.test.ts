@@ -4,7 +4,14 @@ import { describe, expect, it } from 'vitest'
 import { env, runInDurableObject, SELF } from 'cloudflare:test'
 import type { EventEnvelope, PlayerActionPayload } from '@banpick/types'
 
-import { createMatch, materialize, playToCompletion, seatedMatch, TestClient } from './client.js'
+import {
+  commitPhase,
+  createMatch,
+  materialize,
+  playToCompletion,
+  seatedMatch,
+  TestClient,
+} from './client.js'
 
 /**
  * **D17 — session continuity.** "Refreshing the page must be a non-event. So must closing the
@@ -32,9 +39,13 @@ describe('a disconnect is a non-event', () => {
   it('keeps a hidden commit intact and still sealed across a reconnect', async () => {
     const { roomCode, a, b } = await seatedMatch({ modeId: 'bring-ban1', draftCount: 4 })
 
-    // A commits — sealed, and B has not committed, so no gate has fired.
+    // Past the ban phase, then A drafts and B does not — so A's draft is sealed and no gate has
+    // fired. `hasCommitted` is derived from slots, so it means "has drafted"; the phase-level
+    // "has locked in" signal is `awaiting`, which is why both are asserted here.
+    await commitPhase(a, b)
     await a.act(materialize(a.action('COMMIT')!, 'A'))
     expect(b.view.opponent.hasCommitted).toBe(true)
+    expect(b.view.phase!.awaiting).toEqual(['B'])
     expect('slots' in b.view.opponent).toBe(false)
 
     // The wifi drops.
@@ -52,11 +63,12 @@ describe('a disconnect is a non-event', () => {
     await b.resync()
     expect('slots' in b.view.opponent).toBe(false)
 
-    // And exactly one commit is in the log — reconnecting did not re-submit anything.
+    // And exactly two commits are in the log for A — its ban and its draft. Reconnecting did
+    // not re-submit either.
     const commits = (await eventsOf(roomCode)).filter(
       (e) => e.payload.type === 'COMMIT' && e.payload.seat === 'A',
     )
-    expect(commits).toHaveLength(1)
+    expect(commits).toHaveLength(2)
   })
 
   it('survives a hard refresh at every phase boundary', async () => {
@@ -90,16 +102,14 @@ describe('a disconnect is a non-event', () => {
   it('recovers the seat from a resume link on another device, with redaction intact', async () => {
     const { a, b } = await seatedMatch({ modeId: 'bring-ban1', draftCount: 4 })
 
-    // Both commit, so there is genuinely something sealed to check. Before a seat commits its
-    // slots slice is public-and-empty, which reveals nothing and would make the assertion
-    // below vacuous.
+    // Past the ban phase, then A drafts alone. Both matter: before a seat drafts, its slots
+    // slice is public-and-empty — which hides nothing and would make the assertion below
+    // vacuous — and if *both* drafted, the reveal fires and there is nothing sealed left.
+    await commitPhase(a, b)
     await a.act(materialize(a.action('COMMIT')!, 'A'))
-    await b.act(materialize(b.action('COMMIT')!, 'B'))
 
-    // Both seats drafted the same characters, so each meta ban lands and both must repick —
-    // which holds gate two open, leaving picks sealed.
     expect(a.view.opponent.metaBanPlaced).toBeDefined() // gate one opened the bans
-    expect('slots' in a.view.opponent).toBe(false) // gate two has not
+    expect(a.view.opponent.slots).toEqual([]) // B has not drafted: empty, not sealed
 
     // The resume link is a bearer credential: whoever holds it holds the seat, hidden commits
     // included. A second device is therefore indistinguishable from the first, by design (D17).
@@ -107,8 +117,13 @@ describe('a disconnect is a non-event', () => {
 
     expect(otherDevice.seat).toBe('A')
     expect(otherDevice.view.you.slots).toHaveLength(4)
-    // A's view, not a god view: reconnecting does not widen what a seat may know.
-    expect('slots' in otherDevice.view.opponent).toBe(false)
+    // A's view, not a god view: reconnecting does not widen what a seat may know. B has not
+    // drafted, so the honest answer is an empty list rather than a sealed one — and A's own
+    // draft, which *is* secret, is not echoed into the opponent region.
+    expect(otherDevice.view.opponent.slots).toEqual([])
+    expect(JSON.stringify(otherDevice.view.opponent)).not.toContain(
+      otherDevice.view.you.slots![0]!.characterId,
+    )
 
     // The original socket still works too — no session is invalidated by another opening.
     await b.resync()

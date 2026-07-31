@@ -385,6 +385,29 @@ export function materialize(
 }
 
 /** Plays both seats to a terminal state, reporting `results[n]` for round n. */
+/**
+ * Plays the current `COMMIT` for whichever seats are being asked for one.
+ *
+ * Named by intent rather than by module id: `bring-ban1` opens with a **ban** phase and then a
+ * **draft** phase, so "commit once and you have drafted" stopped being true on 2026-07-31. A
+ * test that wants to be past the whole pre-round sequence should say `commitAll`.
+ */
+export async function commitPhase(a: TestClient, b: TestClient): Promise<void> {
+  for (const client of [a, b]) {
+    const commit = client.action('COMMIT')
+    if (commit) await client.act(materialize(commit, client.seat))
+  }
+}
+
+/** Drains every consecutive commit phase — match start to a completed draft in one call. */
+export async function commitAll(a: TestClient, b: TestClient): Promise<void> {
+  for (let guard = 0; guard < 8; guard++) {
+    if (![a, b].some((c) => c.action('COMMIT'))) return
+    await commitPhase(a, b)
+  }
+  throw new Error('commitAll: still committing after 8 phases')
+}
+
 export async function playToCompletion(
   a: TestClient,
   b: TestClient,

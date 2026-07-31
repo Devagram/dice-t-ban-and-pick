@@ -110,7 +110,7 @@ describe('seq is the concurrency key', () => {
     await b.settle(40)
 
     // Matched on the event's `tag`, not on a substring of the payload: MATCH_CREATED carries
-    // the resolved mode, whose `revealTags` contain the literal string "draft:reveal", so a
+    // the resolved mode, whose `revealTags` contain the literal string "ban:reveal", so a
     // LIKE would count the creation event as a reveal.
     const reveals = await runInDurableObject(
       stub(roomCode),
@@ -119,7 +119,7 @@ describe('seq is the concurrency key', () => {
           .exec<{ payload: string }>('SELECT payload FROM events ORDER BY seq')
           .toArray()
           .map((r) => JSON.parse(r.payload) as EventEnvelope)
-          .filter((e) => e.tag === 'draft:reveal').length,
+          .filter((e) => e.tag === 'ban:reveal').length,
     )
     expect(reveals).toBe(1)
   })

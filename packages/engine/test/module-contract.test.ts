@@ -10,7 +10,15 @@ import {
 } from '@banpick/engine'
 import { canonicalJson, SEATS, type EventPayload, type ResolvedModule } from '@banpick/types'
 
-import { apply, atModule, driveUntil, expectOk, expectRejected, startMatch } from './helpers.js'
+import {
+  apply,
+  atModule,
+  blindBanMode,
+  driveUntil,
+  expectOk,
+  expectRejected,
+  startMatch,
+} from './helpers.js'
 
 /**
  * Spec §8 — the module contract.
@@ -27,7 +35,19 @@ const PROGRAMS: [string, ResolvedModule[]][] = [
   ['base@3', resolveMode(baseMode, { draftCount: 3 }).program],
   ['bring-ban1@4', resolveMode(bringBan1Mode, { draftCount: 4 }).program],
   ['bring-ban1@3', resolveMode(bringBan1Mode, { draftCount: 3 }).program],
+  // No shipped mode uses CONDITIONAL_RECOMMIT since the ban moved in front of the draft, but it
+  // is still one of §8's nine and still has to honour the module contract. See `blindBanMode`.
+  ['blind-ban-fixture@4', resolveMode(blindBanMode, { draftCount: 4 }).program],
 ]
+
+/** The first module of a given type anywhere in the corpus above. */
+function anyModuleOfType(type: ResolvedModule['type']): ResolvedModule {
+  for (const [, program] of PROGRAMS) {
+    const found = program.find((m) => m.type === type)
+    if (found) return found
+  }
+  throw new Error(`no program in the corpus contains a ${type} module`)
+}
 
 describe('§8 metadata', () => {
   it('every registered module declares read and write sets', () => {
@@ -75,20 +95,18 @@ describe('system-driven modules ask nothing of players', () => {
 
   for (const type of ['ROLL', 'ASSIGN', 'REVEAL'] as const) {
     it(`${type} awaits nobody and offers no actions`, () => {
-      const mod = PROGRAMS[2]![1].find((m) => m.type === type)
-      expect(mod, `${type} should appear in bring-ban1`).toBeDefined()
-
-      const impl = moduleFor(mod!)
-      expect(impl.awaiting({ state, mod: mod! })).toEqual([])
+      const mod = anyModuleOfType(type)
+      const impl = moduleFor(mod)
+      expect(impl.awaiting({ state, mod })).toEqual([])
       for (const seat of SEATS) {
-        expect(impl.legalActions({ state, mod: mod! }, seat)).toEqual([])
+        expect(impl.legalActions({ state, mod }, seat)).toEqual([])
       }
     })
   }
 
   it('CONDITIONAL_RECOMMIT and CHOOSE produce no system event of their own', () => {
     for (const type of ['CONDITIONAL_RECOMMIT', 'CHOOSE'] as const) {
-      const mod = PROGRAMS[2]![1].find((m) => m.type === type)!
+      const mod = anyModuleOfType(type)
       expect(moduleFor(mod).systemEvent({ state, mod }, 0)).toBeNull()
     }
   })
