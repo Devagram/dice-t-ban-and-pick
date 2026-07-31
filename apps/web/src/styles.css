@@ -1334,7 +1334,9 @@ select {
 .stage__sides {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  align-items: start;
+  /* Both sides stand on the same line. The rows are the same height by construction now, so this
+     is a second lock on the same property rather than the thing holding it up. */
+  align-items: end;
   gap: 8px;
 }
 

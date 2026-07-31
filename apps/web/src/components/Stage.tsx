@@ -167,6 +167,18 @@ export function Stage({
   /** Set once the match is over: the winning side keeps its colour, the other steps back. */
   const finished = view.status === 'COMPLETE' ? (view.outcome ?? null) : null
 
+  /**
+   * One floor for both sides.
+   *
+   * The rows used to size themselves, which meant the side with a card at centre stage grew
+   * taller than the side without one — and since the two are grid items aligned to the top, the
+   * shorter row hung from the ceiling while its opposite stood on the ground. They are one board
+   * and the cards stand on one line, so the extra room a blown-up card needs is reserved for
+   * both the moment *either* seat has one.
+   */
+  const anyChosen = chosenOwn !== null || chosenOpponent !== null
+  const rowHeight = Math.round(CELL_PX * (300 / 199) * (anyChosen ? CHOSEN_SCALE : 1)) + 26
+
   return (
     <section className="stage" aria-label="Draft board">
       <BanBar view={view} byId={byId} mine={mine} theirs={theirs} />
@@ -183,6 +195,7 @@ export function Stage({
           selectable={selectableOwn}
           chosenSlot={chosenOwn}
           outcomes={outcomes(view.seat)}
+          rowHeight={rowHeight}
           finish={
             finished === null
               ? null
@@ -211,6 +224,7 @@ export function Stage({
           selectable={selectableOpponent}
           chosenSlot={chosenOpponent}
           outcomes={outcomes(view.opponent.seat)}
+          rowHeight={rowHeight}
           finish={
             finished === null
               ? null
@@ -314,6 +328,7 @@ function Side({
   chosenSlot,
   outcomes,
   finish,
+  rowHeight,
   onSelect,
   onRemove,
   revealing,
@@ -333,6 +348,8 @@ function Side({
   outcomes: Map<number, 'win' | 'loss' | 'tie'>
   /** How the match ended for this seat, once it has. */
   finish: 'won' | 'lost' | 'draw' | null
+  /** Decided by the stage, so both sides stand on the same line. */
+  rowHeight: number
   onSelect: ((index: SlotIdx) => void) | undefined
   onRemove: ((id: CharId) => void) | undefined
   revealing: boolean
@@ -403,11 +420,6 @@ function Side({
     cells.map((c) => ({ index: c.i, rank: rankOf(c.slot, c.chosen, c.bannedNow) })),
   )
 
-  // Only reserve room for a blown-up card when there is one. Reserving it always left a band of
-  // dead space under every row for the whole draft.
-  const anyChosen = cells.some((c) => c.chosen)
-  const rowHeight = Math.round(CELL_PX * (300 / 199) * (anyChosen ? CHOSEN_SCALE : 1)) + 26
-
   return (
     <div
       className={`side ${own ? 'side--own' : 'side--opponent'} ${finish ? `side--${finish}` : ''}`}
@@ -425,7 +437,7 @@ function Side({
         plainly than greying it in place.
       */}
       <ul
-        className={`side__row ${anyChosen ? 'side__row--focused' : ''}`}
+        className={`side__row ${cells.some((c) => c.chosen) ? 'side__row--focused' : ''}`}
         style={{ height: `${rowHeight}px` }}
       >
         {cells.map(

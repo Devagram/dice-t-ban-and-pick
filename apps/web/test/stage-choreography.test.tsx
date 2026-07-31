@@ -328,6 +328,42 @@ describe('the current pick stays in colour until the round moves on', () => {
     expect(container.querySelector('.side--own .side__row--focused')).toBeTruthy()
   })
 
+  it('gives both sides the same floor, so nothing hangs from the ceiling', () => {
+    // The rows used to size themselves. The side with a card at centre stage grew taller, and
+    // since the two are grid items the shorter one hung from the top while its opposite stood on
+    // the ground — the cards no longer faced each other across a line.
+    const { container } = render(
+      <Stage
+        view={picking({ A: 0 }, null)}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+    const rows = [...container.querySelectorAll('.side__row')] as HTMLElement[]
+    expect(rows).toHaveLength(2)
+    expect(rows[0]!.style.height).toBe(rows[1]!.style.height)
+    // Only one side has a pick, and only that side dims its own also-rans.
+    expect(container.querySelectorAll('.side__row--focused')).toHaveLength(1)
+  })
+
+  it('reserves the room when it is *their* pick that grows, not only yours', () => {
+    // The asymmetric direction, and the one a naive fix misses: reading the height off your own
+    // side alone looks correct in every test where you are the one who picked first.
+    const { container } = render(
+      <Stage
+        view={picking({ B: 0 }, null)}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+    const rows = [...container.querySelectorAll('.side__row')] as HTMLElement[]
+    expect(rows[0]!.style.height).toBe(rows[1]!.style.height)
+    // And the room is genuinely reserved, rather than both sides agreeing on the short height.
+    expect(parseInt(rows[0]!.style.height, 10)).toBeGreaterThan(Math.round(132 * (300 / 199)) + 26)
+  })
+
   it('reserves the taller row only when something is actually blown up', () => {
     // Reserving 1.5× height always left a band of dead space under every row for the whole draft.
     const idle = render(
