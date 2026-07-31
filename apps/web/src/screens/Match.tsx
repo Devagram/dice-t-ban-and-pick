@@ -240,6 +240,9 @@ function MatchBody({
               the rounds start — at which point the ActionBar's result buttons take its place. */}
           {commit ? (
             <DraftPanel
+              // A fresh panel per commit phase. Without this the ban phase's selections carry
+              // into the draft, because React reuses the instance when only the props change.
+              key={commit.moduleId}
               view={view}
               commit={commit}
               onAct={onAct}

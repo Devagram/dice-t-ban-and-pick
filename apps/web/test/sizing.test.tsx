@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 
+import { RoundStrip } from '../src/components/RoundStrip.js'
 import { Stage } from '../src/components/Stage.js'
 import { view } from './fixtures.js'
 
@@ -80,5 +81,43 @@ describe('the roster does not carry its own scrollbar on a wide screen', () => {
 
   it('gives the match screen room to need one less', () => {
     expect(CSS).toMatch(/\.screen--wide \{\s*max-width:\s*1240px/)
+  })
+})
+
+/**
+ * The round strip earns its place only once there are rounds.
+ *
+ * `roundIndex` is null for every pre-round module (ban, draft, reveal) and a number from the
+ * first roll on — verified against the live wire in `apps/worker/test/round-strip.test.ts`.
+ */
+describe('R1 R2 R3 waits for the game to start', () => {
+  const at = (roundIndex: number | null, status: 'IN_PROGRESS' | 'COMPLETE' = 'IN_PROGRESS') =>
+    view({
+      status,
+      phase:
+        roundIndex === null
+          ? { moduleId: 'draft', type: 'SIMULTANEOUS_COMMIT', roundIndex: null, awaiting: ['A'] }
+          : {
+              moduleId: `rounds.${roundIndex}.ban`,
+              type: 'BAN',
+              roundIndex: roundIndex as 0 | 1 | 2,
+              awaiting: ['A'],
+            },
+    })
+
+  it('shows nothing during the ban and draft phases', () => {
+    const { container } = render(<RoundStrip view={at(null)} />)
+    expect(container.innerHTML).toBe('')
+  })
+
+  it('appears once a round is under way', () => {
+    render(<RoundStrip view={at(0)} />)
+    expect(screen.getByText('R1')).toBeTruthy()
+    expect(screen.getByText('R3')).toBeTruthy()
+  })
+
+  it('stays on a finished match, where it is the scoreline', () => {
+    render(<RoundStrip view={at(null, 'COMPLETE')} />)
+    expect(screen.getByText('R1')).toBeTruthy()
   })
 })

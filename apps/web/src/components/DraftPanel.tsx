@@ -117,8 +117,14 @@ export function DraftPanel({
       type: 'COMMIT',
       moduleId: commit.moduleId,
       seat: view.seat,
-      picks,
-      metaBan,
+      // Only what *this* module declared. `bring-ban1` commits twice — a ban, then a draft — and
+      // React reconciles by position, so one panel instance serves both phases and its state
+      // survives the transition. Sending a leftover ban to the draft module is rejected as
+      // WRONG_COMMIT_SHAPE ("draft declares no meta ban") and the player is stuck with no way
+      // out. `Match` also keys the panel by module so the state resets; this is the belt to that
+      // pair of braces, and it is the layer that cannot be defeated by a reconciliation quirk.
+      picks: wantsPicks ? picks : [],
+      metaBan: wantsBan ? metaBan : null,
     })
   }
 

@@ -61,6 +61,44 @@ describe('SIMULTANEOUS_COMMIT', () => {
     ).toBe('WRONG_COMMIT_SHAPE')
   })
 
+  it('refuses a ban aimed at a module that declares none — the client-leak case', () => {
+    // The server half of a bug that reached a live match: `bring-ban1` commits twice, and a
+    // client that carried its ban-phase selection into the draft phase sent a ban the draft
+    // module never asked for. The engine is what stopped it becoming state, and the message it
+    // produces ("draft declares no meta ban") is what named the bug.
+    let state = startMatch({ mode: bringBan1Mode, draftCount: 4 })
+    state = apply(state, 'A', {
+      type: 'COMMIT',
+      moduleId: 'ban',
+      seat: 'A',
+      picks: [],
+      metaBan: 'oracle',
+    })
+    state = apply(state, 'B', {
+      type: 'COMMIT',
+      moduleId: 'ban',
+      seat: 'B',
+      picks: [],
+      metaBan: 'sentinel',
+    })
+
+    const offer = currentAction(state, 'A', 'COMMIT')!
+    expect(offer.moduleId).toBe('draft')
+    expect(offer.metaBan).toBeNull()
+
+    const rejection = expectRejected(
+      send(state, 'A', {
+        type: 'COMMIT',
+        moduleId: 'draft',
+        seat: 'A',
+        picks: offer.picks!.poolBySlot.map((pool, i) => pool[i]!),
+        metaBan: 'oracle', // left over from the phase before
+      }),
+    )
+    expect(rejection.code).toBe('WRONG_COMMIT_SHAPE')
+    expect(rejection.detail).toContain('declares no meta ban')
+  })
+
   it('requires the meta ban a mode does declare', () => {
     // `bring-ban1` opens on a ban-only commit, so omitting the ban is the wrong shape — and
     // sending picks it never asked for is wrong for the same reason.

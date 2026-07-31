@@ -13,6 +13,19 @@ import { DRAW_HEADLINE, DRAW_NOTE } from '../copy.js'
 export function RoundStrip({ view }: { view: PlayerView }) {
   const current = view.phase?.roundIndex ?? null
 
+  /**
+   * Nothing until the rounds actually start.
+   *
+   * `roundIndex` is `null` for every pre-round module — the ban, the draft, the reveal — and a
+   * number from the first roll onward, so it answers "has the game begun?" without the client
+   * knowing anything about the program. Three empty R1/R2/R3 boxes during the draft are a
+   * promise about later competing with the thing you are doing now.
+   *
+   * A completed match keeps its strip: by then it is the scoreline, which is the one thing worth
+   * reading on that screen.
+   */
+  if (current === null && view.status !== 'COMPLETE') return null
+
   return (
     <ol className="rounds" aria-label="Rounds">
       {view.rounds.map((round) => {
