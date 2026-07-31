@@ -312,7 +312,19 @@ function Side({
         ? byId.get(localPick)
         : undefined
 
-    const bannedNow = slot ? slot.bannedInRound === currentRound : false
+    /**
+     * Banned *this* round — and `null === null` is not that.
+     *
+     * `bannedInRound` is null on a slot nobody has banned, and `currentRound` is null whenever
+     * there is no round: through the ban and draft phases, and again once the match ends and
+     * there is no phase at all. Comparing them directly made every **un**banned slot report
+     * itself banned in exactly those two moments — the whole roster stamped the instant it was
+     * revealed, and again on the final screen.
+     *
+     * The explicit null check is what `SlotRail` had and this lost in the rewrite.
+     */
+    const bannedNow =
+      slot !== undefined && slot.bannedInRound !== null && slot.bannedInRound === currentRound
     const chosen = slot !== undefined && slot.index === chosenSlot
     /**
      * Spent, for display purposes — which is **not** the same as `slot.consumed`.

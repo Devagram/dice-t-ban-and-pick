@@ -391,3 +391,93 @@ describe('the reveal is not trampled by the roll', () => {
     expect(revealDurationMs(3)).toBeGreaterThanOrEqual(750 + 420)
   })
 })
+
+/**
+ * "Round banned" means banned *this* round.
+ *
+ * `bannedInRound` is null on a slot nobody banned; `currentRound` is null whenever there is no
+ * round — through the ban and draft phases, and again once the match is over. Comparing the two
+ * directly makes `null === null` true, so every unbanned slot stamps itself the moment the
+ * roster is revealed and again on the final screen. Both are asserted, because they are two
+ * different sources of the same null.
+ */
+describe('the round-ban stamp only appears for a real ban', () => {
+  const board = (phase: PlayerView['phase'], slots: Slot[], status: 'IN_PROGRESS' | 'COMPLETE') =>
+    view({
+      status,
+      phase,
+      you: { seat: 'A', score: 0, hasCommitted: true, slotCount: slots.length, slots },
+      opponent: { seat: 'B', score: 0, hasCommitted: true, slotCount: slots.length, slots: [] },
+    })
+
+  it('stays off the whole roster the moment it is revealed', () => {
+    // The draft phase reports `roundIndex: null`, which used to match every unbanned slot.
+    render(
+      <Stage
+        view={board(
+          { moduleId: 'draft', type: 'SIMULTANEOUS_COMMIT', roundIndex: null, awaiting: ['B'] },
+          [slot(0, 'anvil'), slot(1, 'cartographer'), slot(2, 'duelist')],
+          'IN_PROGRESS',
+        )}
+        expected={3}
+        mine={{ filled: 3 }}
+        theirs={{ filled: 3 }}
+      />,
+    )
+    expect(screen.queryByText('Round banned')).toBeNull()
+  })
+
+  it('stays off the board once the match is over', () => {
+    // No phase at all here, so `currentRound` is null from a second direction.
+    render(
+      <Stage
+        view={board(
+          null,
+          [
+            slot(0, 'anvil', { consumed: true }),
+            slot(1, 'cartographer', { consumed: true }),
+            slot(2, 'duelist', { consumed: true }),
+          ],
+          'COMPLETE',
+        )}
+        expected={3}
+        mine={{ filled: 3 }}
+        theirs={{ filled: 3 }}
+      />,
+    )
+    expect(screen.queryByText('Round banned')).toBeNull()
+  })
+
+  it('still appears for the slot actually banned this round', () => {
+    render(
+      <Stage
+        view={board(
+          { moduleId: 'rounds.1.select', type: 'SELECT', roundIndex: 1, awaiting: ['A'] },
+          [slot(0, 'anvil', { bannedInRound: 1 }), slot(1, 'cartographer'), slot(2, 'duelist')],
+          'IN_PROGRESS',
+        )}
+        expected={3}
+        mine={{ filled: 3 }}
+        theirs={{ filled: 3 }}
+      />,
+    )
+    expect(screen.getAllByText('Round banned')).toHaveLength(1)
+  })
+
+  it('drops the stamp once the round it belonged to has passed', () => {
+    // D3 — a round ban lasts one round. Banned in round 0, we are now in round 1.
+    render(
+      <Stage
+        view={board(
+          { moduleId: 'rounds.1.select', type: 'SELECT', roundIndex: 1, awaiting: ['A'] },
+          [slot(0, 'anvil', { bannedInRound: 0 }), slot(1, 'cartographer')],
+          'IN_PROGRESS',
+        )}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+    expect(screen.queryByText('Round banned')).toBeNull()
+  })
+})
