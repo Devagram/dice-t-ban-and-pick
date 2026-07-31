@@ -243,3 +243,114 @@ describe('the ban bar retires once both rosters are locked', () => {
     expect(screen.getByText('They banned')).toBeTruthy()
   })
 })
+
+/**
+ * The character you are playing is not "spent" yet.
+ *
+ * Selecting consumes the slot immediately — D6 consumes it even on a tie — so the card is already
+ * `consumed` while you are still playing it. Drawing that state greyed the card, struck through
+ * its own name and faded it, at the exact moment it had just been promoted to centre stage.
+ */
+describe('the current pick stays in colour until the round moves on', () => {
+  const picking = (selection: Record<string, number> | undefined, result: 'A' | 'B' | null) =>
+    view({
+      phase: { moduleId: 'rounds.0.report', type: 'REPORT_RESULT', roundIndex: 0, awaiting: ['A'] },
+      you: {
+        seat: 'A',
+        score: 0,
+        hasCommitted: true,
+        slotCount: 2,
+        // Consumed the instant it was selected, which is the trap.
+        slots: [slot(0, 'anvil', { consumed: true }), slot(1, 'cartographer')],
+      },
+      opponent: { seat: 'B', score: 0, hasCommitted: true, slotCount: 2, slots: [] },
+      rounds: [
+        {
+          index: 0,
+          privilegeHolder: 'A',
+          turnOrderHolder: null,
+          roll: null,
+          ban: null,
+          selection: (selection ?? {}) as never,
+          selectionCommitted: { A: true, B: true },
+          playOrder: null,
+          result,
+        },
+      ],
+    })
+
+  it('does not grey or strike the card it just promoted', () => {
+    render(
+      <Stage
+        view={picking({ A: 0 }, null)}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+
+    const chosen = document.querySelector('.side--own .cell-slot--chosen')!
+    expect(chosen.textContent).toContain('The Anvil')
+    // `cell--spent` is what carries the strikethrough and the fade.
+    expect(chosen.querySelector('.cell--spent')).toBeNull()
+    expect(chosen.querySelector('.portrait--dim')).toBeNull()
+    expect(offsetOf('The Anvil')).toBe(0) // and it is still centre stage
+  })
+
+  it('greys it and sends it out once it is no longer the selection', () => {
+    // The round moved on: nothing is selected now, and the consumed slot reads as spent.
+    render(
+      <Stage
+        view={picking(undefined, 'A')}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+
+    expect(document.querySelector('.side--own .cell--spent')).toBeTruthy()
+    expect(offsetOf('The Anvil')).toBeGreaterThan(offsetOf('The Cartographer'))
+  })
+
+  it('steps the rest of the side back instead of dimming the pick', () => {
+    // Same contrast, opposite direction — and it cannot be confused with the grey that means
+    // "spent", because it is applied to everything *except* the card in question.
+    const { container } = render(
+      <Stage
+        view={picking({ A: 0 }, null)}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+    expect(container.querySelector('.side--own .side__row--focused')).toBeTruthy()
+  })
+
+  it('reserves the taller row only when something is actually blown up', () => {
+    // Reserving 1.5× height always left a band of dead space under every row for the whole draft.
+    const idle = render(
+      <Stage
+        view={picking(undefined, null)}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+    const idleHeight = (idle.container.querySelector('.side--own .side__row') as HTMLElement).style
+      .height
+    cleanup()
+
+    const active = render(
+      <Stage
+        view={picking({ A: 0 }, null)}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+    const activeHeight = (active.container.querySelector('.side--own .side__row') as HTMLElement)
+      .style.height
+
+    expect(parseInt(activeHeight, 10)).toBeGreaterThan(parseInt(idleHeight, 10))
+  })
+})

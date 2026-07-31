@@ -84,7 +84,9 @@ type Rank = 0 | 1 | 2 | 3
 function rankOf(slot: Slot | undefined, chosen: boolean, bannedNow: boolean): Rank {
   if (slot === undefined) return 1
   if (chosen) return 0 // the character being played, centre stage
-  if (slot.consumed) return 3 // spent, and furthest out
+  if (slot.consumed) return 3 // spent, and furthest out — but see `spent` above: a slot is
+  //                             consumed the moment it is selected, so this only reaches the
+  //                             card once it is no longer the current selection.
   if (bannedNow) return 2 // denied for this round only (D3), so not as far as spent
   return 1
 }
@@ -298,6 +300,16 @@ function Side({
 
     const bannedNow = slot ? slot.bannedInRound === currentRound : false
     const chosen = slot !== undefined && slot.index === chosenSlot
+    /**
+     * Spent, for display purposes — which is **not** the same as `slot.consumed`.
+     *
+     * Selecting a character consumes its slot immediately (D6 consumes it even on a tie), so the
+     * character you are about to play is already `consumed` while you are playing it. Drawing
+     * that state means the card you just chose greys out, strikes through its own name and fades
+     * — at the exact moment it is the most alive thing on the board. It reads as spent once the
+     * round moves on and it stops being the selection.
+     */
+    const spent = slot?.consumed === true && !chosen
     const choosable = slot ? selectable.includes(slot.index) : false
     // Only your own, only before it is committed — §12 forbids withdrawing a sealed one.
     const removable = !revealed && own && localPick !== undefined && onRemove !== undefined
@@ -311,12 +323,17 @@ function Side({
             ? 'sealed'
             : 'choosing'
 
-    return { i, slot, character, bannedNow, chosen, choosable, removable, state }
+    return { i, slot, character, bannedNow, chosen, spent, choosable, removable, state }
   })
 
   const positions = orderFor(
     cells.map((c) => ({ index: c.i, rank: rankOf(c.slot, c.chosen, c.bannedNow) })),
   )
+
+  // Only reserve room for a blown-up card when there is one. Reserving it always left a band of
+  // dead space under every row for the whole draft.
+  const anyChosen = cells.some((c) => c.chosen)
+  const rowHeight = Math.round(CELL_PX * (300 / 199) * (anyChosen ? CHOSEN_SCALE : 1)) + 26
 
   return (
     <div className={`side ${own ? 'side--own' : 'side--opponent'}`}>
@@ -333,110 +350,108 @@ function Side({
         plainly than greying it in place.
       */}
       <ul
-        className="side__row"
-        style={{ height: `${Math.round(CELL_PX * CHOSEN_SCALE * (300 / 199)) + 26}px` }}
+        className={`side__row ${anyChosen ? 'side__row--focused' : ''}`}
+        style={{ height: `${rowHeight}px` }}
       >
-        {cells.map(({ i, slot, character, bannedNow, chosen, choosable, removable, state }) => {
-          const position = positions[i]!
-          // The row grows away from the centre line, so every cell is offset outward from it.
-          const offset = position * PITCH * (own ? -1 : 1)
-          const scale = chosen ? CHOSEN_SCALE : 1
+        {cells.map(
+          ({ i, slot, character, bannedNow, chosen, spent, choosable, removable, state }) => {
+            const position = positions[i]!
+            // The row grows away from the centre line, so every cell is offset outward from it.
+            const offset = position * PITCH * (own ? -1 : 1)
+            const scale = chosen ? CHOSEN_SCALE : 1
 
-          const classes = [
-            'cell',
-            `cell--${state}`,
-            removable ? 'cell--removable' : '',
-            slot?.consumed ? 'cell--spent' : '',
-            bannedNow ? 'cell--banned' : '',
-            chosen ? 'cell--chosen' : '',
-            choosable ? 'cell--choosable' : '',
-            revealing && revealed ? 'cell--flip' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
+            const classes = [
+              'cell',
+              `cell--${state}`,
+              removable ? 'cell--removable' : '',
+              spent ? 'cell--spent' : '',
+              bannedNow ? 'cell--banned' : '',
+              chosen ? 'cell--chosen' : '',
+              choosable ? 'cell--choosable' : '',
+              revealing && revealed ? 'cell--flip' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')
 
-          const label = character
-            ? `${character.name}${
-                slot?.consumed
-                  ? ' — played'
-                  : bannedNow
-                    ? ' — banned this round'
-                    : chosen
-                      ? ' — playing this round'
-                      : ''
-              }`
-            : state === 'empty'
-              ? 'Empty slot'
-              : state === 'sealed'
-                ? 'Sealed'
-                : 'Chosen'
+            const label = character
+              ? `${character.name}${
+                  spent
+                    ? ' — played'
+                    : bannedNow
+                      ? ' — banned this round'
+                      : chosen
+                        ? ' — playing this round'
+                        : ''
+                }`
+              : state === 'empty'
+                ? 'Empty slot'
+                : state === 'sealed'
+                  ? 'Sealed'
+                  : 'Chosen'
 
-          const body = (
-            <>
-              {character ? (
-                <Portrait
-                  character={character}
-                  size="card"
-                  dimmed={slot?.consumed === true || bannedNow}
-                />
-              ) : (
-                <span className="cell__frame" aria-hidden="true">
-                  {state === 'empty' ? '' : '●'}
-                </span>
-              )}
-              {/* Said outright rather than implied by a colour: a ban lasts one round (D3), and
+            const body = (
+              <>
+                {character ? (
+                  <Portrait character={character} size="card" dimmed={spent || bannedNow} />
+                ) : (
+                  <span className="cell__frame" aria-hidden="true">
+                    {state === 'empty' ? '' : '●'}
+                  </span>
+                )}
+                {/* Said outright rather than implied by a colour: a ban lasts one round (D3), and
                   "greyed" alone reads the same as "already played", which is permanent. */}
-              {bannedNow ? <span className="cell__stamp">Round banned</span> : null}
-              <span className="cell__name">{character ? character.name : label}</span>
-              {removable ? (
-                <span className="cell__remove" aria-hidden="true">
-                  Remove
-                </span>
-              ) : null}
-            </>
-          )
+                {bannedNow ? <span className="cell__stamp">Round banned</span> : null}
+                <span className="cell__name">{character ? character.name : label}</span>
+                {removable ? (
+                  <span className="cell__remove" aria-hidden="true">
+                    Remove
+                  </span>
+                ) : null}
+              </>
+            )
 
-          return (
-            <li
-              key={slot ? slot.index : i}
-              className="cell-slot"
-              style={{
-                width: `${CELL_PX}px`,
-                transform: `translateX(${offset}px) scale(${scale})`,
-                // Grows toward the centre line, into the gap beside the "vs".
-                transformOrigin: own ? 'right center' : 'left center',
-                zIndex: chosen ? 2 : 1,
-                ...(revealing && revealed
-                  ? ({
-                      '--flip-delay': `${revealDelay(position, boxes, own)}ms`,
-                    } as React.CSSProperties)
-                  : {}),
-              }}
-            >
-              {choosable && slot ? (
-                <button
-                  type="button"
-                  className={classes}
-                  aria-label={label}
-                  onClick={() => onSelect?.(slot.index)}
-                >
-                  {body}
-                </button>
-              ) : removable ? (
-                <button
-                  type="button"
-                  className={classes}
-                  aria-label={`Remove ${character?.name ?? ''}`.trim()}
-                  onClick={() => onRemove?.(cells[i]!.character?.id ?? '')}
-                >
-                  {body}
-                </button>
-              ) : (
-                <div className={classes}>{body}</div>
-              )}
-            </li>
-          )
-        })}
+            return (
+              <li
+                key={slot ? slot.index : i}
+                className={`cell-slot ${chosen ? 'cell-slot--chosen' : ''}`}
+                style={{
+                  width: `${CELL_PX}px`,
+                  transform: `translateX(${offset}px) scale(${scale})`,
+                  // Grows toward the centre line, into the gap beside the "vs".
+                  transformOrigin: own ? 'right bottom' : 'left bottom',
+                  zIndex: chosen ? 2 : 1,
+                  ...(revealing && revealed
+                    ? ({
+                        '--flip-delay': `${revealDelay(position, boxes, own)}ms`,
+                      } as React.CSSProperties)
+                    : {}),
+                }}
+              >
+                {choosable && slot ? (
+                  <button
+                    type="button"
+                    className={classes}
+                    aria-label={label}
+                    onClick={() => onSelect?.(slot.index)}
+                  >
+                    {body}
+                  </button>
+                ) : removable ? (
+                  <button
+                    type="button"
+                    className={classes}
+                    aria-label={`Remove ${character?.name ?? ''}`.trim()}
+                    onClick={() => onRemove?.(cells[i]!.character?.id ?? '')}
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div className={classes}>{body}</div>
+                )}
+              </li>
+            )
+          },
+        )}
       </ul>
     </div>
   )
