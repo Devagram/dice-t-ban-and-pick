@@ -24,14 +24,14 @@ export interface TransportState {
    * Cleared on every new view, because a state change means the count it described is stale —
    * a bar left showing "2 of 4" after the draft resolved would be worse than showing nothing.
    */
-  progress: { filled: number; of: number } | null
+  progress: { filled: number; of: number; ban: boolean } | null
 }
 
 export interface Transport {
   send(payload: PlayerActionPayload): void
   resync(): void
   /** Tells the opponent how far along you are. Cosmetic; carries a count and nothing else. */
-  reportProgress(filled: number, of: number): void
+  reportProgress(filled: number, of: number, ban?: boolean): void
   close(): void
 }
 
@@ -54,6 +54,8 @@ export function connect(
   let attempt = 0
   let closedByUs = false
   let timer: ReturnType<typeof setTimeout> | undefined
+  /** The last progress count actually put on the wire, so a repeat costs nothing. */
+  let lastProgress: string | null = null
 
   const url = `${websocketUrl}?token=${encodeURIComponent(seatToken)}`
 
@@ -84,7 +86,7 @@ export function connect(
           onChange({ error: { code: message.code, detail: message.detail } })
           break
         case 'OPPONENT_PROGRESS':
-          onChange({ progress: { filled: message.filled, of: message.of } })
+          onChange({ progress: { filled: message.filled, of: message.of, ban: message.ban } })
           break
       }
     })
@@ -122,8 +124,15 @@ export function connect(
     resync() {
       post({ type: 'RESYNC' })
     },
-    reportProgress(filled, of) {
-      post({ type: 'PROGRESS', filled, of })
+    reportProgress(filled, of, ban = false) {
+      // Deduped at the wire, not just at the caller. Progress is cosmetic, so a repeat carries
+      // no information — and a chatty progress bar must never be able to cost a player their
+      // ability to commit. Belt and braces on purpose: this is the layer that cannot be defeated
+      // by a caller re-rendering.
+      const key = `${filled}/${of}/${ban ? 1 : 0}`
+      if (key === lastProgress) return
+      lastProgress = key
+      post({ type: 'PROGRESS', filled, of, ban })
     },
     close() {
       closedByUs = true

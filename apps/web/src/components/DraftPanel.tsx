@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Action, CharId, PlayerActionPayload, PlayerView } from '@banpick/types'
 
 import { META_BAN_HELP, META_BAN_PROMPT, SEALED_NOTE } from '../copy.js'
@@ -24,11 +24,19 @@ export interface DraftPanelProps {
   view: PlayerView
   commit: Extract<Action, { type: 'COMMIT' }>
   onAct: (payload: PlayerActionPayload) => void
-  /** Reports how many slots are filled, so the opponent sees movement rather than a blank wait. */
-  onProgress?: (filled: number, of: number) => void
+  /** Reports slots filled and whether a ban is chosen, so the opponent's rail fills as you pick. */
+  onProgress?: (filled: number, of: number, ban: boolean) => void
+  /**
+   * Your own picks, for your own rail. **Local only — never sent.**
+   *
+   * Separate from `onProgress` on purpose: that one goes on the wire and must carry counts alone
+   * (§7), while this carries real character ids and must not leave the browser. Two callbacks
+   * rather than one object makes it hard to send the wrong one by accident.
+   */
+  onDraftChange?: (picks: CharId[], metaBan: CharId | null) => void
 }
 
-export function DraftPanel({ view, commit, onAct, onProgress }: DraftPanelProps) {
+export function DraftPanel({ view, commit, onAct, onProgress, onDraftChange }: DraftPanelProps) {
   const [picks, setPicks] = useState<CharId[]>([])
   const [metaBan, setMetaBan] = useState<CharId | null>(null)
 
@@ -44,16 +52,36 @@ export function DraftPanel({ view, commit, onAct, onProgress }: DraftPanelProps)
     : []
 
   /**
-   * Total decisions in this commit, so the opponent's bar counts the same things you do — a
-   * `bring-ban1` draft is four picks *and* a ban, and a bar that reached "4 of 4" while you were
-   * still choosing a ban would read as stalled rather than in progress.
+   * Slots, and the ban, counted separately.
+   *
+   * They used to be summed into "decisions", which read fine as a sentence and was useless for
+   * drawing boxes: "3 of 5" cannot say whether that is three picks or two picks and a ban, and
+   * the rail needs to know exactly which slots are full.
    */
-  const totalSteps = (wantsPicks ? commit.picks!.count : 0) + (wantsBan ? 1 : 0)
-  const doneSteps = picks.length + (metaBan ? 1 : 0)
+  const slotCount = wantsPicks ? commit.picks!.count : 0
+  const banChosen = wantsBan && metaBan !== null
+
+  /**
+   * Reported on **change**, not on render.
+   *
+   * The callbacks are deliberately not dependencies, and the refs are why they can safely not be:
+   * the effect always calls the current one, but only when something actually moves. `Match`
+   * passes inline arrows, so including them fired the effect on every render — and because a
+   * progress ping re-renders the *opponent*, the two clients drove each other in an unbounded
+   * loop that only the server's rate limiter stopped, by locking the seat out of real actions.
+   */
+  const report = useRef(onProgress)
+  report.current = onProgress
+  const reportLocal = useRef(onDraftChange)
+  reportLocal.current = onDraftChange
 
   useEffect(() => {
-    onProgress?.(doneSteps, totalSteps)
-  }, [doneSteps, totalSteps, onProgress])
+    report.current?.(picks.length, slotCount, banChosen)
+  }, [picks.length, slotCount, banChosen])
+
+  useEffect(() => {
+    reportLocal.current?.(picks, metaBan)
+  }, [picks, metaBan])
 
   const submit = (): void => {
     if (wantsPicks) noteDrafted(picks)

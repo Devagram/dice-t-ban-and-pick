@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { PlayerActionPayload, PlayerView, SlotIdx } from '@banpick/types'
+import type { CharId, PlayerActionPayload, PlayerView, SlotIdx } from '@banpick/types'
 
 import { RESUME_LINK_WARNING, WAITING_NOTE } from '../copy.js'
 import { connect, type Transport, type TransportState } from '../transport.js'
@@ -58,7 +58,7 @@ export function Match({
       <MatchBody
         view={state.view}
         onAct={act}
-        onProgress={(filled, of) => transport?.reportProgress(filled, of)}
+        onProgress={(filled, of, ban) => transport?.reportProgress(filled, of, ban)}
         progress={state.progress}
         roomCode={roomCode}
         seatToken={seatToken}
@@ -87,8 +87,8 @@ function MatchBody({
 }: {
   view: PlayerView
   onAct: (payload: PlayerActionPayload) => void
-  onProgress: (filled: number, of: number) => void
-  progress: { filled: number; of: number } | null
+  onProgress: (filled: number, of: number, ban: boolean) => void
+  progress: { filled: number; of: number; ban: boolean } | null
   roomCode: string
   seatToken: string
 }) {
@@ -109,6 +109,33 @@ function MatchBody({
   const myMove = view.legalActions.some((a) => a.type !== 'UNDO_LAST_RESULT')
   const waiting = !myMove && view.status === 'IN_PROGRESS'
 
+  /**
+   * Your own in-flight draft, so your rail fills as you pick.
+   *
+   * Held here rather than in `DraftPanel` because the rail outlives the panel: the picks have to
+   * stay on screen from the first click through the commit. **Never sent** — the wire carries
+   * counts only (§7); these are ids, and they are yours.
+   */
+  const [mine, setMine] = useState<{ picks: CharId[]; metaBan: CharId | null }>({
+    picks: [],
+    metaBan: null,
+  })
+
+  // Cleared once the commit lands, so the real slots take over from the local guess rather than
+  // both being drawn.
+  useEffect(() => {
+    if (view.you.hasCommitted) setMine({ picks: [], metaBan: null })
+  }, [view.you.hasCommitted])
+
+  /**
+   * How many boxes to draw before anything is committed.
+   *
+   * `draftCount` is a declared mode parameter (D25) and is on the public ruleset, so both rails
+   * can be the right size from the moment the match opens — including the opponent's, whose
+   * `slotCount` stays 0 until they commit.
+   */
+  const expectedSlots = Number(view.ruleset.parameters.draftCount) || 0
+
   return (
     <>
       <header className="matchbar">
@@ -128,27 +155,22 @@ function MatchBody({
           still-tumbling die would answer the question the animation is asking. */}
       {rollPlaying ? null : (
         <>
-          <OpponentActivity view={view} progress={progress} />
-          {commit ? (
-            <DraftPanel view={view} commit={commit} onAct={onAct} onProgress={onProgress} />
-          ) : null}
-          {recommit ? <RecommitPanel view={view} recommit={recommit} onAct={onAct} /> : null}
-        </>
-      )}
-
-      {rollPlaying || commit || recommit ? null : (
-        <>
           {targets.ban ? (
             <p className="prompt__title">Ban one of their characters for this round</p>
           ) : null}
           {targets.select ? <p className="prompt__title">Choose who you play this round</p> : null}
 
+          {/* Both rails, for the whole match — including *during* the draft, which is the point.
+              They used to be hidden whenever a commit panel was open, so the draft happened
+              behind a blank screen and four slots appeared at once at the end. */}
           <div className="rails">
             <SlotRail
               title="Yours"
               view={view.you}
               roster={view.roster}
               currentRound={view.phase?.roundIndex ?? null}
+              expected={expectedSlots}
+              pending={{ filled: mine.picks.length, picks: mine.picks, ban: mine.metaBan !== null }}
               selectable={targets.own as SlotIdx[]}
               onSelect={(index) => {
                 const select = targets.select
@@ -168,6 +190,10 @@ function MatchBody({
               view={view.opponent}
               roster={view.roster}
               currentRound={view.phase?.roundIndex ?? null}
+              expected={expectedSlots}
+              // Their count comes from their browser, so the rail draws it as "choosing" rather
+              // than as fact. No ids: there are none to have (§7).
+              pending={progress ? { filled: progress.filled, ban: progress.ban } : { filled: 0 }}
               selectable={targets.opponent as SlotIdx[]}
               onSelect={(index) => {
                 const ban = targets.ban
@@ -185,6 +211,18 @@ function MatchBody({
               }}
             />
           </div>
+
+          <OpponentActivity view={view} progress={progress} />
+          {commit ? (
+            <DraftPanel
+              view={view}
+              commit={commit}
+              onAct={onAct}
+              onProgress={onProgress}
+              onDraftChange={(picks, metaBan) => setMine({ picks, metaBan })}
+            />
+          ) : null}
+          {recommit ? <RecommitPanel view={view} recommit={recommit} onAct={onAct} /> : null}
         </>
       )}
 

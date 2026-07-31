@@ -56,14 +56,29 @@ name it. A bare `npx wrangler deploy` fails with _"The Cloudflare application de
 has been run in the root of a workspace"_ — wrangler sees an npm workspace root with no project
 in it and refuses to guess.
 
-| Setting        | Value                                                     |
-| -------------- | --------------------------------------------------------- |
-| Root directory | `/` (the repo root — the build needs the workspace)       |
-| Build command  | `npm run build`                                           |
-| Deploy command | `npx wrangler deploy --config apps/worker/wrangler.jsonc` |
+| Setting        | Value                                               |
+| -------------- | --------------------------------------------------- |
+| Root directory | `/` (the repo root — the build needs the workspace) |
+| Build command  | _(leave empty)_                                     |
+| Deploy command | `npm run deploy`                                    |
 
 Root directory stays at `/` because `npm run build` builds `apps/web` through the workspace;
 pointing it at `apps/worker` would put the install and the build in the wrong place.
+
+**The deploy command must build, not just deploy.** `npm run deploy` is `npm run build &&
+wrangler deploy --config apps/worker/wrangler.jsonc` — one field, defined in
+[package.json](package.json), so the dashboard cannot drift from the repo. Splitting it across
+the Build and Deploy fields also works, but then both have to be right and only one of them
+looks wrong when it isn't.
+
+### If a deploy "succeeds" but the site is unchanged
+
+Check the build log for `The directory specified by the assets.directory field does not exist`.
+
+`apps/worker/public/` is **build output and is gitignored**, so a fresh checkout does not
+contain it — which is what Cloudflare builds from. A deploy command that skips the build finds
+no assets, fails, and leaves the previous version live. The site then looks untouched even
+though the commit went through, which reads exactly like a caching problem and is not one.
 
 That prints `https://banpick.<your-subdomain>.workers.dev`. The Durable Object and its SQLite
 storage are declared in [wrangler.jsonc](apps/worker/wrangler.jsonc) and provisioned by the

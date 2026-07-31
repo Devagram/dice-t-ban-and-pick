@@ -378,12 +378,27 @@ select {
   }
 }
 
+.rail__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
 .rail__title {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 0.85rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+/* The live "2 of 4" beside the rail title, so the count sits with the boxes it describes. */
+.rail__count {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .rail__list {
@@ -430,9 +445,39 @@ select {
   color: #ffd7d7;
 }
 
+/*
+ * The three pre-reveal states.
+ *
+ * `--choosing` is dashed on purpose. That count came from the opponent's own browser and the
+ * server cannot confirm it (a draft is one COMMIT), so it is drawn as in-progress rather than as
+ * settled — the same distinction LoL draws between a hovered pick and a locked one. `--sealed` is
+ * solid because a commit *is* server-confirmed, even though its contents are not visible.
+ */
+.slot--empty {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--line) 60%, transparent);
+  color: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+
+.slot--choosing {
+  border-style: dashed;
+  border-color: var(--accent);
+  color: var(--muted);
+  animation: slot-arrive 220ms ease-out;
+}
+
 .slot--sealed {
   color: var(--muted);
   font-style: italic;
+}
+
+/* The face-down marker. Sized so a filled box reads as filled at a glance, from across a table. */
+.slot__face {
+  width: 28px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .slot__status {
@@ -443,6 +488,83 @@ select {
 
 .slot__name {
   overflow-wrap: anywhere;
+}
+
+/* A slot arriving as it is chosen — small, so a four-pick draft is not four bounces. */
+@keyframes slot-arrive {
+  from {
+    transform: scale(0.96);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/*
+ * The reveal.
+ *
+ * Staggered by `--flip-delay`, set per slot in SlotRail, so the cards turn over one after another
+ * rather than all on one frame. `backface-visibility` is not used: this is a scale-and-fade
+ * standing in for a flip, which reads the same at this size and does not need a second face
+ * rendered behind every card.
+ */
+.slot--flip {
+  animation: slot-flip 420ms ease-out backwards;
+  animation-delay: var(--flip-delay, 0ms);
+}
+
+@keyframes slot-flip {
+  from {
+    transform: rotateY(90deg) scale(0.9);
+    opacity: 0;
+  }
+  60% {
+    transform: rotateY(-8deg) scale(1.02);
+    opacity: 1;
+  }
+  to {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+/*
+ * The meta ban, beside the slots rather than among them.
+ *
+ * Slots are the positional ban *target* (§5); a fifth box would make the rail misreport how many
+ * characters a seat holds.
+ */
+.banchip {
+  margin: 8px 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+.banchip__label {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+}
+
+.banchip--pending .banchip__value {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.banchip--placed .banchip__value {
+  color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slot--flip,
+  .slot--choosing {
+    animation: none;
+  }
 }
 
 /* --- Prompts and actions ------------------------------------------------- */

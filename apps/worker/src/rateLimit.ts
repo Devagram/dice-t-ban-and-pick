@@ -31,6 +31,19 @@ export class RateLimiter {
   private readonly buckets = new Map<Seat, Bucket>()
 
   /**
+   * Cosmetic traffic gets its **own** limiter, never the action budget.
+   *
+   * Learned the hard way: a re-render loop in the client turned the progress bar into a message
+   * flood, and because progress and actions shared one bucket, the rate limiter locked the seat
+   * out of *committing*. A player could not play. Two buckets mean the worst a runaway cosmetic
+   * feature can do is stop being cosmetic — the match stays playable, which is the property
+   * worth protecting.
+   */
+  static forChatter(): RateLimiter {
+    return new RateLimiter()
+  }
+
+  /**
    * `now` is injectable so the tests can advance time without sleeping. In the Worker it comes
    * from `Date.now()`, which is frozen within a request — coarse, and coarse in the safe
    * direction: several actions in one request tick share a timestamp and so cannot refill.

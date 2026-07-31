@@ -67,6 +67,8 @@ const MAX_APPEND_ATTEMPTS = 5
 export class MatchDO extends DurableObject<Env> {
   private readonly sql: SqlStorage
   private readonly limiter = new RateLimiter()
+  /** Cosmetic traffic, budgeted separately so it can never cost a player an action. */
+  private readonly chatter = RateLimiter.forChatter()
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -313,6 +315,23 @@ export class MatchDO extends DurableObject<Env> {
 
     const target: SeatSocket = { socket, seat }
 
+    // Progress is handled before the action budget is touched, and without rebuilding state.
+    //
+    // It is cosmetic, so it must not be able to cost a player their ability to act — sharing one
+    // bucket meant a chatty client got "too many actions; slow down" on its *commit*. It also
+    // reads nothing, so folding the whole event log to relay a count was pure waste on the hot
+    // path of a feature that fires on every click. Over-quota pings are dropped in silence: an
+    // error frame is itself traffic, and there is nothing the player could do about it.
+    if (message.type === 'PROGRESS') {
+      if (!this.chatter.allow(seat)) return
+      // Clamped rather than validated because it decides nothing — a nonsense count should not
+      // cost a round trip to reject, and the seat comes from the socket, not the message.
+      const of = Math.max(0, Math.min(16, Math.floor(message.of) || 0))
+      const filled = Math.max(0, Math.min(of, Math.floor(message.filled) || 0))
+      relayProgress(this.sockets(), seat, filled, of, message.ban === true)
+      return
+    }
+
     if (!this.limiter.allow(seat)) {
       sendProtocolError(socket, 'RATE_LIMITED', 'too many actions; slow down')
       return
@@ -332,15 +351,6 @@ export class MatchDO extends DurableObject<Env> {
         this.applyAction(target, state, message.idempotencyKey, message.payload)
         this.touch()
         return
-      case 'PROGRESS': {
-        // Cosmetic and ephemeral: relayed, never appended, never stored. Clamped rather than
-        // validated because it decides nothing — a nonsense count should not cost a round trip
-        // to reject, and the seat is taken from the socket rather than the message.
-        const of = Math.max(0, Math.min(16, Math.floor(message.of) || 0))
-        const filled = Math.max(0, Math.min(of, Math.floor(message.filled) || 0))
-        relayProgress(this.sockets(), seat, filled, of)
-        return
-      }
       default:
         sendProtocolError(socket, 'UNKNOWN_MESSAGE', 'unrecognized message type')
     }

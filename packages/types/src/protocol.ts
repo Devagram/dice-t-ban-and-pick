@@ -46,7 +46,22 @@ export type ClientMessage =
    * trust model grants friendly opponents, and the worst a liar achieves is a wrong progress
    * bar.
    */
-  | { type: 'PROGRESS'; filled: number; of: number }
+  | {
+      type: 'PROGRESS'
+      /** Draft **slots** filled so far — not decisions. The rail renders one box per slot. */
+      filled: number
+      /** How many slots there are, which is `draftCount` and already public on the ruleset. */
+      of: number
+      /**
+       * Whether a meta ban has been chosen, where the mode asks for one.
+       *
+       * Separate from the counts rather than folded into them: a `bring-ban1` commit is four
+       * picks *and* a ban, and "3 of 5" cannot say whether that is three picks or two picks and
+       * a ban — which makes it useless for drawing four slot boxes. A boolean beside the counts
+       * keeps both readouts honest, and still names nothing.
+       */
+      ban?: boolean
+    }
 
 export type ServerMessage =
   /**
@@ -66,7 +81,7 @@ export type ServerMessage =
    * `seat` is whose progress this is, decided by the server from the sender's token rather than
    * taken from the message.
    */
-  | { type: 'OPPONENT_PROGRESS'; seat: Seat; filled: number; of: number }
+  | { type: 'OPPONENT_PROGRESS'; seat: Seat; filled: number; of: number; ban: boolean }
 
 export type ProtocolErrorCode =
   'MALFORMED' | 'RATE_LIMITED' | 'UNKNOWN_MESSAGE' | 'NOT_YOUR_SEAT' | 'UNAUTHENTICATED'

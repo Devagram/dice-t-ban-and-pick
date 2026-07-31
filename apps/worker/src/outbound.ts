@@ -66,10 +66,11 @@ export function relayProgress(
   from: Seat,
   filled: number,
   of: number,
+  ban: boolean,
 ): void {
   for (const target of targets) {
     if (target.seat === from) continue // you already know your own progress
-    deliver(target.socket, { type: 'OPPONENT_PROGRESS', seat: from, filled, of })
+    deliver(target.socket, { type: 'OPPONENT_PROGRESS', seat: from, filled, of, ban })
   }
 }
 

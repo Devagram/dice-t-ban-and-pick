@@ -42,6 +42,9 @@ describe('progress reaches the opponent', () => {
       seat: 'A',
       filled: 2,
       of: 5,
+      // Counts describe *slots*; the meta ban rides alongside as its own flag, because "3 of 5"
+      // cannot say whether that is three picks or two picks and a ban.
+      ban: false,
     })
     // You already know your own progress; echoing it back is noise on the wire.
     expect(a.progress).toHaveLength(0)
@@ -103,6 +106,26 @@ describe('progress leaks nothing and changes nothing', () => {
         expect(frame, `a progress frame leaked "${id}"`).not.toContain(id)
       }
     }
+  })
+
+  it('never costs a player the ability to act', async () => {
+    // **The bug that took a live match down.** A client re-render loop turned the progress bar
+    // into a flood; progress and actions shared one token bucket; the seat was rate-limited out
+    // of its own COMMIT and the match was stuck on "too many actions; slow down".
+    //
+    // The client no longer chatters, but a *deployed* client still might, so this is the layer
+    // that has to hold: whatever progress does, committing must still work.
+    const { a, b } = await seatedMatch({ modeId: 'bring-ban1', draftCount: 4 })
+
+    for (let i = 0; i < 60; i++) a.send({ type: 'PROGRESS', filled: i % 5, of: 5 })
+    await a.settle(60)
+
+    const { materialize } = await import('./client.js')
+    await a.act(materialize(a.action('COMMIT')!, 'A'))
+
+    expect(a.lastError?.code, 'the flood locked the seat out of acting').not.toBe('RATE_LIMITED')
+    expect(a.lastRejection).toBeUndefined()
+    expect(b.view.opponent.hasCommitted).toBe(true)
   })
 
   it('does not disturb a match played alongside it', async () => {
