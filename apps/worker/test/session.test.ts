@@ -154,9 +154,7 @@ describe('the seat belongs to the token, not the socket', () => {
       // a frame a well-behaved client could not, which is the whole point of the test.
       payload: { ...materialize(commit, 'A'), seat: 'B' } as PlayerActionPayload,
     })
-    await a.settle()
-
-    expect(a.lastError?.code).toBe('NOT_YOUR_SEAT')
+    expect((await a.waitForError()).code).toBe('NOT_YOUR_SEAT')
   })
 
   it('refuses an undo that names the other seat', async () => {
@@ -166,8 +164,7 @@ describe('the seat belongs to the token, not the socket', () => {
       idempotencyKey: 'forged-undo',
       payload: { type: 'UNDO_LAST_RESULT', roundIndex: 0, requestedBy: 'B' },
     })
-    await a.settle()
-    expect(a.lastError?.code).toBe('NOT_YOUR_SEAT')
+    expect((await a.waitForError()).code).toBe('NOT_YOUR_SEAT')
   })
 })
 

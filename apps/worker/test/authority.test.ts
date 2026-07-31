@@ -197,8 +197,7 @@ describe('idempotency — a double-clicked commit appends once', () => {
       idempotencyKey: '',
       payload: materialize(a.action('COMMIT')!, 'A'),
     })
-    await a.settle()
-    expect(a.lastError?.code).toBe('MALFORMED')
+    expect((await a.waitForError()).code).toBe('MALFORMED')
   })
 })
 
@@ -208,15 +207,13 @@ describe('the protocol refuses nonsense', () => {
     // Raw, because `send` would serialize the string into valid JSON and the server would then
     // correctly report UNKNOWN_MESSAGE instead — a different failure than the one under test.
     a.sendRaw('{ not json at all')
-    await a.settle()
-    expect(a.lastError?.code).toBe('MALFORMED')
+    expect((await a.waitForError()).code).toBe('MALFORMED')
   })
 
   it('rejects an unrecognized message type', async () => {
     const { a } = await seatedMatch()
     a.send({ type: 'DEMAND_VICTORY' } as never)
-    await a.settle()
-    expect(a.lastError?.code).toBe('UNKNOWN_MESSAGE')
+    expect((await a.waitForError()).code).toBe('UNKNOWN_MESSAGE')
   })
 
   it('rate limits a client stuck in a loop', async () => {
@@ -224,8 +221,7 @@ describe('the protocol refuses nonsense', () => {
     // held-down key or a retry bug turning one match into a five-figure request count.
     const { a } = await seatedMatch()
     for (let i = 0; i < 60; i++) a.send({ type: 'RESYNC' })
-    await a.settle(40)
-    expect(a.lastError?.code).toBe('RATE_LIMITED')
+    expect((await a.waitForError()).code).toBe('RATE_LIMITED')
   })
 })
 

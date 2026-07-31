@@ -50,6 +50,14 @@ export interface SlotRailProps {
    * opponent's they are a count only, drawn face down.
    */
   pending?: { filled: number; picks?: CharId[]; ban?: boolean }
+  /**
+   * How to describe this seat's meta ban.
+   *
+   * It needs saying explicitly because the ban targets the *opponent* (D4): the character under
+   * "Theirs" is one of **yours** that they removed. Labelling it "Meta ban" on their rail reads
+   * as though one of their own is gone, which is the opposite of what happened.
+   */
+  banLabel?: string
 }
 
 const FLIP_STAGGER_MS = 150
@@ -63,6 +71,7 @@ export function SlotRail({
   title,
   expected = 0,
   pending,
+  banLabel = 'Meta ban',
 }: SlotRailProps) {
   const byId = new Map(roster.map((c) => [c.id, c]))
 
@@ -119,6 +128,7 @@ export function SlotRail({
           })}
         </ul>
         <BanChip
+          label={banLabel}
           placed={view.hasCommitted ? (view.metaBanPlaced ?? undefined) : undefined}
           pending={!view.hasCommitted && pending?.ban === true}
           roster={byId}
@@ -179,7 +189,7 @@ export function SlotRail({
         })}
       </ul>
       {view.metaBanPlaced ? (
-        <BanChip placed={view.metaBanPlaced} pending={false} roster={byId} />
+        <BanChip label={banLabel} placed={view.metaBanPlaced} pending={false} roster={byId} />
       ) : null}
     </section>
   )
@@ -215,10 +225,12 @@ function RailHead({
  * rail lie about how many characters a seat holds. It gets its own chip beside them.
  */
 function BanChip({
+  label,
   placed,
   pending,
   roster,
 }: {
+  label: string
   placed?: CharId | undefined
   pending: boolean
   roster: Map<CharId, Character>
@@ -228,7 +240,7 @@ function BanChip({
 
   return (
     <p className={`banchip ${placed ? 'banchip--placed' : 'banchip--pending'}`}>
-      <span className="banchip__label">Meta ban</span>
+      <span className="banchip__label">{label}</span>
       <span className="banchip__value">{character ? character.name : 'chosen'}</span>
     </p>
   )

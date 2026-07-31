@@ -229,6 +229,41 @@ describe('the meta ban sits beside the slots, not among them', () => {
     expect(screen.getByText('chosen')).toBeTruthy()
   })
 
+  it('says whose ban it is, because a ban lands on the other seat', () => {
+    // D4 — the character named under "Theirs" is one of *yours* that they removed. A bare
+    // "Meta ban" there reads as though one of their own is gone.
+    render(
+      <SlotRail
+        title="Theirs"
+        banLabel="They banned"
+        view={sealedSeat({ hasCommitted: true, slotCount: 4, metaBanPlaced: 'anvil' })}
+        roster={ROSTER}
+        currentRound={null}
+        expected={4}
+      />,
+    )
+    expect(screen.getByText('They banned')).toBeTruthy()
+    expect(screen.getByText('The Anvil')).toBeTruthy()
+  })
+
+  it('shows the ban at gate one while the picks are still sealed', () => {
+    // The middle state of bring-ban1: bans public, draft not. The only moment where one slice of
+    // a seat is visible and another is not. `apps/worker/test/reveal-gates.test.ts` pins the wire.
+    render(
+      <SlotRail
+        title="Theirs"
+        banLabel="They banned"
+        view={sealedSeat({ hasCommitted: true, slotCount: 4, metaBanPlaced: 'anvil' })}
+        roster={ROSTER}
+        currentRound={null}
+        expected={4}
+      />,
+    )
+    expect(screen.getAllByText('Sealed')).toHaveLength(4)
+    expect(screen.getByText('The Anvil')).toBeTruthy() // the ban, and only the ban
+    expect(screen.queryByText('The Cartographer')).toBeNull()
+  })
+
   it('says nothing when no ban is in play', () => {
     render(
       <SlotRail

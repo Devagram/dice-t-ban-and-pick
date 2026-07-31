@@ -166,6 +166,8 @@ function MatchBody({
           <div className="rails">
             <SlotRail
               title="Yours"
+              // D4 — your ban lands on one of *their* characters, and theirs on one of yours.
+              banLabel="You banned"
               view={view.you}
               roster={view.roster}
               currentRound={view.phase?.roundIndex ?? null}
@@ -187,6 +189,7 @@ function MatchBody({
             />
             <SlotRail
               title="Theirs"
+              banLabel="They banned"
               view={view.opponent}
               roster={view.roster}
               currentRound={view.phase?.roundIndex ?? null}

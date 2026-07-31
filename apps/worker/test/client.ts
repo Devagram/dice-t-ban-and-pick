@@ -170,9 +170,50 @@ export class TestClient {
     )
   }
 
-  /** Lets any fan-out addressed to this client land. */
+  /**
+   * Lets any fan-out addressed to this client land.
+   *
+   * A fixed number of turns, which is correct **only** for negative assertions — proving nothing
+   * arrived means waiting a while and then looking. For a positive one, use `waitForError` or
+   * `waitForRejection`: asserting on a frame after a fixed wait is a race that passes on a fast
+   * machine and fails on a loaded CI runner, which is exactly how this file lost an afternoon.
+   */
   async settle(turns = 4): Promise<void> {
     for (let i = 0; i < turns; i++) await scheduler.wait(1)
+  }
+
+  /**
+   * Waits for a protocol ERROR, or fails saying none came.
+   *
+   * Same reasoning as `waitForFrame`: a server that never replies is a real failure and must look
+   * like one. The timeout is generous because it is a backstop, not a delay — a passing case
+   * returns on the first turn the frame exists.
+   */
+  async waitForError(timeoutTurns = 200): Promise<Extract<ServerMessage, { type: 'ERROR' }>> {
+    for (let i = 0; i < timeoutTurns; i++) {
+      const error = this.errors.at(-1)
+      if (error) return error
+      await scheduler.wait(1)
+    }
+    throw new Error(
+      `client ${this.seatToken.slice(0, 8)} received no ERROR within ${timeoutTurns} turns. ` +
+        `Last rejection: ${JSON.stringify(this.lastRejection)}.`,
+    )
+  }
+
+  /** As `waitForError`, for an action the engine refused rather than a protocol fault. */
+  async waitForRejection(
+    timeoutTurns = 200,
+  ): Promise<Extract<ServerMessage, { type: 'REJECTED' }>> {
+    for (let i = 0; i < timeoutTurns; i++) {
+      const rejection = this.rejections.at(-1)
+      if (rejection) return rejection
+      await scheduler.wait(1)
+    }
+    throw new Error(
+      `client ${this.seatToken.slice(0, 8)} received no REJECTED within ${timeoutTurns} turns. ` +
+        `Last error: ${JSON.stringify(this.lastError)}.`,
+    )
   }
 
   get view(): PlayerView {
