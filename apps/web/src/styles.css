@@ -1745,7 +1745,7 @@ select {
   transform: translateX(-50%);
   border-radius: 14px;
   pointer-events: none;
-  z-index: 0;
+  /* `z-index` is set inline from `Z_LOCK_IN`, alongside the cells it has to sit above. */
   animation:
     lockin-arrive 320ms ease-out,
     lockin-pulse 1.8s ease-in-out 320ms infinite;

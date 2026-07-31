@@ -703,13 +703,67 @@ describe('the pair locks in', () => {
     expect(container.querySelector('.lockin')).toBeTruthy()
   })
 
-  it('sizes the ring from the same arithmetic that places the cards', () => {
+  it('encloses the pair rather than tracing them', () => {
     vi.useFakeTimers()
     const { container } = render2(both(0, 0))
     act(() => void vi.advanceTimersByTime(1000))
     const ring = container.querySelector('.lockin') as HTMLElement
-    // Two blown-up cells, the gap either side of the "vs", and the "vs" column itself.
-    expect(parseInt(ring.style.width, 10)).toBe(Math.round(132 * 1.5) * 2 + 6 * 2 + 44)
+
+    // Two blown-up cells, the gap either side of the "vs", the "vs" column, and padding.
+    const cardsWide = Math.round(132 * 1.5) * 2 + 8 * 2 + 44
+    expect(parseInt(ring.style.width, 10)).toBeGreaterThan(cardsWide)
+
+    // Tall enough for the whole card, not just its portrait — the first version measured the art
+    // alone and cut across the names underneath it.
+    const portraitOnly = Math.round(132 * (300 / 199) * 1.5)
+    const wholeCard = Math.round((132 * (300 / 199) + 26) * 1.5)
+    expect(parseInt(ring.style.height, 10)).toBeGreaterThan(wholeCard)
+    expect(wholeCard).toBeGreaterThan(portraitOnly)
+
+    // And it hangs below the cards' floor by its own padding, so the bottom edge clears them too.
+    expect(parseInt(ring.style.bottom, 10)).toBeLessThan(0)
+    vi.useRealTimers()
+  })
+
+  it('draws the ring above every card, including the small ones beside it', () => {
+    // The ring is wider than the pair it encloses — that is the point — so its edges pass over
+    // the cards on either side. Underneath them it was simply invisible.
+    vi.useFakeTimers()
+    const { container } = render2(both(0, 0))
+    act(() => void vi.advanceTimersByTime(1000))
+
+    const ring = Number((container.querySelector('.lockin') as HTMLElement).style.zIndex)
+    const cells = [...container.querySelectorAll('.cell-slot')] as HTMLElement[]
+    expect(cells.length).toBeGreaterThan(2) // there are neighbours to be hidden behind
+    for (const cell of cells) {
+      expect(ring).toBeGreaterThan(Number(cell.style.zIndex))
+    }
+    vi.useRealTimers()
+  })
+
+  it('still lifts the chosen card above its own neighbours', () => {
+    vi.useFakeTimers()
+    const { container } = render2(both(0, 0))
+    act(() => void vi.advanceTimersByTime(1000))
+    const own = [...container.querySelectorAll('.side--own .cell-slot')] as HTMLElement[]
+    const chosen = own.find((c) => c.className.includes('cell-slot--chosen'))!
+    const others = own.filter((c) => c !== chosen)
+    for (const other of others) {
+      expect(Number(chosen.style.zIndex)).toBeGreaterThan(Number(other.style.zIndex))
+    }
+    vi.useRealTimers()
+  })
+
+  it('gives the blown-up card a row tall enough to hold it', () => {
+    // Scaling a card scales its name and padding too. Sizing the row from the portrait alone
+    // left the chosen card overflowing its own row by about thirteen pixels.
+    vi.useFakeTimers()
+    const { container } = render2(both(0, 0))
+    act(() => void vi.advanceTimersByTime(1000))
+    const row = container.querySelector('.side__row') as HTMLElement
+    expect(parseInt(row.style.height, 10)).toBeGreaterThanOrEqual(
+      Math.round((132 * (300 / 199) + 26) * 1.5),
+    )
     vi.useRealTimers()
   })
 })

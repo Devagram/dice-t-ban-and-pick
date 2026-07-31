@@ -70,6 +70,30 @@ const GAP_PX = 6
 const PITCH = CELL_PX + GAP_PX
 /** Fixed so the lock-in ring can be sized without measuring the DOM. */
 const VS_WIDTH_PX = 44
+/** `.stage__sides` gap — the space either side of the "vs", not the space between cells. */
+const SIDES_GAP_PX = 8
+/**
+ * Everything on a card that is not the portrait: its padding, the gap under the art, and the
+ * name. The ring has to clear all of it, and sizing from the portrait alone left it cutting
+ * across the names.
+ */
+const CARD_CHROME_PX = 26
+/** Card height at rest. The portrait keeps the source art's 199×300, plus the chrome above. */
+const CARD_HEIGHT_PX = CELL_PX * (300 / 199) + CARD_CHROME_PX
+/** Breathing room, so the ring encloses the pair rather than tracing them. */
+const RING_PAD_PX = 12
+
+/**
+ * Stacking on the board, in one place.
+ *
+ * The ring is deliberately the top layer. It is wider than the pair it encloses — that is the
+ * point — so its edges pass over the cards on either side, and underneath them it was simply
+ * invisible. Nothing is hidden by putting it on top: the ring is a border and a glow with a
+ * transparent middle, and it takes no pointer events.
+ */
+const Z_CELL = 1
+const Z_CELL_CHOSEN = 2
+const Z_LOCK_IN = 3
 /** The character being played this round, blown up next to the "vs". */
 const CHOSEN_SCALE = 1.5
 
@@ -183,7 +207,9 @@ export function Stage({
    * both the moment *either* seat has one.
    */
   const anyChosen = chosenOwn !== null || chosenOpponent !== null
-  const rowHeight = Math.round(CELL_PX * (300 / 199) * (anyChosen ? CHOSEN_SCALE : 1)) + 26
+  // Scaling the *card* scales its chrome too, so the row has to grow by the same factor —
+  // measuring only the portrait left the blown-up card overflowing its own row by ~13px.
+  const rowHeight = Math.round(CARD_HEIGHT_PX * (anyChosen ? CHOSEN_SCALE : 1))
 
   /**
    * Both cards are at centre stage — so after a beat, one border replaces two.
@@ -223,8 +249,10 @@ export function Stage({
             className="lockin"
             aria-hidden="true"
             style={{
-              width: `${Math.round(CELL_PX * CHOSEN_SCALE) * 2 + GAP_PX * 2 + VS_WIDTH_PX}px`,
-              height: `${Math.round(CELL_PX * CHOSEN_SCALE * (300 / 199)) + 8}px`,
+              zIndex: Z_LOCK_IN,
+              width: `${Math.round(CELL_PX * CHOSEN_SCALE) * 2 + SIDES_GAP_PX * 2 + VS_WIDTH_PX + RING_PAD_PX * 2}px`,
+              height: `${Math.round(CARD_HEIGHT_PX * CHOSEN_SCALE) + RING_PAD_PX * 2}px`,
+              bottom: `${-RING_PAD_PX}px`,
             }}
           />
         ) : null}
@@ -562,7 +590,7 @@ function Side({
                   transform: `translateX(${offset}px) scale(${scale})`,
                   // Grows toward the centre line, into the gap beside the "vs".
                   transformOrigin: own ? 'right bottom' : 'left bottom',
-                  zIndex: chosen ? 2 : 1,
+                  zIndex: chosen ? Z_CELL_CHOSEN : Z_CELL,
                   ...(revealing && revealed
                     ? ({
                         '--flip-delay': `${revealDelay(position, boxes, own)}ms`,

@@ -42,6 +42,18 @@ describe('the drafted row reads larger than the roster', () => {
     expect(CSS).toContain('minmax(var(--roster-tile), 1fr)')
   })
 
+  it('keeps the sides gap agreed between the CSS and the lock-in ring', () => {
+    // The ring spans both cards *and the space either side of the "vs"*. That gap lives on
+    // `.stage__sides` in CSS and as `SIDES_GAP_PX` in the ring maths — the third pair of this
+    // kind on this board, and the first version of the ring used the wrong one of the two gaps.
+    const STAGE = readFileSync('apps/web/src/components/Stage.tsx', 'utf8')
+    const declared = /^const SIDES_GAP_PX = (\d+)$/m.exec(STAGE)
+    expect(declared, 'no SIDES_GAP_PX in Stage.tsx').toBeTruthy()
+    const css = /\.stage__sides \{[^}]*gap:\s*(\d+)px/.exec(CSS)
+    expect(css, 'no gap on .stage__sides').toBeTruthy()
+    expect(Number(declared![1])).toBe(Number(css![1]))
+  })
+
   it('keeps the vs column width agreed between the CSS and the lock-in ring', () => {
     // The joined ring is sized in TypeScript from the two cards, the gaps, and this column. If
     // the column changes in CSS alone the ring stops lining up with what it encloses — the same
