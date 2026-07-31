@@ -53,6 +53,19 @@ export type Action =
       roundIndex: RoundIdx
       outcomes: RoundOutcome[]
     }
+  /**
+   * Take hold of your own die.
+   *
+   * The roll is still decided entirely by the server — seeded, and already determined by
+   * `(seed, seq, actor, attempt)` before either player clicks. This action does not produce the
+   * number; it says *go*. Both seats must say it before the dice resolve, which is what makes
+   * the moment shared rather than something the round does at you.
+   */
+  | {
+      type: 'ROLL'
+      moduleId: string
+      roundIndex: RoundIdx
+    }
   | {
       type: 'UNDO_LAST_RESULT'
       moduleId: null

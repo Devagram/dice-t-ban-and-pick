@@ -101,6 +101,16 @@ function driveToRound2Select(state: MatchState): MatchState {
 
     const action = legalActions(current, actor).find((a) => a.type !== 'UNDO_LAST_RESULT')!
     switch (action.type) {
+      case 'ROLL':
+        // The dice are gated on both seats asking for them, so a driver has to ask.
+        current = apply(current, actor, {
+          type: 'ROLL_READY',
+          moduleId: action.moduleId,
+          roundIndex: action.roundIndex,
+          seat: actor,
+        })
+        break
+
       case 'COMMIT':
         current = apply(current, actor, {
           type: 'COMMIT',

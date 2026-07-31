@@ -17,7 +17,15 @@ import type { Seat } from './seat.js'
 export type PlayerActionPayload = Extract<
   EventPayload,
   {
-    type: 'COMMIT' | 'RECOMMIT' | 'CHOOSE' | 'BAN' | 'SELECT' | 'REPORT_RESULT' | 'UNDO_LAST_RESULT'
+    type:
+      | 'COMMIT'
+      | 'RECOMMIT'
+      | 'CHOOSE'
+      | 'BAN'
+      | 'SELECT'
+      | 'REPORT_RESULT'
+      | 'ROLL_READY'
+      | 'UNDO_LAST_RESULT'
   }
 >
 

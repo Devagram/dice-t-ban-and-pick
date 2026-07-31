@@ -343,6 +343,15 @@ export function materialize(
         seat,
         replacements: action.slots.map((s, i) => ({ index: s.index, characterId: s.pool[i]! })),
       }
+    case 'ROLL':
+      // Asking for the dice carries no choice — the result was fixed by the seed long before.
+      return {
+        type: 'ROLL_READY',
+        moduleId: action.moduleId,
+        roundIndex: action.roundIndex,
+        seat,
+      }
+
     case 'CHOOSE':
       return {
         type: 'CHOOSE',

@@ -93,7 +93,9 @@ describe('§8 metadata', () => {
 describe('system-driven modules ask nothing of players', () => {
   const state = startMatch({ mode: bringBan1Mode, draftCount: 4 })
 
-  for (const type of ['ROLL', 'ASSIGN', 'REVEAL'] as const) {
+  // ROLL is deliberately absent: since 2026-07-31 the dice wait for both seats to ask, so it is
+  // the one module here that *does* await players. `roll-trigger.test.ts` covers it.
+  for (const type of ['ASSIGN', 'REVEAL'] as const) {
     it(`${type} awaits nobody and offers no actions`, () => {
       const mod = anyModuleOfType(type)
       const impl = moduleFor(mod)
@@ -330,6 +332,14 @@ function advance(state: ReturnType<typeof startMatch>, seat: 'A' | 'B') {
         roundIndex: action.roundIndex,
         reportedBy: seat,
         outcome: action.roundIndex === 0 ? 'A' : 'B',
+      })
+    case 'ROLL':
+      // The dice are gated on both seats asking for them, so a driver has to ask.
+      return apply(state, seat, {
+        type: 'ROLL_READY',
+        moduleId: action.moduleId,
+        roundIndex: action.roundIndex,
+        seat,
       })
     default:
       throw new Error(`advance: unexpected ${action.type}`)

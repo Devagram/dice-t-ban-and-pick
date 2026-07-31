@@ -269,6 +269,14 @@ function applyFirst(
         slotIndex: action.slots[0]!,
         reason: null,
       })
+    case 'ROLL':
+      // The dice are gated on both seats asking for them, so a driver has to ask.
+      return apply(state, seat, {
+        type: 'ROLL_READY',
+        moduleId: action.moduleId,
+        roundIndex: action.roundIndex,
+        seat,
+      })
     default:
       throw new Error(`applyFirst: unexpected ${action.type}`)
   }

@@ -127,6 +127,14 @@ function act(state: MatchState, seat: Seat, results: RoundOutcome[]): EventEnvel
         picks: action.picks ? action.picks.poolBySlot.map((pool, i) => pool[i]!) : [],
         metaBan: action.metaBan ? action.metaBan.pool[0]! : null,
       })
+    case 'ROLL':
+      // The dice are gated on both seats asking for them.
+      return wrap({
+        type: 'ROLL_READY',
+        moduleId: action.moduleId,
+        roundIndex: action.roundIndex,
+        seat,
+      })
     case 'RECOMMIT':
       return wrap({
         type: 'RECOMMIT',

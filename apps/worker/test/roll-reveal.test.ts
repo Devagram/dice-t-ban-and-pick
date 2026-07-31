@@ -44,6 +44,11 @@ async function rolled(): Promise<Awaited<ReturnType<typeof seatedMatch>>> {
   await match.a.act(materialize(match.a.action('COMMIT')!, 'A'))
   await match.b.act(materialize(match.b.action('COMMIT')!, 'B'))
   await match.a.settle(10)
+
+  // The dice wait to be asked for now. Both seats, then the roll resolves.
+  await match.a.act(materialize(match.a.action('ROLL')!, 'A'))
+  await match.b.act(materialize(match.b.action('ROLL')!, 'B'))
+  await match.a.settle(10)
   return match
 }
 

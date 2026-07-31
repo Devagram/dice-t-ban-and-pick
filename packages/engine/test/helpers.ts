@@ -277,6 +277,15 @@ export function materialize(action: Action, seat: Seat, pickOffset = 0): EventPa
       }
     }
 
+    case 'ROLL':
+      // Asking for the dice carries no choice — the result was fixed by the seed long before.
+      return {
+        type: 'ROLL_READY',
+        moduleId: action.moduleId,
+        roundIndex: action.roundIndex,
+        seat,
+      }
+
     case 'CHOOSE':
       return {
         type: 'CHOOSE',

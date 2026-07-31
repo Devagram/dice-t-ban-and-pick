@@ -1,4 +1,11 @@
-import type { Action, EventEnvelope, ResolvedModule, RollSpec, Seat } from '@banpick/types'
+import {
+  SEATS,
+  type Action,
+  type EventEnvelope,
+  type ResolvedModule,
+  type RollSpec,
+  type Seat,
+} from '@banpick/types'
 
 import { rollDice } from '../rng.js'
 import {
@@ -22,6 +29,12 @@ type Ctx = ModuleCtx<RollModule>
  *
  * `onTie: REROLL` advances `attempt` rather than consuming stream state, so the reroll replays
  * as exactly as the roll it replaced.
+ *
+ * **Both players have to ask for it.** The dice are the server's and always were — the outcome is
+ * fixed by `(seed, seq, actor, attempt)` before anyone clicks — but the round used to throw them
+ * the instant it opened, which made the most dramatic moment in a match something that happened
+ * *at* the players rather than between them. A `ROLL_READY` from each seat gates it. Nothing
+ * about the result depends on the clicks; only the timing does, and timing is the whole point.
  */
 export const roll: PhaseModule<RollModule> = {
   reads: [],
@@ -29,16 +42,22 @@ export const roll: PhaseModule<RollModule> = {
   /** D10 — round 1 removes it, and correctly: nothing is left undecided. */
   essential: false,
 
-  awaiting(): Seat[] {
-    return []
+  awaiting({ state, mod }: Ctx): Seat[] {
+    if (roundOf(state, mod).roll !== null) return []
+    return SEATS.filter((s) => !hasReadied(state, mod.id, s))
   },
 
-  legalActions(): Action[] {
-    return []
+  legalActions({ state, mod }: Ctx, seat: Seat): Action[] {
+    if (roundOf(state, mod).roll !== null) return []
+    if (hasReadied(state, mod.id, seat)) return []
+    return [{ type: 'ROLL', moduleId: mod.id, roundIndex: findRoundIndex(mod) }]
   },
 
   systemEvent({ state, mod }: Ctx, seq: number): EventEnvelope | null {
     if (roundOf(state, mod).roll !== null) return null
+    // Nothing happens until both seats have asked. The dice were decided long before either of
+    // them did, but they are not *shown* until the table agrees to look.
+    if (!SEATS.every((s) => hasReadied(state, mod.id, s))) return null
 
     // REROLL is unbounded in the spec. It terminates with probability 1 and, at 1d6, the
     // chance of reaching 64 consecutive ties is about 10^-50 — but an unbounded loop inside a
@@ -74,6 +93,22 @@ export const roll: PhaseModule<RollModule> = {
 
   apply({ state, mod }: Ctx, event: EventEnvelope): ApplyResult {
     const p = event.payload
+
+    // A seat asking for the dice. Recorded and nothing more — the roll itself is a SYSTEM event
+    // that `systemStep` emits once both are in, which keeps `reduce` single-event and keeps the
+    // RNG out of a player-authored payload.
+    if (p.type === 'ROLL_READY') {
+      if (roundOf(state, mod).roll !== null) {
+        return reject('WRONG_PHASE', `${mod.id} has already rolled`)
+      }
+      if (hasReadied(state, mod.id, p.seat)) {
+        return reject('DUPLICATE_COMMIT', `${p.seat} has already asked to roll`)
+      }
+      const next = cloneState(state)
+      next.log.push(event)
+      return { ok: true, state: next }
+    }
+
     if (p.type !== 'ROLL') {
       return reject('WRONG_PHASE', `${mod.id} expects ROLL, got ${p.type}`)
     }
@@ -102,4 +137,12 @@ export const roll: PhaseModule<RollModule> = {
   isComplete({ state, mod }: Ctx): boolean {
     return roundOf(state, mod).roll !== null
   },
+}
+
+/** Has this seat asked for the dice on this module? */
+function hasReadied(state: Ctx['state'], moduleId: string, seat: Seat): boolean {
+  return state.log.some(
+    (e) =>
+      e.payload.type === 'ROLL_READY' && e.payload.moduleId === moduleId && e.payload.seat === seat,
+  )
 }

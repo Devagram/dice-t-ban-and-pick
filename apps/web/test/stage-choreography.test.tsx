@@ -481,3 +481,108 @@ describe('the round-ban stamp only appears for a real ban', () => {
     expect(screen.queryByText('Round banned')).toBeNull()
   })
 })
+
+/**
+ * A card carries its own history.
+ *
+ * A spent slot was played in some round, and that round has a result — so it can say what it did
+ * rather than becoming an anonymous grey square. Per seat, because one round is a win for one
+ * player and a loss for the other.
+ */
+describe('played cards remember their result', () => {
+  const finished = (
+    result: 'A' | 'B' | 'TIE',
+    status: 'IN_PROGRESS' | 'COMPLETE' = 'IN_PROGRESS',
+  ) =>
+    view({
+      status,
+      outcome: status === 'COMPLETE' ? (result === 'TIE' ? 'DRAW' : result) : null,
+      phase:
+        status === 'COMPLETE'
+          ? null
+          : { moduleId: 'rounds.1.ban', type: 'BAN', roundIndex: 1, awaiting: ['A'] },
+      you: {
+        seat: 'A',
+        score: 0,
+        hasCommitted: true,
+        slotCount: 2,
+        slots: [slot(0, 'anvil', { consumed: true }), slot(1, 'cartographer')],
+      },
+      opponent: {
+        seat: 'B',
+        score: 0,
+        hasCommitted: true,
+        slotCount: 2,
+        slots: [slot(0, 'duelist', { consumed: true }), slot(1, 'gambler')],
+      },
+      rounds: [
+        {
+          index: 0,
+          privilegeHolder: 'A',
+          turnOrderHolder: null,
+          roll: null,
+          ban: null,
+          selection: { A: 0, B: 0 } as never,
+          selectionCommitted: { A: true, B: true },
+          playOrder: null,
+          result,
+        },
+      ],
+    })
+
+  it('marks the same round a win for one side and a loss for the other', () => {
+    const { container } = render(
+      <Stage view={finished('A')} expected={2} mine={{ filled: 2 }} theirs={{ filled: 2 }} />,
+    )
+    expect(container.querySelector('.side--own .cell--win')).toBeTruthy()
+    expect(container.querySelector('.side--opponent .cell--loss')).toBeTruthy()
+    // And the unplayed slots carry no verdict at all.
+    expect(container.querySelectorAll('.cell--win')).toHaveLength(1)
+  })
+
+  it('marks a tied round on both sides', () => {
+    const { container } = render(
+      <Stage view={finished('TIE')} expected={2} mine={{ filled: 2 }} theirs={{ filled: 2 }} />,
+    )
+    expect(container.querySelectorAll('.cell--tie')).toHaveLength(2)
+    expect(container.querySelector('.cell--win')).toBeNull()
+  })
+
+  it('crowns the winner and steps the loser back at the end', () => {
+    const { container } = render(
+      <Stage
+        view={finished('A', 'COMPLETE')}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+    expect(container.querySelector('.side--own.side--won')).toBeTruthy()
+    expect(container.querySelector('.side--opponent.side--lost')).toBeTruthy()
+  })
+
+  it('crowns nobody on a draw', () => {
+    const { container } = render(
+      <Stage
+        view={finished('TIE', 'COMPLETE')}
+        expected={2}
+        mine={{ filled: 2 }}
+        theirs={{ filled: 2 }}
+      />,
+    )
+    expect(container.querySelector('.side--won')).toBeNull()
+    expect(container.querySelector('.side--lost')).toBeNull()
+    expect(container.querySelectorAll('.side--draw')).toHaveLength(2)
+  })
+
+  it('says nothing about a round still being played', () => {
+    // A result of null means the round is live — no verdict to carry yet.
+    const live = finished('A')
+    live.rounds[0]!.result = null
+    const { container } = render(
+      <Stage view={live} expected={2} mine={{ filled: 2 }} theirs={{ filled: 2 }} />,
+    )
+    expect(container.querySelector('.cell--win')).toBeNull()
+    expect(container.querySelector('.cell--loss')).toBeNull()
+  })
+})

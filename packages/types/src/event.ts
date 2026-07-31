@@ -155,6 +155,11 @@ export type EventPayload =
       reportedBy: Seat
       outcome: RoundOutcome
     }
+  /**
+   * A seat is ready to roll. Carries no number: the dice are the server's (§11 non-negotiable 1),
+   * and this only records that a player asked for them.
+   */
+  | { type: 'ROLL_READY'; moduleId: string; roundIndex: RoundIdx; seat: Seat }
   /** D15 — open to either seat until the next round's roll. Covers the fat finger, not the lie. */
   | { type: 'UNDO_LAST_RESULT'; roundIndex: RoundIdx; requestedBy: Seat }
   /** Terminal. Emitted by SYSTEM when the match rule says there is nothing left to play. */

@@ -1,4 +1,4 @@
-import type { Character, CharId, PlayerView, Slot, SlotIdx } from '@banpick/types'
+import type { Character, CharId, PlayerView, Seat, Slot, SlotIdx } from '@banpick/types'
 
 import { Portrait } from './Portrait.js'
 
@@ -147,6 +147,26 @@ export function Stage({
   const chosenOwn = selection?.[view.seat] ?? null
   const chosenOpponent = selection?.[view.opponent.seat] ?? null
 
+  /**
+   * How each played character finished, by slot.
+   *
+   * A slot is spent because it was selected in some round, and that round has a result — so the
+   * card can carry its own outcome for the rest of the match rather than becoming an anonymous
+   * grey square. Built per seat because the same round is a win for one and a loss for the other.
+   */
+  const outcomes = (seat: Seat): Map<number, 'win' | 'loss' | 'tie'> => {
+    const out = new Map<number, 'win' | 'loss' | 'tie'>()
+    for (const r of view.rounds) {
+      const slotIndex = r.selection[seat]
+      if (slotIndex === undefined || slotIndex === null || r.result === null) continue
+      out.set(slotIndex, r.result === 'TIE' ? 'tie' : r.result === seat ? 'win' : 'loss')
+    }
+    return out
+  }
+
+  /** Set once the match is over: the winning side keeps its colour, the other steps back. */
+  const finished = view.status === 'COMPLETE' ? (view.outcome ?? null) : null
+
   return (
     <section className="stage" aria-label="Draft board">
       <BanBar view={view} byId={byId} mine={mine} theirs={theirs} />
@@ -162,6 +182,16 @@ export function Stage({
           currentRound={round}
           selectable={selectableOwn}
           chosenSlot={chosenOwn}
+          outcomes={outcomes(view.seat)}
+          finish={
+            finished === null
+              ? null
+              : finished === 'DRAW'
+                ? 'draw'
+                : finished === view.seat
+                  ? 'won'
+                  : 'lost'
+          }
           onSelect={onSelectOwn}
           onRemove={onRemoveOwn}
           revealing={revealing}
@@ -180,6 +210,16 @@ export function Stage({
           currentRound={round}
           selectable={selectableOpponent}
           chosenSlot={chosenOpponent}
+          outcomes={outcomes(view.opponent.seat)}
+          finish={
+            finished === null
+              ? null
+              : finished === 'DRAW'
+                ? 'draw'
+                : finished === view.opponent.seat
+                  ? 'won'
+                  : 'lost'
+          }
           onSelect={onSelectOpponent}
           onRemove={undefined}
           revealing={revealing}
@@ -272,6 +312,8 @@ function Side({
   currentRound,
   selectable,
   chosenSlot,
+  outcomes,
+  finish,
   onSelect,
   onRemove,
   revealing,
@@ -287,6 +329,10 @@ function Side({
   selectable: SlotIdx[]
   /** The slot this seat is playing this round, or null while unchosen or still sealed. */
   chosenSlot: SlotIdx | null
+  /** How each already-played slot finished, so a spent card still says what it did. */
+  outcomes: Map<number, 'win' | 'loss' | 'tie'>
+  /** How the match ended for this seat, once it has. */
+  finish: 'won' | 'lost' | 'draw' | null
   onSelect: ((index: SlotIdx) => void) | undefined
   onRemove: ((id: CharId) => void) | undefined
   revealing: boolean
@@ -349,7 +395,8 @@ function Side({
             ? 'sealed'
             : 'choosing'
 
-    return { i, slot, character, bannedNow, chosen, spent, choosable, removable, state }
+    const outcome = slot ? (outcomes.get(slot.index) ?? null) : null
+    return { i, slot, character, bannedNow, chosen, spent, outcome, choosable, removable, state }
   })
 
   const positions = orderFor(
@@ -362,7 +409,9 @@ function Side({
   const rowHeight = Math.round(CELL_PX * (300 / 199) * (anyChosen ? CHOSEN_SCALE : 1)) + 26
 
   return (
-    <div className={`side ${own ? 'side--own' : 'side--opponent'}`}>
+    <div
+      className={`side ${own ? 'side--own' : 'side--opponent'} ${finish ? `side--${finish}` : ''}`}
+    >
       <div className="side__head">
         <h3 className="side__title">{title}</h3>
         <span className="side__seat">{seat}</span>
@@ -380,7 +429,18 @@ function Side({
         style={{ height: `${rowHeight}px` }}
       >
         {cells.map(
-          ({ i, slot, character, bannedNow, chosen, spent, choosable, removable, state }) => {
+          ({
+            i,
+            slot,
+            character,
+            bannedNow,
+            chosen,
+            spent,
+            outcome,
+            choosable,
+            removable,
+            state,
+          }) => {
             const position = positions[i]!
             // The row grows away from the centre line, so every cell is offset outward from it.
             const offset = position * PITCH * (own ? -1 : 1)
@@ -393,6 +453,7 @@ function Side({
               spent ? 'cell--spent' : '',
               bannedNow ? 'cell--banned' : '',
               chosen ? 'cell--chosen' : '',
+              outcome ? `cell--${outcome}` : '',
               choosable ? 'cell--choosable' : '',
               revealing && revealed ? 'cell--flip' : '',
             ]

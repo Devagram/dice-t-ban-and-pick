@@ -1622,3 +1622,103 @@ select {
     transition: none;
   }
 }
+
+/* --- The two cards that meet in the middle ------------------------------- */
+
+/*
+ * The pair facing each other across the "vs" share one live edge.
+ *
+ * Built from two layers so the effect reads at a glance without drowning the portrait: a hard
+ * ring that cycles hue, and a soft outer bloom that breathes. `box-shadow` rather than a real
+ * border, because a border would change the box and shove the row sideways every time a pick
+ * lands.
+ */
+.cell--chosen .cell {
+  border-color: transparent;
+  animation: arc-ring 1.6s ease-in-out infinite;
+}
+
+@keyframes arc-ring {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px var(--accent),
+      0 0 10px 2px color-mix(in srgb, var(--accent) 70%, transparent),
+      0 0 26px 6px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px #b9e4ff,
+      0 0 16px 4px color-mix(in srgb, #b9e4ff 80%, transparent),
+      0 0 40px 12px color-mix(in srgb, var(--accent) 42%, transparent);
+  }
+}
+
+/* --- A card remembers how its round went --------------------------------- */
+
+/*
+ * Green won, red lost, yellow drew — carried by the card that played it, so a finished board is
+ * readable without cross-referencing the round strip. Kept on `box-shadow` for the same reason as
+ * above, and deliberately quieter than the live pair so the current round still leads.
+ */
+.cell--win {
+  border-color: var(--good);
+  box-shadow: 0 0 0 1px var(--good);
+}
+
+.cell--loss {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+.cell--tie {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px var(--warn);
+}
+
+/* --- The end of the match ------------------------------------------------ */
+
+/*
+ * The winner keeps its colour and the loser steps back — the same "highlight by receding" trick
+ * the current pick uses, so the board never learns a second visual language.
+ */
+.side--lost .cell {
+  filter: saturate(0.25) brightness(0.7);
+}
+
+.side--won .cell,
+.side--won .cell--win {
+  animation: victory-gold 2.4s ease-in-out infinite;
+  border-color: #f2c14e;
+}
+
+@keyframes victory-gold {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px #f2c14e,
+      0 0 12px 2px color-mix(in srgb, #f2c14e 45%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px #ffe08a,
+      0 0 28px 8px color-mix(in srgb, #f2c14e 60%, transparent);
+  }
+}
+
+/* A drawn match: both sides keep their colour, neither gets the gold. */
+.side--draw .cell {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell--chosen .cell,
+  .side--won .cell {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  .side--won .cell {
+    box-shadow: 0 0 0 2px #f2c14e;
+  }
+}

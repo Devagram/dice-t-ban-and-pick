@@ -53,7 +53,11 @@ export function ActionBar({ view, onAct }: ActionBarProps) {
   // COMMIT and RECOMMIT open the draft panel; BAN and SELECT belong to the rail. What is left
   // is what this bar draws.
   const inline = view.legalActions.filter(
-    (a) => a.type === 'CHOOSE' || a.type === 'REPORT_RESULT' || a.type === 'UNDO_LAST_RESULT',
+    (a) =>
+      a.type === 'CHOOSE' ||
+      a.type === 'REPORT_RESULT' ||
+      a.type === 'ROLL' ||
+      a.type === 'UNDO_LAST_RESULT',
   )
 
   if (inline.length === 0) return null
@@ -68,6 +72,31 @@ export function ActionBar({ view, onAct }: ActionBarProps) {
             )
           case 'REPORT_RESULT':
             return <ReportControl key={action.moduleId} action={action} onAct={onAct} view={view} />
+          case 'ROLL':
+            /*
+             * The dice were decided before this button existed — seeded from
+             * `(seed, seq, actor, attempt)` the moment the match was created, and unchanged by
+             * when or whether anyone presses it. What the press buys is the *moment*: the round
+             * used to throw them at you the instant it opened. Both seats have to ask, so the
+             * server waits and the reveal belongs to the table.
+             */
+            return (
+              <button
+                key={action.moduleId}
+                type="button"
+                className="btn btn--primary"
+                onClick={() =>
+                  onAct({
+                    type: 'ROLL_READY',
+                    moduleId: action.moduleId,
+                    roundIndex: action.roundIndex,
+                    seat: view.seat,
+                  })
+                }
+              >
+                Roll for priority
+              </button>
+            )
           case 'UNDO_LAST_RESULT':
             return (
               <button

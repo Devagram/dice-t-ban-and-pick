@@ -244,7 +244,15 @@ describe('totality — reduce rejects, it does not throw', () => {
         legalActions(state, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
       )!
       const action = legalActions(state, actor).find((a) => a.type !== 'UNDO_LAST_RESULT')!
-      if (action.type === 'CHOOSE') {
+      if (action.type === 'ROLL') {
+        // The dice wait for both seats to ask for them.
+        state = apply(state, actor, {
+          type: 'ROLL_READY',
+          moduleId: action.moduleId,
+          roundIndex: action.roundIndex,
+          seat: actor,
+        })
+      } else if (action.type === 'CHOOSE') {
         state = apply(state, actor, {
           type: 'CHOOSE',
           moduleId: action.moduleId,
