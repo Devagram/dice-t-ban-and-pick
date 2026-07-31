@@ -53,7 +53,7 @@ export function Match({
   }
 
   return (
-    <main className="screen">
+    <main className="screen screen--wide">
       <ConnectionBanner status={state.status} />
       <MatchBody
         view={state.view}

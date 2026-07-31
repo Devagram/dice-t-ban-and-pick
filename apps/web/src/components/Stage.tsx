@@ -253,7 +253,9 @@ function Side({
                   dimmed={slot?.consumed === true || bannedNow}
                 />
               ) : (
-                <span className="cell__face" aria-hidden="true">
+                // Same box as a portrait, not a bare glyph: an empty slot has to hold the space
+                // its character will occupy, or the row reflows as picks land.
+                <span className="cell__frame" aria-hidden="true">
                   {state === 'empty' ? '' : '●'}
                 </span>
               )}

@@ -21,6 +21,16 @@
   --good: #7fdc9a;
   --radius: 10px;
   --tap: 44px; /* minimum comfortable touch target */
+
+  /*
+   * Portrait sizes, as a *relationship* rather than two numbers that happen to differ.
+   *
+   * A fighting game shows your chosen fighters large and the pick-from roster small — the
+   * drafted row is the thing you are reading, the roster is the thing you are scanning. These
+   * two tokens are the only place that hierarchy is set, so it cannot drift.
+   */
+  --roster-tile: 92px; /* the full roster, below */
+  --stage-cell: 132px; /* the drafted row, above — deliberately larger */
 }
 
 * {
@@ -54,6 +64,14 @@ select {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/*
+ * The match wants width; a lobby form does not. A 1200px-wide text input is worse than a narrow
+ * one, so only the board screen opts in.
+ */
+.screen--wide {
+  max-width: 1240px;
 }
 
 .screen--centred {
@@ -918,9 +936,27 @@ select {
   flex-shrink: 0;
 }
 
-.portrait--card {
+.portrait--card,
+.cell__frame {
   width: 100%;
   aspect-ratio: 199 / 300;
+  border-radius: 8px;
+}
+
+/*
+ * The placeholder for a slot with no portrait — empty, or sealed and therefore unknowable.
+ *
+ * It shares the rule above with `.portrait--card` on purpose. These sit side by side in the same
+ * row, and matching their geometry by writing the numbers twice is how a row ends up with cells
+ * that are almost, but not quite, the same size.
+ */
+.cell__frame {
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-2) 70%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
 }
 
 .portrait--chip {
@@ -970,10 +1006,24 @@ select {
   margin: 0;
   padding: 2px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--roster-tile), 1fr));
+  gap: 8px;
   max-height: 58vh;
   overflow-y: auto;
+}
+
+/*
+ * One scrollbar, not two.
+ *
+ * The inner scroll region earns its place on a phone, where the roster would otherwise bury the
+ * commit button. On a wide screen it is just a second thing to scroll inside the first, so the
+ * cap comes off and the page handles it.
+ */
+@media (min-width: 900px) {
+  .picker__grid {
+    max-height: none;
+    overflow-y: visible;
+  }
 }
 
 .tile-shell {
@@ -1306,15 +1356,14 @@ select {
   padding: 0;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 4px;
+  grid-auto-columns: minmax(0, var(--stage-cell));
+  gap: 6px;
+  justify-content: start;
 }
 
+/* Their row hugs the centre line, so the two sides read as facing each other. */
 .side--opponent .side__row {
-  direction: rtl; /* their slot 1 sits nearest the centre, mirroring your side */
-}
-.side--opponent .cell {
-  direction: ltr;
+  justify-content: end;
 }
 
 .cell {
@@ -1323,11 +1372,11 @@ select {
   align-items: center;
   gap: 4px;
   width: 100%;
-  padding: 6px 2px;
+  padding: 6px 4px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   text-align: center;
 }
 
@@ -1362,11 +1411,6 @@ select {
 
 .cell--banned {
   border-color: var(--danger);
-}
-
-.cell__face {
-  font-size: 1.1rem;
-  line-height: 1;
 }
 
 .cell__name {
