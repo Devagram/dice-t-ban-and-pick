@@ -1,4 +1,4 @@
-import type { Character, CharId, PlayerView, SlotIdx } from '@banpick/types'
+import type { Character, CharId, PlayerView, Slot, SlotIdx } from '@banpick/types'
 
 import { Portrait } from './Portrait.js'
 
@@ -54,7 +54,57 @@ export interface StageProps {
   revealing?: boolean
 }
 
+/**
+ * Layout, in numbers rather than in CSS.
+ *
+ * Cells are absolutely positioned and moved with `transform`, because that is the only way the
+ * *reordering* animates — a card sliding from the middle of the row to the centre, or out to the
+ * edge when it is spent. Flex `order` would reposition instantly and lose the whole effect, so
+ * the pitch has to be arithmetic the component can do.
+ *
+ * `CELL_PX` must match `--stage-cell`; `sizing.test.tsx` asserts they agree.
+ */
+const CELL_PX = 132
+const GAP_PX = 6
+const PITCH = CELL_PX + GAP_PX
+/** The character being played this round, blown up next to the "vs". */
+const CHOSEN_SCALE = 1.5
+
 const FLIP_STAGGER_MS = 150
+
+/**
+ * Where a slot sits, measured out from the centre line.
+ *
+ * Rank 0 is nearest the "vs" and 3 is furthest, so the row tells the round's story by position
+ * alone: what you are playing sits in the middle, what is still available flanks it, and what is
+ * out of play this round drifts to the edge.
+ */
+type Rank = 0 | 1 | 2 | 3
+
+function rankOf(slot: Slot | undefined, chosen: boolean, bannedNow: boolean): Rank {
+  if (slot === undefined) return 1
+  if (chosen) return 0 // the character being played, centre stage
+  if (slot.consumed) return 3 // spent, and furthest out
+  if (bannedNow) return 2 // denied for this round only (D3), so not as far as spent
+  return 1
+}
+
+/** Display order, nearest the centre first. Ties keep slot order, so nothing jitters. */
+function orderFor(entries: { index: number; rank: Rank }[]): number[] {
+  const sorted = [...entries].sort((a, b) => a.rank - b.rank || a.index - b.index)
+  const position = new Map(sorted.map((e, i) => [e.index, i]))
+  return entries.map((e) => position.get(e.index)!)
+}
+
+/**
+ * The reveal: outside-in, one card at a time, alternating sides.
+ *
+ * Starting at the outermost pair and walking inward puts the last flip next to the "vs", which is
+ * where the eye already is. Alternating means neither player is simply told first.
+ */
+function revealDelay(position: number, count: number, own: boolean): number {
+  return ((count - 1 - position) * 2 + (own ? 0 : 1)) * FLIP_STAGGER_MS
+}
 
 export function Stage({
   view,
@@ -71,6 +121,16 @@ export function Stage({
   const byId = new Map(view.roster.map((c) => [c.id, c]))
   const round = view.phase?.roundIndex ?? null
 
+  /**
+   * Who each seat is playing this round, when that is known.
+   *
+   * Absent while a selection is sealed (round 2 picks simultaneously and hidden), which is
+   * exactly right: an unrevealed choice must not pull a card to centre stage and announce itself.
+   */
+  const selection = round !== null ? view.rounds[round]?.selection : undefined
+  const chosenOwn = selection?.[view.seat] ?? null
+  const chosenOpponent = selection?.[view.opponent.seat] ?? null
+
   return (
     <section className="stage" aria-label="Draft board">
       <BanBar view={view} byId={byId} mine={mine} theirs={theirs} />
@@ -85,6 +145,7 @@ export function Stage({
           pending={mine}
           currentRound={round}
           selectable={selectableOwn}
+          chosenSlot={chosenOwn}
           onSelect={onSelectOwn}
           onRemove={onRemoveOwn}
           revealing={revealing}
@@ -102,6 +163,7 @@ export function Stage({
           pending={theirs}
           currentRound={round}
           selectable={selectableOpponent}
+          chosenSlot={chosenOpponent}
           onSelect={onSelectOpponent}
           onRemove={undefined}
           revealing={revealing}
@@ -130,6 +192,17 @@ function BanBar({
   mine: Pending
   theirs: Pending
 }) {
+  /**
+   * The bans matter only while they can still change what you do.
+   *
+   * They are worth showing through the ban phase and the draft — that is the whole reason the ban
+   * moved in front of the draft, so you choose knowing what is gone. Once both rosters are locked
+   * the information is spent: it cannot affect another decision, and the character it names is
+   * visibly absent from the boards below it.
+   */
+  const rostersLocked = view.you.hasCommitted && view.opponent.hasCommitted
+  if (rostersLocked) return null
+
   const yours = view.you.metaBanPlaced ?? null
   const opponent = view.opponent.metaBanPlaced ?? null
   const anything = yours || opponent || mine.ban || theirs.ban
@@ -182,6 +255,7 @@ function Side({
   pending,
   currentRound,
   selectable,
+  chosenSlot,
   onSelect,
   onRemove,
   revealing,
@@ -195,6 +269,8 @@ function Side({
   pending: Pending
   currentRound: number | null
   selectable: SlotIdx[]
+  /** The slot this seat is playing this round, or null while unchosen or still sealed. */
+  chosenSlot: SlotIdx | null
   onSelect: ((index: SlotIdx) => void) | undefined
   onRemove: ((id: CharId) => void) | undefined
   revealing: boolean
@@ -208,6 +284,40 @@ function Side({
   const boxes = revealed ? slots.length : Math.max(expected, seatView.slotCount)
   const filled = revealed ? boxes : seatView.hasCommitted ? boxes : Math.min(pending.filled, boxes)
 
+  const cells = Array.from({ length: boxes }, (_, i) => {
+    const slot = revealed ? slots[i] : undefined
+    // Your locally-held picks stop being *yours to edit* the moment the commit lands, so a
+    // sealed side falls back to sealed cells. Without the `hasCommitted` term a committed draft
+    // kept drawing the local copy and kept offering to remove it — which §12 forbids.
+    const localPick = !revealed && own && !seatView.hasCommitted ? pending.picks?.[i] : undefined
+    const character = slot
+      ? byId.get(slot.characterId)
+      : localPick
+        ? byId.get(localPick)
+        : undefined
+
+    const bannedNow = slot ? slot.bannedInRound === currentRound : false
+    const chosen = slot !== undefined && slot.index === chosenSlot
+    const choosable = slot ? selectable.includes(slot.index) : false
+    // Only your own, only before it is committed — §12 forbids withdrawing a sealed one.
+    const removable = !revealed && own && localPick !== undefined && onRemove !== undefined
+    const state = revealed
+      ? 'revealed'
+      : i >= filled
+        ? 'empty'
+        : character
+          ? 'mine'
+          : seatView.hasCommitted
+            ? 'sealed'
+            : 'choosing'
+
+    return { i, slot, character, bannedNow, chosen, choosable, removable, state }
+  })
+
+  const positions = orderFor(
+    cells.map((c) => ({ index: c.i, rank: rankOf(c.slot, c.chosen, c.bannedNow) })),
+  )
+
   return (
     <div className={`side ${own ? 'side--own' : 'side--opponent'}`}>
       <div className="side__head">
@@ -216,33 +326,21 @@ function Side({
         <span className="side__score">{seatView.score}</span>
       </div>
 
-      <ul className="side__row">
-        {Array.from({ length: boxes }, (_, i) => {
-          const slot = revealed ? slots[i] : undefined
-          // Your locally-held picks stop being *yours to edit* the moment the commit lands, so
-          // a sealed side falls back to sealed cells. Without the `hasCommitted` term a committed
-          // draft kept drawing the local copy and kept offering to remove it — which §12 forbids.
-          const localPick =
-            !revealed && own && !seatView.hasCommitted ? pending.picks?.[i] : undefined
-          const character = slot
-            ? byId.get(slot.characterId)
-            : localPick
-              ? byId.get(localPick)
-              : undefined
-
-          const bannedNow = slot ? slot.bannedInRound === currentRound : false
-          const choosable = slot ? selectable.includes(slot.index) : false
-          // Only your own, only before it is committed — §12 forbids withdrawing a sealed one.
-          const removable = !revealed && own && localPick !== undefined && onRemove !== undefined
-          const state = revealed
-            ? 'revealed'
-            : i >= filled
-              ? 'empty'
-              : character
-                ? 'mine'
-                : seatView.hasCommitted
-                  ? 'sealed'
-                  : 'choosing'
+      {/*
+        Absolutely positioned, and moved with `transform`, so a card changing rank *slides*.
+        Reordering the DOM (or flex `order`) would snap it there instead, and the movement is the
+        whole point — a character walking out to the edge when it is spent says "gone" more
+        plainly than greying it in place.
+      */}
+      <ul
+        className="side__row"
+        style={{ height: `${Math.round(CELL_PX * CHOSEN_SCALE * (300 / 199)) + 26}px` }}
+      >
+        {cells.map(({ i, slot, character, bannedNow, chosen, choosable, removable, state }) => {
+          const position = positions[i]!
+          // The row grows away from the centre line, so every cell is offset outward from it.
+          const offset = position * PITCH * (own ? -1 : 1)
+          const scale = chosen ? CHOSEN_SCALE : 1
 
           const classes = [
             'cell',
@@ -250,6 +348,7 @@ function Side({
             removable ? 'cell--removable' : '',
             slot?.consumed ? 'cell--spent' : '',
             bannedNow ? 'cell--banned' : '',
+            chosen ? 'cell--chosen' : '',
             choosable ? 'cell--choosable' : '',
             revealing && revealed ? 'cell--flip' : '',
           ]
@@ -257,7 +356,15 @@ function Side({
             .join(' ')
 
           const label = character
-            ? `${character.name}${slot?.consumed ? ' — played' : bannedNow ? ' — banned this round' : ''}`
+            ? `${character.name}${
+                slot?.consumed
+                  ? ' — played'
+                  : bannedNow
+                    ? ' — banned this round'
+                    : chosen
+                      ? ' — playing this round'
+                      : ''
+              }`
             : state === 'empty'
               ? 'Empty slot'
               : state === 'sealed'
@@ -273,27 +380,38 @@ function Side({
                   dimmed={slot?.consumed === true || bannedNow}
                 />
               ) : (
-                // Same box as a portrait, not a bare glyph: an empty slot has to hold the space
-                // its character will occupy, or the row reflows as picks land.
                 <span className="cell__frame" aria-hidden="true">
                   {state === 'empty' ? '' : '●'}
                 </span>
               )}
+              {/* Said outright rather than implied by a colour: a ban lasts one round (D3), and
+                  "greyed" alone reads the same as "already played", which is permanent. */}
+              {bannedNow ? <span className="cell__stamp">Round banned</span> : null}
               <span className="cell__name">{character ? character.name : label}</span>
+              {removable ? (
+                <span className="cell__remove" aria-hidden="true">
+                  Remove
+                </span>
+              ) : null}
             </>
           )
 
           return (
             <li
               key={slot ? slot.index : i}
-              // The classes go on whichever element is the cell — the wrapper when it is inert,
-              // the button when there is one. Both would nest two bordered boxes.
-              className={choosable || removable ? undefined : classes}
-              style={
-                revealing && revealed
-                  ? ({ '--flip-delay': `${i * FLIP_STAGGER_MS}ms` } as React.CSSProperties)
-                  : undefined
-              }
+              className="cell-slot"
+              style={{
+                width: `${CELL_PX}px`,
+                transform: `translateX(${offset}px) scale(${scale})`,
+                // Grows toward the centre line, into the gap beside the "vs".
+                transformOrigin: own ? 'right center' : 'left center',
+                zIndex: chosen ? 2 : 1,
+                ...(revealing && revealed
+                  ? ({
+                      '--flip-delay': `${revealDelay(position, boxes, own)}ms`,
+                    } as React.CSSProperties)
+                  : {}),
+              }}
             >
               {choosable && slot ? (
                 <button
@@ -308,16 +426,13 @@ function Side({
                 <button
                   type="button"
                   className={classes}
-                  aria-label={`Remove ${character?.name ?? localPick}`}
-                  onClick={() => onRemove(localPick!)}
+                  aria-label={`Remove ${character?.name ?? ''}`.trim()}
+                  onClick={() => onRemove?.(cells[i]!.character?.id ?? '')}
                 >
                   {body}
-                  <span className="cell__remove" aria-hidden="true">
-                    Remove
-                  </span>
                 </button>
               ) : (
-                body
+                <div className={classes}>{body}</div>
               )}
             </li>
           )

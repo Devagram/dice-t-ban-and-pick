@@ -1367,37 +1367,38 @@ select {
 }
 
 /* The row. `[1][2][3] vs [1][2][3]` — one column per slot, never wrapping to a list. */
+/*
+ * The row is a positioning context, not a layout.
+ *
+ * Cells are absolutely positioned and moved with `transform`, so a card changing rank slides to
+ * its new place instead of teleporting there. Flex or grid would reorder instantly, and the
+ * movement is the point: a spent character walking out to the edge says "gone" more plainly than
+ * greying it where it stands.
+ */
 .side__row {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, var(--stage-cell));
-  gap: 6px;
-  justify-content: start;
+  position: relative;
 }
 
-/* Their row hugs the centre line, so the two sides read as facing each other. */
-.side--opponent .side__row {
-  justify-content: end;
+/* Anchored to the centre line — your row grows left from it, theirs grows right. */
+.cell-slot {
+  position: absolute;
+  top: 0;
+  transition:
+    transform 380ms cubic-bezier(0.22, 0.8, 0.3, 1),
+    opacity 240ms ease-out;
 }
 
-.cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  padding: 6px 4px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-  font-size: 0.7rem;
-  text-align: center;
+.side--own .cell-slot {
+  right: 0;
 }
 
-/* Dashed while unverified, solid once the server has it. See the note in Stage.tsx. */
+.side--opponent .cell-slot {
+  left: 0;
+}
+
 .cell--empty {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--line) 60%, transparent);
@@ -1538,5 +1539,59 @@ select {
 @media (hover: none) {
   .cell__remove {
     opacity: 1;
+  }
+}
+
+/* --- The round, told by position ----------------------------------------- */
+
+/*
+ * The character being played, blown up beside the "vs".
+ *
+ * Scale rather than a bigger box: the cell keeps its place in the pitch arithmetic, so nothing
+ * else has to move to make room, and `transform-origin` sends the growth toward the centre line
+ * rather than into its neighbour.
+ */
+.cell--chosen .cell {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.cell--chosen .cell__name {
+  font-weight: 600;
+}
+
+/*
+ * "Round banned", said outright.
+ *
+ * D3 makes a round ban temporary — the character is back next round. Grey alone reads identically
+ * to "already played", which is permanent, so the two states have to differ in words and not only
+ * in colour.
+ */
+.cell__stamp {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  padding: 2px 6px;
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  background: color-mix(in srgb, #3a1f24 88%, transparent);
+  color: #ffd7d7;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.cell--banned,
+.cell--spent {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell-slot {
+    transition: none;
   }
 }

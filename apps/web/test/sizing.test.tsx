@@ -38,9 +38,18 @@ describe('the drafted row reads larger than the roster', () => {
     expect(tokenPx('stage-cell')).toBeGreaterThan(tokenPx('roster-tile'))
   })
 
-  it('sizes both grids from those tokens rather than from literals', () => {
+  it('sizes the roster grid from its token rather than from a literal', () => {
     expect(CSS).toContain('minmax(var(--roster-tile), 1fr)')
-    expect(CSS).toContain('minmax(0, var(--stage-cell))')
+  })
+
+  it('keeps the stage cell width agreed between the CSS token and the layout maths', () => {
+    // Stage cells are absolutely positioned and moved by `transform`, so their pitch is computed
+    // in TypeScript rather than by a grid. That makes `CELL_PX` and `--stage-cell` two
+    // statements of one number, in two languages — exactly the pair that drifts.
+    const STAGE = readFileSync('apps/web/src/components/Stage.tsx', 'utf8')
+    const declared = /^const CELL_PX = (\d+)$/m.exec(STAGE)
+    expect(declared, 'no CELL_PX in Stage.tsx').toBeTruthy()
+    expect(Number(declared![1])).toBe(tokenPx('stage-cell'))
   })
 })
 

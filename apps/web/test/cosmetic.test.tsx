@@ -245,20 +245,46 @@ describe('you can see the opponent working', () => {
     expect(screen.getByText(/will not see what they pick until the reveal/i)).toBeTruthy()
   })
 
-  it('switches to sealed once they commit', () => {
+  it('says sealed exactly when they have committed this phase and you have not', () => {
+    // The real sealed moment: the server is waiting on you alone, in a commit phase.
     render(
       <OpponentActivity
         view={view({
-          phase: { moduleId: 'draft', type: 'SIMULTANEOUS_COMMIT', roundIndex: 0, awaiting: ['B'] },
+          phase: { moduleId: 'draft', type: 'SIMULTANEOUS_COMMIT', roundIndex: 0, awaiting: ['A'] },
           opponent: { seat: 'B', score: 0, hasCommitted: true, slotCount: 4 },
         })}
       />,
     )
-    expect(screen.getByText('They have sealed their choice.')).toBeTruthy()
+    expect(screen.getByText(/sealed their choice/)).toBeTruthy()
   })
 
-  it('says nothing when the opponent is not being waited on', () => {
-    const { container } = render(<OpponentActivity view={awaiting(['A'])} />)
+  it('does not claim they sealed anything while they are still choosing', () => {
+    // **The bug.** This read `opponent.hasCommitted`, which is derived from slots and so means
+    // "has drafted" — true forever after the draft. From then on, every round ban and every
+    // selection was announced as "They have sealed their choice", over the top of the accurate
+    // description of what they were actually doing.
+    render(
+      <OpponentActivity
+        view={view({
+          phase: { moduleId: 'rounds.0.ban', type: 'BAN', roundIndex: 0, awaiting: ['B'] },
+          // Drafted long ago, and entirely beside the point of the phase they are in now.
+          opponent: { seat: 'B', score: 0, hasCommitted: true, slotCount: 4 },
+        })}
+      />,
+    )
+    expect(screen.queryByText(/sealed their choice/)).toBeNull()
+    expect(screen.getByText(/choosing which of your characters to ban/i)).toBeTruthy()
+  })
+
+  it('says nothing outside a commit phase when they are not being waited on', () => {
+    const { container } = render(
+      <OpponentActivity
+        view={view({
+          phase: { moduleId: 'rounds.0.ban', type: 'BAN', roundIndex: 0, awaiting: ['A'] },
+          opponent: { seat: 'B', score: 0, hasCommitted: true, slotCount: 4 },
+        })}
+      />,
+    )
     expect(container.innerHTML).toBe('')
   })
 
