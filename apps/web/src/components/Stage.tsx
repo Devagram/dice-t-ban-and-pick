@@ -108,6 +108,20 @@ function revealDelay(position: number, count: number, own: boolean): number {
   return ((count - 1 - position) * 2 + (own ? 0 : 1)) * FLIP_STAGGER_MS
 }
 
+/** One card's flip. Must match the `slot-flip` animation in the stylesheet. */
+const FLIP_DURATION_MS = 420
+
+/**
+ * How long the whole reveal takes, last card included.
+ *
+ * Exported because `Match` has to hold the dice back until it finishes, and a number guessed
+ * separately over there is a number that drifts — the first version cut the last two cards off
+ * because it had been estimated rather than derived.
+ */
+export function revealDurationMs(count: number): number {
+  return revealDelay(0, count, false) + FLIP_DURATION_MS
+}
+
 export function Stage({
   view,
   expected,

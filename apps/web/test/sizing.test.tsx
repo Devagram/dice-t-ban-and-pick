@@ -130,3 +130,52 @@ describe('R1 R2 R3 waits for the game to start', () => {
     expect(screen.getByText('R1')).toBeTruthy()
   })
 })
+
+/**
+ * Every modifier has a base rule to modify.
+ *
+ * Twice now a `--modifier` has outlived the rule it was modifying: once when a second
+ * `.tile__name` was appended and silently dropped the first one's padding and weight, and once
+ * when a splice that replaced `.side__row` ran to the next selector and took `.cell` with it.
+ * The second left bare dashed boxes with square corners, because the modifiers were suddenly
+ * doing all the drawing and none of them had ever been asked to.
+ *
+ * Neither showed up in a test: every assertion was about a modifier, and the modifiers were fine.
+ */
+describe('BEM modifiers still have their base rule', () => {
+  const selectors = CSS.match(/^\.[a-z][a-z0-9_-]*/gm) ?? []
+  const defined = new Set(selectors)
+
+  it('defines a base class for every --modifier in the stylesheet', () => {
+    const orphans = [...new Set(selectors.filter((s) => s.includes('--')))]
+      .map((s) => ({ modifier: s, base: s.slice(0, s.indexOf('--')) }))
+      // Bases that intentionally carry no rule of their own — either a bare layout slot with
+      // nothing to say, or an element styled only in context. Adding to this list is a claim
+      // that the base was *never* there, which is a different thing from it having vanished.
+      .filter(
+        ({ base }) =>
+          ![
+            '.screen', // page shell; every variant sets its own width
+            '.btn',
+            '.chip',
+            '.conn',
+            '.outcome',
+            '.round',
+            '.side', // a grid slot; the row inside it does the drawing
+            '.bancell__name', // styled through `.bancell--placed .bancell__name`
+          ].includes(base),
+      )
+      .filter(({ base }) => !defined.has(base))
+
+    expect(orphans).toEqual([])
+  })
+
+  it('keeps the board card drawn by its base rule, not by its states', () => {
+    // The specific shape of the regression: `.cell` carries the radius, padding and background;
+    // `.cell--empty` and friends only change the border. Losing the base is invisible until you
+    // look at the thing.
+    expect(CSS).toMatch(/^\.cell \{[^}]*border-radius:/m)
+    expect(CSS).toMatch(/^\.cell \{[^}]*background:/m)
+    expect(CSS).toMatch(/^\.cell \{[^}]*padding:/m)
+  })
+})

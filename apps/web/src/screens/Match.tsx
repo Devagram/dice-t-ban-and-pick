@@ -8,7 +8,7 @@ import { DiceRoll } from '../components/DiceRoll.js'
 import { OpponentActivity } from '../components/OpponentActivity.js'
 import { DraftPanel, RecommitPanel } from '../components/DraftPanel.js'
 import { Outcome, RoundStrip } from '../components/RoundStrip.js'
-import { Stage } from '../components/Stage.js'
+import { Stage, revealDurationMs } from '../components/Stage.js'
 
 /**
  * The match.
@@ -163,7 +163,7 @@ function MatchBody({
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     setRevealing(true)
-    const done = setTimeout(() => setRevealing(false), expectedSlots * 150 + 600)
+    const done = setTimeout(() => setRevealing(false), revealDurationMs(expectedSlots))
     return () => clearTimeout(done)
   }, [opponentOpen, expectedSlots])
 
@@ -178,57 +178,67 @@ function MatchBody({
       <Outcome view={view} />
       <RoundStrip view={view} />
 
-      {roll && round !== null ? (
+      {/*
+        The dice wait for the rosters.
+        
+        Both arrive in the *same* frame: committing fires `pickReveal`, which opens round one,
+        which fires the ROLL — the server drains all of it in one settle and sends one view. So
+        without this gate the roll starts on the frame the reveal does, and the reveal is never
+        seen at all.
+      */}
+      {roll && round !== null && !revealing ? (
         <DiceRoll key={`roll-${round}`} view={view} roll={roll} onDone={() => setRollSeen(round)} />
       ) : null}
 
-      {/* The rest of the round waits for the dice to land. Showing the ban buttons under a
+      {/* The board never leaves. It used to sit inside the roll gate below, which meant it was
+          unmounted for the whole reveal — the one moment it most needs to be on screen. */}
+      <Stage
+        view={view}
+        expected={expectedSlots}
+        mine={{ filled: mine.picks.length, picks: mine.picks, ban: mine.metaBan !== null }}
+        // Their count comes from their own browser, so the stage draws it as "choosing"
+        // rather than as fact. No ids: there are none to have (§7).
+        theirs={progress ? { filled: progress.filled, ban: progress.ban } : { filled: 0 }}
+        revealing={revealing}
+        selectableOwn={rollPlaying ? [] : (targets.own as SlotIdx[])}
+        selectableOpponent={rollPlaying ? [] : (targets.opponent as SlotIdx[])}
+        onSelectOwn={(index) => {
+          const select = targets.select
+          if (!select) return
+          onAct({
+            type: 'SELECT',
+            moduleId: select.moduleId,
+            roundIndex: select.roundIndex,
+            seat: view.seat,
+            slotIndex: index,
+            reason: null,
+          })
+        }}
+        onRemoveOwn={(id) => setRemoveRequest({ id, n: removeRequest.n + 1 })}
+        onSelectOpponent={(index) => {
+          const ban = targets.ban
+          if (!ban) return
+          const target = ban.targets.find((t) => t.slotIndex === index)
+          if (!target) return
+          onAct({
+            type: 'BAN',
+            moduleId: ban.moduleId,
+            roundIndex: ban.roundIndex,
+            seat: view.seat,
+            tier: 'ROUND',
+            target,
+          })
+        }}
+      />
+
+      {/* The controls wait for the dice, and for the reveal before them. Ban buttons under a
           still-tumbling die would answer the question the animation is asking. */}
-      {rollPlaying ? null : (
+      {rollPlaying || revealing ? null : (
         <>
           {/* The board, always in the same place and always the same shape. Only what sits
               *under* it changes: the roster while drafting, the result buttons once a round is
               being played. That fixed frame is the whole idea — a select screen you can read at
               a glance because nothing moves. */}
-          <Stage
-            view={view}
-            expected={expectedSlots}
-            mine={{ filled: mine.picks.length, picks: mine.picks, ban: mine.metaBan !== null }}
-            // Their count comes from their own browser, so the stage draws it as "choosing"
-            // rather than as fact. No ids: there are none to have (§7).
-            theirs={progress ? { filled: progress.filled, ban: progress.ban } : { filled: 0 }}
-            revealing={revealing}
-            selectableOwn={targets.own as SlotIdx[]}
-            selectableOpponent={targets.opponent as SlotIdx[]}
-            onSelectOwn={(index) => {
-              const select = targets.select
-              if (!select) return
-              onAct({
-                type: 'SELECT',
-                moduleId: select.moduleId,
-                roundIndex: select.roundIndex,
-                seat: view.seat,
-                slotIndex: index,
-                reason: null,
-              })
-            }}
-            onRemoveOwn={(id) => setRemoveRequest({ id, n: removeRequest.n + 1 })}
-            onSelectOpponent={(index) => {
-              const ban = targets.ban
-              if (!ban) return
-              const target = ban.targets.find((t) => t.slotIndex === index)
-              if (!target) return
-              onAct({
-                type: 'BAN',
-                moduleId: ban.moduleId,
-                roundIndex: ban.roundIndex,
-                seat: view.seat,
-                tier: 'ROUND',
-                target,
-              })
-            }}
-          />
-
           {targets.ban ? (
             <p className="prompt__title">Ban one of their characters for this round</p>
           ) : null}

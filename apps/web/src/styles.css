@@ -1406,6 +1406,31 @@ select {
   left: 0;
 }
 
+/*
+ * A card on the board.
+ *
+ * Deleted by accident in the move to absolute positioning — the splice that replaced `.side__row`
+ * ran to the next rule and took this with it. Everything below is a *modifier*, so losing the
+ * base left bare dashed boxes with square corners and no background: the modifiers were doing all
+ * the drawing and none of them had ever been asked to.
+ */
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font-size: 0.7rem;
+  text-align: center;
+  /* The "Round banned" stamp is absolutely positioned inside this. */
+  position: relative;
+}
+
 .cell--empty {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--line) 60%, transparent);

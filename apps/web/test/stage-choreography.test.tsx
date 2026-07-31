@@ -2,7 +2,9 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import type { PlayerView, Slot } from '@banpick/types'
 
-import { Stage } from '../src/components/Stage.js'
+import { readFileSync } from 'node:fs'
+
+import { Stage, revealDurationMs } from '../src/components/Stage.js'
 import { view } from './fixtures.js'
 
 /**
@@ -352,5 +354,40 @@ describe('the current pick stays in colour until the round moves on', () => {
       .style.height
 
     expect(parseInt(activeHeight, 10)).toBeGreaterThan(parseInt(idleHeight, 10))
+  })
+})
+
+/**
+ * The reveal has to be on screen to be seen.
+ *
+ * It was not. The board sat inside the roll gate, and the reveal and the roll arrive in the
+ * *same* server frame — committing fires `pickReveal`, which opens round one, which fires the
+ * ROLL, and the server drains all of it in one settle and sends one view. So the client went
+ * straight to "dice pending", the board was unmounted, and the animation played to nobody.
+ */
+describe('the reveal is not trampled by the roll', () => {
+  it('holds the dice back until the reveal has finished', () => {
+    // `Match` gates DiceRoll on `!revealing`, and the reveal's own duration is exported from
+    // Stage so the two cannot drift.
+    const SRC = readFileSync('apps/web/src/screens/Match.tsx', 'utf8')
+    expect(SRC).toContain('!revealing ? (')
+    expect(SRC).toContain('revealDurationMs(expectedSlots)')
+  })
+
+  it('keeps the board mounted while the dice are in the air', () => {
+    const SRC = readFileSync('apps/web/src/screens/Match.tsx', 'utf8')
+    const stageAt = SRC.indexOf('<Stage')
+    const gateAt = SRC.indexOf('{rollPlaying || revealing ? null : (')
+    expect(stageAt).toBeGreaterThan(-1)
+    expect(gateAt).toBeGreaterThan(-1)
+    // The board is rendered before the gate, so nothing the gate hides can take it with it.
+    expect(stageAt).toBeLessThan(gateAt)
+  })
+
+  it('runs long enough for the last card to finish turning', () => {
+    // The first version timed the reveal at `slots * 150 + 600`, which cut the final two cards
+    // off — the last delay alone is 1050ms and the flip itself is another 420ms.
+    expect(revealDurationMs(4)).toBeGreaterThanOrEqual(1050 + 420)
+    expect(revealDurationMs(3)).toBeGreaterThanOrEqual(750 + 420)
   })
 })
