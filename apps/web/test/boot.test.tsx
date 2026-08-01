@@ -264,3 +264,47 @@ describe('the rule you are consenting to is on the card', () => {
     expect(screen.queryByText('Not two sets running')).toBeNull()
   })
 })
+
+/**
+ * Both players get to say who they are.
+ *
+ * The host is asked on the home screen. A joiner never sees that screen — they arrive at
+ * `/j/CODE` and go straight to the seat button — so without a field here, seat B could generate
+ * an id and never a name, and the host would face a blank label all match.
+ */
+describe('the joiner can name themselves', () => {
+  it('offers a name field before the seat button', async () => {
+    goTo('/j/ABC123')
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Take a seat' })).toBeTruthy())
+    const field = screen.getByLabelText('Your name')
+    expect(field).toBeTruthy()
+
+    // Before the button, like the rules it sits among: you say who you are as you sit down.
+    const position = field.compareDocumentPosition(
+      screen.getByRole('button', { name: 'Take a seat' }),
+    )
+    // eslint-disable-next-line no-bitwise
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('remembers the name for next time', async () => {
+    goTo('/j/ABC123')
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByLabelText('Your name')).toBeTruthy())
+    fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Alex' } })
+    expect(localStorage.getItem('banpick:playerName')).toBe('Alex')
+  })
+
+  it('lets a seat be taken without one', async () => {
+    // Optional throughout: the match plays exactly as it always did for an unnamed seat, which
+    // is also what an older client does.
+    goTo('/j/ABC123')
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Take a seat' })).toBeTruthy())
+    expect(screen.getByRole('button', { name: 'Take a seat' })).not.toHaveProperty('disabled', true)
+  })
+})

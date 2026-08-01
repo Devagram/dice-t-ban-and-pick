@@ -77,6 +77,10 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
           <span className="field__label">Your name</span>
           <input
             className="field__input"
+            // Named explicitly: the wrapping label also holds the help paragraph, so the computed
+            // accessible name would otherwise be "Your name" followed by a sentence of
+            // explanation — technically labelled, useless to listen to.
+            aria-label="Your name"
             value={name}
             placeholder="Tom"
             maxLength={40}

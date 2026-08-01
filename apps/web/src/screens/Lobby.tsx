@@ -3,6 +3,7 @@ import type { LobbyPreview } from '@banpick/types'
 
 import { claimSeat, fetchPreview } from '../api.js'
 import { RulesetCard } from '../components/RulesetCard.js'
+import { playerName, setPlayerName } from '../player.js'
 import { rememberSeat } from '../transport.js'
 
 /**
@@ -22,6 +23,7 @@ export function Lobby({
   const [preview, setPreview] = useState<LobbyPreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [name, setName] = useState(playerName)
 
   useEffect(() => {
     fetchPreview(roomCode)
@@ -97,6 +99,36 @@ export function Lobby({
         </p>
       ) : (
         <div className="seatcta">
+          {/*
+            D28 — asked here, not only on the home screen.
+            
+            A joiner arrives at /j/CODE and never sees the host's form, so this was the one seat
+            that could never be named: the id still generated and the rule still worked, but the
+            opponent saw a blank label. Sitting down is also the honest moment to ask — it is when
+            you become a player rather than a visitor.
+          */}
+          <label className="field">
+            <span className="field__label">Your name</span>
+            <input
+              className="field__input"
+              // Named explicitly: the wrapping label also holds the help paragraph, so the
+              // computed accessible name would otherwise be "Your name" followed by a sentence
+              // of explanation — technically labelled, useless to listen to.
+              aria-label="Your name"
+              value={name}
+              placeholder="Tom"
+              maxLength={40}
+              onChange={(e) => {
+                setName(e.target.value)
+                setPlayerName(e.target.value)
+              }}
+            />
+            <p className="field__help">
+              Shown to your opponent, and used to remember which ban you brought last time. Kept in
+              this browser only — optional, and the match plays fine without it.
+            </p>
+          </label>
+
           <p className="seatcta__note">
             Taking a seat accepts these rules. The host cannot change them afterwards.
           </p>
