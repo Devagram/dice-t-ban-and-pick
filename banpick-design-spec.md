@@ -433,6 +433,18 @@ Cutting `COMPENSATION` takes the whole `advantageHolder` apparatus with it — t
 
 **D27 — the concurrency guarantee is also in the data model.** `seq` is the event log's primary key, so two writers who both read a log of length N both try to write `seq = N` and exactly one can win; the loser re-reads and re-_judges_ rather than re-appending, because the opponent's event may have made the action illegal. Under a Durable Object this can never fire — §11's single-threading is what makes simultaneous commits safe, and Phase 3 tests that it holds. It exists because that guarantee currently lives in the **runtime**, and a guarantee that lives in the runtime is one a future deployment decision can remove silently. In the data model it holds on any host that can run two processes, which is every host except this one. Cost: one conditional insert and a bounded retry.
 
+**D28 — the same meta ban may not be brought against the same person two sets running, and that is the first state in this app that outlives a match.** The rule is small; the precedent is not, so it is written down rather than absorbed. **D19 said no tournament layer**, and one honest reading of that was "no persistent player state at all" — this breaks that reading and keeps the rest: identity is a name you type plus an id your browser generates, there are no accounts, no passwords, nothing that crosses devices except the resume link D17 already mints, and the only thing remembered is _the last ban between one pair of players_. Not a history, not a record, not a ranking.
+
+Three consequences shaped the implementation, and each is a place this could have gone wrong.
+
+**The engine still never reads anything.** §5 makes `reduce` a pure function of its log and §14.5 turns that into replayability, so a pool that depended on a database lookup would break both — a replay a month later would consult a history that had since moved on and produce a different match. The Durable Object therefore resolves the history and _writes it into the log_ as `PAIRING_RESOLVED`, exactly as `MATCH_CREATED` already snapshots the roster and the ruleset. The engine sees one more set to subtract and knows nothing about where it came from.
+
+**It resolves when the second seat fills, not at creation.** A host opens a room before anyone sits, so at `MATCH_CREATED` there is no pairing to look up. §12.4 already makes the second `SEAT_FILLED` the moment play opens; it is also the first moment the question can be asked, and it is still comfortably before the ban phase, which is the only thing the answer affects.
+
+**The rule is a term, not a branch.** `legalMetaBanPoolExpr` takes the constraints and pushes `DENIED_META_BAN` into the difference when the host has it on — the same test D12's `selfDuplicates` had to pass, and the same reason: a rule expressed as configuration can be turned off, audited, and replayed, while a rule expressed as an `if` inside the evaluator cannot. §13's roster floor moves with it: with the rule on, viability must assume one further character is unavailable, and that check runs at creation before the pairing is known, so it assumes the worst case rather than the actual history.
+
+Names are self-asserted and deliberately unverified — §1's trust model is friendly opponents. The generated id is what the history keys on, so a mistyped name costs a wrong label rather than a bypassed rule; typing someone else's name does not inherit their history.
+
 Free plan headroom, verified July 2026 and **re-verified at the start of Phase 3** against the current published limits. Every row held; two are new.
 
 | Resource                                   | Free limit      | A full Bo3 uses                 |

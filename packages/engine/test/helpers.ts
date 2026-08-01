@@ -35,6 +35,7 @@ export const ROSTER_75 = roster75Json as Roster
 const CONSTRAINTS: DraftConstraints = {
   crossSeatMirrors: 'ALLOWED', // D1
   selfDuplicates: 'FORBIDDEN', // D12
+  repeatBans: 'FORBIDDEN', // D28
 }
 
 /**

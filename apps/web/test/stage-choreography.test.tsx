@@ -725,6 +725,18 @@ describe('the pair locks in', () => {
     vi.useRealTimers()
   })
 
+  it('is not clipped by the wrapper that scales the board', () => {
+    // The ring hangs below the cards on purpose, and the scaling wrapper used to `overflow:
+    // hidden` — which cut its bottom edge off flush with them. `clip` on one axis keeps the
+    // horizontal guard without trading the ring for a scrollbar.
+    // Comments stripped first: this rule *explains* why it is not `overflow: hidden`, and a
+    // naive search finds that sentence and calls it a regression.
+    const declarations = CSS_TEXT.replace(/\/\*[^]*?\*\//g, '')
+    expect(declarations).toMatch(/\.stage__fit \{[^}]*overflow-x:\s*clip/)
+    expect(declarations).toMatch(/\.stage__fit \{[^}]*overflow-y:\s*visible/)
+    expect(declarations).not.toMatch(/\.stage__fit \{[^}]*overflow:\s*hidden/)
+  })
+
   it('draws the ring above every card, including the small ones beside it', () => {
     // The ring is wider than the pair it encloses — that is the point — so its edges pass over
     // the cards on either side. Underneath them it was simply invisible.

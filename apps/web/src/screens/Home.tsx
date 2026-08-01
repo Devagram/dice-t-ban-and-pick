@@ -4,6 +4,7 @@ import type { Character } from '@banpick/types'
 import { createMatch, fetchRoster, listModes, type ModeSummary } from '../api.js'
 import { MODE_BLURBS } from '../copy.js'
 import { Portrait } from '../components/Portrait.js'
+import { playerName, setPlayerName } from '../player.js'
 
 /**
  * §12.1 — the host selects mode, **its parameters** (D25), and the global ban list.
@@ -17,6 +18,9 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
   const [parameters, setParameters] = useState<Record<string, string | number>>({})
   const [globalBanned, setGlobalBanned] = useState<string[]>([])
   const [roster, setRoster] = useState<Character[]>([])
+  const [name, setName] = useState(playerName)
+  /** D28 — the host's answer; `rulesetFor` on the server turns it into a rule. */
+  const [allowRepeatBans, setAllowRepeatBans] = useState(false)
   const [joinCode, setJoinCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -50,7 +54,7 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
     setBusy(true)
     setError(null)
     try {
-      const created = await createMatch({ modeId, parameters, globalBanned })
+      const created = await createMatch({ modeId, parameters, globalBanned, allowRepeatBans })
       onCreated(created.roomCode)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -66,6 +70,27 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
         <h1 className="title">Ban &amp; Pick</h1>
         <p className="hero__sub">Dice Throne · draft, ban, and settle it</p>
       </header>
+
+      <section className="panel">
+        <h2 className="panel__title">You</h2>
+        <label className="field">
+          <span className="field__label">Your name</span>
+          <input
+            className="field__input"
+            value={name}
+            placeholder="Tom"
+            maxLength={40}
+            onChange={(e) => {
+              setName(e.target.value)
+              setPlayerName(e.target.value)
+            }}
+          />
+          <p className="field__help">
+            Shown to your opponent, and used to remember which ban you brought last time. Kept in
+            this browser only.
+          </p>
+        </label>
+      </section>
 
       <section className="panel">
         <h2 className="panel__title">Start a match</h2>
@@ -149,6 +174,29 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
             </div>
           </fieldset>
         ) : null}
+
+        <fieldset className="field">
+          <legend className="field__label">Repeat bans</legend>
+          <p className="field__help">
+            Off, you cannot bring the same ban against the same person two sets running.
+          </p>
+          <div className="segmented" role="group">
+            {[
+              { value: false, label: 'Not allowed' },
+              { value: true, label: 'Allowed' },
+            ].map((option) => (
+              <button
+                key={String(option.value)}
+                type="button"
+                className={`chip ${allowRepeatBans === option.value ? 'chip--on' : ''}`}
+                aria-pressed={allowRepeatBans === option.value}
+                onClick={() => setAllowRepeatBans(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         <button type="button" className="btn btn--primary" disabled={busy} onClick={create}>
           {busy ? 'Creating…' : 'Create match'}

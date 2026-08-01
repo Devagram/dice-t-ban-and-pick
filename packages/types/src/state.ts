@@ -58,6 +58,12 @@ export interface MatchState {
   seats: Record<Seat, SeatState>
   /** Derived from the opponent's meta ban at reveal. Denies, it does not prevent (§9.2). */
   metaBannedAgainst: Record<Seat, CharId[]>
+  /**
+   * D28 — what each seat is barred from banning, carried in from the previous set against this
+   * opponent. Empty when the rule is off, when there is no history, or before the pairing
+   * resolves.
+   */
+  deniedMetaBans: Record<Seat, CharId[]>
 
   rounds: RoundState[]
   /**

@@ -5,10 +5,14 @@
  * nothing ships that we did not generate. Nine short cues built from oscillators and filtered
  * noise cost about a hundred lines and zero bytes of payload.
  *
- * **Muted by default.** Sound that arrives uninvited is a bug in someone's open-plan office, and
- * autoplay policy would block it on first load anyway — a browser gives no audio until the user
- * has interacted with the page, so an unmuted default would produce silence *and* a broken
- * expectation. The toggle persists, so it is one click per browser and never again.
+ * **On by default**, and the toggle persists — so turning it off is one click per browser and
+ * never again.
+ *
+ * One consequence worth knowing rather than working around: browsers give no audio until the page
+ * has been interacted with, so cues fired before the player's first click are silently dropped by
+ * the autoplay policy. In practice the first interaction is taking a seat or picking a character,
+ * both of which happen before anything interesting makes a noise. The context is still created
+ * lazily and resumed on use, so nothing is broken by it — the early cues simply do not sound.
  *
  * Every cue is fired from the same place as its animation, so sound and motion cannot disagree
  * about what just happened.
@@ -24,10 +28,12 @@ let enabled = read()
 
 function read(): boolean {
   try {
-    return localStorage.getItem(KEY) === 'on'
+    // Absent means on: the default is sound, and only an explicit "off" turns it down. Reading it
+    // the other way round would mute anyone whose storage was cleared.
+    return localStorage.getItem(KEY) !== 'off'
   } catch {
-    // Private browsing. Silence is the safe default.
-    return false
+    // Private browsing, or storage denied. Match the default rather than diverging from it.
+    return true
   }
 }
 

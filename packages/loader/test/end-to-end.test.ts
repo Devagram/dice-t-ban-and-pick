@@ -37,7 +37,11 @@ function rulesetFor(loaded: ReturnType<typeof loadShipped>, draftCount: 3 | 4, r
     parameters: variant.parameters,
     rosterVersion: roster.rosterVersion,
     globalBanned: [],
-    constraints: { crossSeatMirrors: 'ALLOWED', selfDuplicates: 'FORBIDDEN' },
+    constraints: {
+      crossSeatMirrors: 'ALLOWED',
+      selfDuplicates: 'FORBIDDEN',
+      repeatBans: 'FORBIDDEN',
+    },
     onTie: variant.mode.onTie,
     match: variant.mode.match,
     overtime: variant.mode.overtime,

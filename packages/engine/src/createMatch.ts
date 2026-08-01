@@ -54,6 +54,8 @@ export function createMatch(event: EventEnvelope): MatchState {
       B: { slots: publicSlice([]), metaBanPlaced: publicSlice(null), score: 0 },
     },
     metaBannedAgainst: { A: [], B: [] },
+    // D28 — filled by PAIRING_RESOLVED once both seats are known, if the rule is on.
+    deniedMetaBans: { A: [], B: [] },
     rounds,
     cursor: 0,
     outcome: null,

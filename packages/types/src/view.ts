@@ -26,6 +26,11 @@ export interface SeatView {
   /** Absent while sealed. */
   metaBanPlaced?: CharId | null
   /**
+   * D28 — what this seat may not ban, from the previous set. Present on **your own** seat only;
+   * the opponent's would leak what they banned last time.
+   */
+  deniedMetaBans?: CharId[]
+  /**
    * That a commitment *exists* is public — the UI has to render "waiting for opponent".
    * What it contains is not. Sealing the fact as well would make the wait unexplainable.
    */
@@ -34,6 +39,15 @@ export interface SeatView {
   slotCount: number
 }
 
+/**
+ * D28 — what you may not ban this match, because you brought it against this same opponent last
+ * set.
+ *
+ * **Yours only.** It is your own history, so telling you costs nothing — and without it the
+ * character simply vanishes from your pool with no explanation, which reads as a bug. The
+ * opponent's denial is not here: it would say what *they* banned last time, which they know and
+ * you should not.
+ */
 export interface RoundView {
   index: RoundIdx
   privilegeHolder: Seat | null

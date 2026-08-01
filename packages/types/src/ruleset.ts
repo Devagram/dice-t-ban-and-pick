@@ -9,6 +9,15 @@ export interface DraftConstraints {
   crossSeatMirrors: 'ALLOWED' | 'FORBIDDEN'
   /** D12 — FORBIDDEN. Caps meta ban blast radius at one slot and makes the §13 floor derivable. */
   selfDuplicates: 'ALLOWED' | 'FORBIDDEN'
+  /**
+   * D28 — FORBIDDEN by default. You may not bring the same meta ban against the same person two
+   * sets running.
+   *
+   * The first rule in the app that spans matches, which is why it needs saying in the ruleset
+   * rather than being implicit: it changes what the joiner is consenting to when they sit down
+   * (§12.3), and the pool it narrows is the one the whole mode turns on.
+   */
+  repeatBans: 'ALLOWED' | 'FORBIDDEN'
 }
 
 /** Spec §10, D21. One rule ships; the type keeps the door open for evidence to reopen it. */

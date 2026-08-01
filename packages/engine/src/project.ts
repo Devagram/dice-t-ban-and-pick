@@ -48,6 +48,10 @@ export function project(state: MatchState, seat: Seat): PlayerView {
     // the difference real, and the difference is the whole guarantee.
     if (visible(src.slots)) view.slots = src.slots.value
     if (visible(src.metaBanPlaced)) view.metaBanPlaced = src.metaBanPlaced.value
+    // D28 — your own denial, and only your own. Theirs would say what they banned last set.
+    if (s === seat && state.deniedMetaBans[s].length > 0) {
+      view.deniedMetaBans = [...state.deniedMetaBans[s]]
+    }
     return view
   }
 

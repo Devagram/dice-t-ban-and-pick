@@ -15,6 +15,8 @@
 declare namespace Cloudflare {
   interface Env {
     MATCH: DurableObjectNamespace
+    /** D28 — one per pairing, keyed by the two player ids sorted. */
+    PAIR_HISTORY: DurableObjectNamespace
   }
 }
 

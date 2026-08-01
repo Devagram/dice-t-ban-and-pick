@@ -43,10 +43,12 @@ describe('D12 lands as a term, not an `if`', () => {
   const forbidden = legalDraftPoolExpr({
     crossSeatMirrors: 'ALLOWED',
     selfDuplicates: 'FORBIDDEN',
+    repeatBans: 'FORBIDDEN',
   })
   const allowed = legalDraftPoolExpr({
     crossSeatMirrors: 'ALLOWED',
     selfDuplicates: 'ALLOWED',
+    repeatBans: 'FORBIDDEN',
   })
 
   it('differs from the unconstrained pool by exactly one subtrahend', () => {
@@ -86,10 +88,31 @@ describe('D12 lands as a term, not an `if`', () => {
 })
 
 describe('the five named pools of §6', () => {
-  it('legalMetaBanPool is activeRoster minus globalBanned, and nothing else', () => {
-    const expr = legalMetaBanPoolExpr() as Extract<CharSetExpr, { op: 'DIFF' }>
+  it('legalMetaBanPool is activeRoster minus globalBanned when repeats are allowed', () => {
+    const expr = legalMetaBanPoolExpr({
+      crossSeatMirrors: 'ALLOWED',
+      selfDuplicates: 'FORBIDDEN',
+      repeatBans: 'ALLOWED',
+    }) as Extract<CharSetExpr, { op: 'DIFF' }>
     expect(expr.from).toEqual({ op: 'ACTIVE_ROSTER' })
     expect(expr.minus).toEqual([{ op: 'GLOBAL_BANNED' }])
+  })
+
+  it('D28 lands as one more term, not as a branch', () => {
+    // The same honesty test D12 had to pass: the constraint changes the *expression*, and
+    // evaluation never looks at configuration. Both trees differ by exactly one subtrahend.
+    const constraints = { crossSeatMirrors: 'ALLOWED', selfDuplicates: 'FORBIDDEN' } as const
+    const allowed = legalMetaBanPoolExpr({ ...constraints, repeatBans: 'ALLOWED' }) as Extract<
+      CharSetExpr,
+      { op: 'DIFF' }
+    >
+    const forbidden = legalMetaBanPoolExpr({ ...constraints, repeatBans: 'FORBIDDEN' }) as Extract<
+      CharSetExpr,
+      { op: 'DIFF' }
+    >
+
+    expect(forbidden.from).toEqual(allowed.from)
+    expect(forbidden.minus).toEqual([...allowed.minus, { op: 'DENIED_META_BAN' }])
   })
 
   it('legalRoundBan is the opponent’s unconsumed slots (D3)', () => {

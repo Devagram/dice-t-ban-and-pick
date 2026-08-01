@@ -40,6 +40,7 @@ export function reduce(state: MatchState | null, event: EventEnvelope): ReduceRe
   if (state === null) return reject('MATCH_NOT_CREATED', 'no MATCH_CREATED event yet')
 
   if (event.payload.type === 'SEAT_FILLED') return fillSeat(state, event)
+  if (event.payload.type === 'PAIRING_RESOLVED') return resolvePairing(state, event)
   if (event.payload.type === 'UNDO_LAST_RESULT') return undoLastResult(state, event)
   if (event.payload.type === 'MATCH_COMPLETE') {
     const next = cloneState(state)
@@ -108,6 +109,32 @@ function fillSeat(state: MatchState, event: EventEnvelope): ReduceResult {
   // §12.4 — SEAT_FILLED locks the ruleset. Seating is the consent, so it is also the point of
   // no return: the host may abandon and reopen, never edit in place.
   if (SEATS.every((s) => next.seatsFilled[s])) next.status = 'IN_PROGRESS'
+  next.log.push(event)
+  return { ok: true, state: advance(next) }
+}
+
+/**
+ * D28 — the cross-match ban history, arriving as an event.
+ *
+ * The DO reads it from the pairing's own object and writes it here the moment the second seat
+ * fills, which is the first point at which the pairing is known: a room is opened before anyone
+ * sits, so this cannot ride on `MATCH_CREATED` beside the roster and the ruleset.
+ *
+ * Deliberately not enforced against the ruleset here. If the host allowed repeats, the DO simply
+ * does not send this, and the pool has no term to subtract with — the rule lives in one place
+ * (`legalMetaBanPoolExpr`) rather than being half-checked in two.
+ */
+function resolvePairing(state: MatchState, event: EventEnvelope): ReduceResult {
+  const p = event.payload
+  if (p.type !== 'PAIRING_RESOLVED') return reject('WRONG_PHASE', 'expected PAIRING_RESOLVED')
+  // Before the ban is placed, which is the only thing it can affect. Late would mean a pool that
+  // narrowed under a player mid-decision.
+  if (state.log.some((e) => e.payload.type === 'COMMIT')) {
+    return reject('WRONG_PHASE', 'the pairing resolves before anything is committed')
+  }
+
+  const next = cloneState(state)
+  next.deniedMetaBans = { A: [...p.deniedMetaBans.A], B: [...p.deniedMetaBans.B] }
   next.log.push(event)
   return { ok: true, state: advance(next) }
 }

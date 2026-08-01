@@ -1253,7 +1253,20 @@ select {
  * criterion in docs/DELIVERY-PLAN.md.
  */
 .stage__fit {
-  overflow: hidden;
+  /*
+   * Clipped horizontally only.
+   *
+   * The wrapper exists to stop a scaled board overflowing the page sideways — the board keeps its
+   * natural *layout* width whatever the transform says, so without this a shrunken board still
+   * pushes a horizontal scrollbar.
+   *
+   * It must not clip vertically. The lock-in ring deliberately hangs below the cards it encloses,
+   * and `overflow: hidden` cut its bottom edge off flush with them. `clip` rather than `hidden`
+   * because `hidden` on one axis forces the other to `auto`, which trades a cut-off ring for a
+   * stray scrollbar.
+   */
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .stage__board {

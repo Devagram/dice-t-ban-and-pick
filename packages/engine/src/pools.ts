@@ -36,6 +36,14 @@ export type CharSetExpr =
   /** The characters the *opponent's* meta ban denies to the evaluating seat. */
   | { op: 'META_BANNED_AGAINST' }
   /**
+   * D28 — what this seat banned against this same opponent last set, and so may not ban again.
+   *
+   * Read off state like every other term. The value got there through the log
+   * (`PAIRING_RESOLVED`), never through a lookup, which is what keeps the engine pure and the
+   * replay exact.
+   */
+  | { op: 'DENIED_META_BAN' }
+  /**
    * D12. Slot-indexed on purpose: it excludes what the seat holds in its **other** slots, so a
    * CONDITIONAL_RECOMMIT of slot 1 is not forbidden from re-selecting slot 1's own character —
    * which would be a different rule than the one D12 states.
@@ -73,6 +81,9 @@ export function evalCharSet(expr: CharSetExpr, ctx: PoolContext): CharId[] {
 
     case 'META_BANNED_AGAINST':
       return ctx.state.metaBannedAgainst[ctx.seat]
+
+    case 'DENIED_META_BAN':
+      return ctx.state.deniedMetaBans[ctx.seat]
 
     case 'SELF_HELD_OTHER_SLOTS': {
       const slots = ctx.state.seats[ctx.seat].slots.value
@@ -121,6 +132,7 @@ const ACTIVE_ROSTER: CharSetExpr = { op: 'ACTIVE_ROSTER' }
 const GLOBAL_BANNED: CharSetExpr = { op: 'GLOBAL_BANNED' }
 const META_BANNED_AGAINST: CharSetExpr = { op: 'META_BANNED_AGAINST' }
 const SELF_HELD_OTHER_SLOTS: CharSetExpr = { op: 'SELF_HELD_OTHER_SLOTS' }
+const DENIED_META_BAN: CharSetExpr = { op: 'DENIED_META_BAN' }
 
 /**
  * `activeRoster \ globalBanned \ metaBannedAgainst[seat] \ selfHeld(seat, slotIdx)`
@@ -141,8 +153,12 @@ export function legalDraftPoolExpr(constraints: DraftConstraints): CharSetExpr {
  * that "the payoff for keeping bans as set algebra rather than procedures", and it is — the
  * rule is not written anywhere, it falls out of the expression.
  */
-export function legalMetaBanPoolExpr(): CharSetExpr {
-  return { op: 'DIFF', from: ACTIVE_ROSTER, minus: [GLOBAL_BANNED] }
+export function legalMetaBanPoolExpr(constraints: DraftConstraints): CharSetExpr {
+  const minus: CharSetExpr[] = [GLOBAL_BANNED]
+  // D28, and the same shape as D12 above: the constraint adds a *term*, and evaluation never
+  // branches on configuration. A FORBIDDEN ruleset gets a tree with one more subtrahend.
+  if (constraints.repeatBans === 'FORBIDDEN') minus.push(DENIED_META_BAN)
+  return { op: 'DIFF', from: ACTIVE_ROSTER, minus }
 }
 
 /** `seat.slots WHERE characterId ∈ metaBannedAgainst[seat]` */
@@ -175,7 +191,7 @@ export function charPool(name: PoolName, ctx: PoolContext): CharId[] {
     case 'legalDraftPool':
       return evalCharSet(legalDraftPoolExpr(ctx.state.ruleset.constraints), ctx)
     case 'legalMetaBanPool':
-      return evalCharSet(legalMetaBanPoolExpr(), ctx)
+      return evalCharSet(legalMetaBanPoolExpr(ctx.state.ruleset.constraints), ctx)
     default:
       throw new TypeError(`charPool: ${name} yields slots, not characters`)
   }

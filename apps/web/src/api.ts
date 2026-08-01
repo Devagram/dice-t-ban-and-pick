@@ -1,3 +1,4 @@
+import { currentPlayer } from './player.js'
 import type {
   Character,
   ClaimSeatResponse,
@@ -63,6 +64,17 @@ export function fetchPreview(roomCode: string): Promise<LobbyPreview> {
   return fetch(`/api/match/${roomCode}/preview`).then(json<LobbyPreview>)
 }
 
+/**
+ * D28 — the claim carries who is sitting down.
+ *
+ * Optional on the server, so an older client still seats fine; sending it is what makes the
+ * no-repeat-ban rule able to find a history.
+ */
 export function claimSeat(roomCode: string): Promise<ClaimSeatResponse> {
-  return fetch(`/api/match/${roomCode}/seat`, { method: 'POST' }).then(json<ClaimSeatResponse>)
+  const player = currentPlayer()
+  return fetch(`/api/match/${roomCode}/seat`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId: player.id, displayName: player.name }),
+  }).then(json<ClaimSeatResponse>)
 }

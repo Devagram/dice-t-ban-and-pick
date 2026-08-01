@@ -79,6 +79,9 @@ export function DraftPanel({
    */
   const bannedAgainstYou = view.opponent.metaBanPlaced ? [view.opponent.metaBanPlaced] : []
 
+  /** D28 — what you brought against this opponent last set, and so may not bring again. */
+  const deniedLastSet = view.you.deniedMetaBans ?? []
+
   /**
    * Reported on **change**, not on render.
    *
@@ -157,8 +160,15 @@ export function DraftPanel({
       {wantsBan && picksDone ? (
         <CharacterPicker
           label={META_BAN_PROMPT}
-          help={META_BAN_HELP}
+          help={
+            deniedLastSet.length > 0
+              ? `${META_BAN_HELP} You cannot repeat the ban you brought last set.`
+              : META_BAN_HELP
+          }
           pool={commit.metaBan!.pool}
+          // D28 — shown greyed rather than missing. A character that silently vanished from the
+          // pool reads as a bug; one that is visibly struck through explains itself.
+          unavailable={deniedLastSet}
           roster={view.roster}
           selected={metaBan ? [metaBan] : []}
           remaining={metaBan ? 0 : 1}

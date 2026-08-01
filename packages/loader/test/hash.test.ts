@@ -105,7 +105,11 @@ describe('canonical ruleset serialization', () => {
     parameters: { draftCount: 4 },
     rosterVersion: '2026.07.28-1',
     globalBanned: ['oracle', 'anvil', 'vagrant'],
-    constraints: { crossSeatMirrors: 'ALLOWED', selfDuplicates: 'FORBIDDEN' },
+    constraints: {
+      crossSeatMirrors: 'ALLOWED',
+      selfDuplicates: 'FORBIDDEN',
+      repeatBans: 'FORBIDDEN',
+    },
     onTie: { scoring: 'HALF_POINT', consumesCharacters: true },
     match: { resolution: 'ALWAYS_3_ROUNDS', stopWhenDecided: true },
     overtime: { enabled: false },
@@ -118,8 +122,14 @@ describe('canonical ruleset serialization', () => {
     // every hash written by an earlier build has silently stopped matching. The assertion on
     // the canonical string as well as the digest is so a failure says *what* moved rather than
     // just that something did.
+    //
+    // **Moved once, on 2026-08-01**, when D28 added `repeatBans` to the constraints — the ruleset
+    // genuinely gained a field, so the hash genuinely changed. Rulesets written before that date
+    // hash differently, which is correct: they described a different set of rules. This is what
+    // the assertion is for, and updating it is a decision rather than a chore.
     expect(canonicalRuleset(ruleset())).toBe(
-      '{"constraints":{"crossSeatMirrors":"ALLOWED","selfDuplicates":"FORBIDDEN"},' +
+      '{"constraints":{"crossSeatMirrors":"ALLOWED","repeatBans":"FORBIDDEN",' +
+        '"selfDuplicates":"FORBIDDEN"},' +
         '"globalBanned":["anvil","oracle","vagrant"],' +
         '"match":{"resolution":"ALWAYS_3_ROUNDS","stopWhenDecided":true},' +
         '"modeContentHash":"abc123def456","modeId":"base",' +
@@ -127,7 +137,7 @@ describe('canonical ruleset serialization', () => {
         '"overtime":{"enabled":false},"parameters":{"draftCount":4},' +
         '"rosterVersion":"2026.07.28-1"}',
     )
-    expect(rulesetHash(ruleset())).toBe('81e9cd39c071')
+    expect(rulesetHash(ruleset())).toBe('ef3d08f8160c')
   })
 
   it('is insensitive to globalBanned order', () => {

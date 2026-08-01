@@ -56,8 +56,27 @@ export type EventPayload =
       mode: ResolvedMode
       engineVersion: string
     }
-  /** Locks the ruleset and (in the DO) mints the seat token (D17). */
-  | { type: 'SEAT_FILLED'; seat: Seat }
+  /**
+   * Locks the ruleset and (in the DO) mints the seat token (D17).
+   *
+   * `player` is self-asserted and deliberately so — §1's trust model is friendly opponents. The
+   * `id` is generated per browser and is what cross-match history keys on, so a wrong `name`
+   * costs a wrong label rather than a bypassed rule. Absent on a log written before D28.
+   */
+  | { type: 'SEAT_FILLED'; seat: Seat; player?: { id: string; name: string } }
+  /**
+   * D28 — what each seat may **not** ban this match, because they banned it against this same
+   * opponent last time.
+   *
+   * Authored by SYSTEM the moment the second seat fills, which is the first point at which the
+   * pairing is known — the host opens a room before anyone sits, so this cannot ride on
+   * `MATCH_CREATED` with the roster and the ruleset.
+   *
+   * It is *in the log* rather than looked up, and that is the whole design: the engine stays a
+   * pure function of its events (§5), and a replay reproduces the match without reaching for a
+   * database that may since have moved on.
+   */
+  | { type: 'PAIRING_RESOLVED'; deniedMetaBans: Record<Seat, CharId[]> }
   /** SIMULTANEOUS_COMMIT. Hidden until the module's reveal tag lands. */
   | {
       type: 'COMMIT'

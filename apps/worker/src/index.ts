@@ -9,6 +9,7 @@ import { listModes } from './modes.js'
 const ROSTER = rosterAsset as Roster
 
 export { MatchDO } from './MatchDO.js'
+export { PairHistoryDO } from './PairHistoryDO.js'
 
 /**
  * The Worker entry point: a router, and nothing more.

@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import { App } from '../src/App.js'
+import { RulesetCard } from '../src/components/RulesetCard.js'
+import { RULESET } from './fixtures.js'
 import { ROSTER } from './fixtures.js'
 
 /**
@@ -48,7 +50,11 @@ function stubNetwork(): void {
                   parameters: { draftCount: 4 },
                   rosterVersion: '2026.07.28-1',
                   globalBanned: ['anvil'],
-                  constraints: { crossSeatMirrors: 'ALLOWED', selfDuplicates: 'FORBIDDEN' },
+                  constraints: {
+                    crossSeatMirrors: 'ALLOWED',
+                    selfDuplicates: 'FORBIDDEN',
+                    repeatBans: 'FORBIDDEN',
+                  },
                   onTie: { scoring: 'HALF_POINT', consumesCharacters: true },
                   match: { resolution: 'ALWAYS_3_ROUNDS', stopWhenDecided: true },
                   overtime: { enabled: false },
@@ -213,5 +219,48 @@ describe('the front door', () => {
     expect(document.querySelector('.codehero__code')?.textContent).toBe('ABC123')
     // Waiting is a state, not a caption — the open-seat line carries the live marker.
     expect(document.querySelector('.codehero__seats--open')).toBeTruthy()
+  })
+})
+
+/**
+ * D28 on the lobby card.
+ *
+ * §12.3 makes seating the consent, so a rule that narrows your ban pool has to be readable
+ * *before* you sit rather than discovered at the ban phase. Shown either way, so its absence is
+ * an answer rather than an omission.
+ */
+describe('the rule you are consenting to is on the card', () => {
+  it('states the no-repeat rule before the seat button', async () => {
+    goTo('/j/ABC123')
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByText('Repeat bans')).toBeTruthy())
+    expect(screen.getByText('Not two sets running')).toBeTruthy()
+
+    // Before the button that accepts it — the same ordering §12.3 demands of the whole card.
+    const position = screen
+      .getByText('Repeat bans')
+      .compareDocumentPosition(screen.getByRole('button', { name: 'Take a seat' }))
+    // eslint-disable-next-line no-bitwise
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('says so when the host allowed repeats, rather than going quiet', () => {
+    // Asserted against the card directly, because the branch is the point: a rule that only
+    // renders when restrictive means its absence carries no information, and a fixture missing
+    // the field would make the test above pass without testing anything.
+    render(
+      <RulesetCard
+        modeLabel="Standard Bo3 — draft 4"
+        ruleset={{
+          ...RULESET,
+          constraints: { ...RULESET.constraints, repeatBans: 'ALLOWED' },
+        }}
+        globalBannedCharacters={[]}
+        rosterSize={10}
+      />,
+    )
+    expect(screen.getByText('Allowed')).toBeTruthy()
+    expect(screen.queryByText('Not two sets running')).toBeNull()
   })
 })

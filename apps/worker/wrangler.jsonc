@@ -10,7 +10,12 @@
   // removing it and running all 48 worker tests plus a deploy dry run.
 
   "durable_objects": {
-    "bindings": [{ "name": "MATCH", "class_name": "MatchDO" }],
+    "bindings": [
+      { "name": "MATCH", "class_name": "MatchDO" },
+      // D28 — one object per *pairing*, holding the last meta ban between those two players. The
+      // only state in this app that outlives a match; see the decision for why it stays that small.
+      { "name": "PAIR_HISTORY", "class_name": "PairHistoryDO" },
+    ],
   },
 
   // The client, served from the same origin as the API. §11 said Cloudflare Pages; static
@@ -32,6 +37,12 @@
       // SQLite is the only storage backend available on the free plan, and §11 notes it is the
       // recommended one regardless.
       "new_sqlite_classes": ["MatchDO"],
+    },
+    {
+      // Added rather than folded into v1: a migration tag that has already been applied cannot be
+      // edited, and rewriting one is how a deployed object loses its storage.
+      "tag": "v2",
+      "new_sqlite_classes": ["PairHistoryDO"],
     },
   ],
 

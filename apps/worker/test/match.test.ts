@@ -152,9 +152,10 @@ describe('the host cannot ban a match into unplayability (Phase 2 finding F4)', 
     // The loader validates the roster alone supports the mode, but `globalBanned` is empty at
     // load time — the host has not chosen yet. This is the only place the real number is known,
     // and it has to be caught before a joiner consents by sitting down.
-    // Ban everything but four, whatever the roster size happens to be — drafting 4 with a meta
-    // ban needs 5. Computed rather than hardcoded so this keeps testing the *rule* as the game
-    // gains heroes, instead of quietly becoming a test that bans a fixed six of forty.
+    // Ban everything but five, whatever the roster size happens to be. Drafting 4 with a meta
+    // ban needs 5 — and since D28 the ban you brought last set may be denied too, so the floor
+    // is 6. Computed rather than hardcoded so this keeps testing the *rule* as the game gains
+    // heroes, instead of quietly becoming a test that bans a fixed six of forty.
     const all = (await roster()).map((c) => c.id)
     const response = await SELF.fetch('https://example.com/api/match', {
       method: 'POST',
@@ -162,23 +163,54 @@ describe('the host cannot ban a match into unplayability (Phase 2 finding F4)', 
       body: JSON.stringify({
         modeId: 'base',
         parameters: { draftCount: 4 },
-        globalBanned: all.slice(0, all.length - 4),
+        globalBanned: all.slice(0, all.length - 5),
       }),
     })
 
     expect(response.status).toBe(400)
     const body = (await response.json()) as { error: string; detail: string }
     expect(body.error).toBe('ROSTER_VIABILITY')
-    expect(body.detail).toContain('needs at least 5')
+    expect(body.detail).toContain('needs at least 6')
   })
 
   it('allows a ban list that stops exactly one short of the floor', async () => {
-    // One fewer ban leaves five, which is exactly `draftCount + 1`. The boundary is the
-    // interesting case: off-by-one here would either block legal matches or allow unplayable
-    // ones, and both fail in front of two people who have already sat down.
+    // One fewer ban leaves six, which is exactly the floor: `draftCount + 1` for the meta ban,
+    // plus one more for D28's possible denial. The boundary is the interesting case — off by one
+    // either way blocks legal matches or allows unplayable ones, and both fail in front of two
+    // people who have already consented by sitting down.
     const all = (await roster()).map((c) => c.id)
-    const { roomCode } = await createMatch({ globalBanned: all.slice(0, all.length - 5) })
-    expect((await preview(roomCode)).ruleset.globalBanned).toHaveLength(all.length - 5)
+    const { roomCode } = await createMatch({ globalBanned: all.slice(0, all.length - 6) })
+    expect((await preview(roomCode)).ruleset.globalBanned).toHaveLength(all.length - 6)
+  })
+
+  it('needs one fewer when the host allows repeat bans', async () => {
+    // The floor is derived, not asserted (§13). Turning D28 off gives the character back, and a
+    // ban list that is one too many with the rule on is exactly right with it off.
+    const all = (await roster()).map((c) => c.id)
+    const tooMany = all.slice(0, all.length - 5)
+
+    const refused = await SELF.fetch('https://example.com/api/match', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        modeId: 'base',
+        parameters: { draftCount: 4 },
+        globalBanned: tooMany,
+      }),
+    })
+    expect(refused.status).toBe(400)
+
+    const allowed = await SELF.fetch('https://example.com/api/match', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        modeId: 'base',
+        parameters: { draftCount: 4 },
+        globalBanned: tooMany,
+        allowRepeatBans: true,
+      }),
+    })
+    expect(allowed.status).toBe(201)
   })
 
   it('refuses parameters no variant was validated for (D25)', async () => {

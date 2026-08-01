@@ -86,13 +86,21 @@ export function rulesetFor(
   variant: BundledVariant,
   rosterVersion: string,
   globalBanned: string[],
+  allowRepeatBans: boolean,
 ): Ruleset {
   return {
     modeId: variant.mode.modeId,
     parameters: variant.parameters,
     rosterVersion,
     globalBanned,
-    constraints: { crossSeatMirrors: 'ALLOWED', selfDuplicates: 'FORBIDDEN' },
+    constraints: {
+      crossSeatMirrors: 'ALLOWED',
+      selfDuplicates: 'FORBIDDEN',
+      // D28 — the host's answer, become a rule. Snapshotted here so the joiner consents to it
+      // (§12.3) and so a replay a month later applies the rule the match was actually played
+      // under, not whatever the default has since become.
+      repeatBans: allowRepeatBans ? 'ALLOWED' : 'FORBIDDEN',
+    },
     onTie: variant.mode.onTie,
     match: variant.mode.match,
     overtime: variant.mode.overtime,

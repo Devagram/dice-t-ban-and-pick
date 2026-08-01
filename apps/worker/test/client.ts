@@ -40,9 +40,16 @@ export class TestClient {
     private readonly claimedSeat: Seat | null,
   ) {}
 
-  static async claimSeat(roomCode: string): Promise<TestClient> {
+  /** `player` is D28's identity. Omitted, the seat is anonymous and carries no ban history. */
+  static async claimSeat(
+    roomCode: string,
+    player?: { playerId: string; displayName?: string },
+  ): Promise<TestClient> {
     const response = await SELF.fetch(`https://example.com/api/match/${roomCode}/seat`, {
       method: 'POST',
+      ...(player
+        ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(player) }
+        : {}),
     })
     if (!response.ok)
       throw new Error(`claimSeat failed: ${response.status} ${await response.text()}`)
@@ -298,14 +305,23 @@ export async function preview(roomCode: string): Promise<LobbyPreview> {
 }
 
 /** Creates a match and seats two connected clients. The starting point for most tests. */
-export async function seatedMatch(opts: CreateOptions = {}): Promise<{
+export async function seatedMatch(
+  opts: CreateOptions & { players?: [string, string] } = {},
+): Promise<{
   roomCode: string
   a: TestClient
   b: TestClient
 }> {
   const { roomCode } = await createMatch(opts)
-  const first = await TestClient.claimSeat(roomCode)
-  const second = await TestClient.claimSeat(roomCode)
+  // Seats are handed out in order, so the first id belongs to whoever gets seat A.
+  const first = await TestClient.claimSeat(
+    roomCode,
+    opts.players ? { playerId: opts.players[0] } : undefined,
+  )
+  const second = await TestClient.claimSeat(
+    roomCode,
+    opts.players ? { playerId: opts.players[1] } : undefined,
+  )
   const a = first.seat === 'A' ? first : second
   const b = first.seat === 'A' ? second : first
   await a.connect()

@@ -51,6 +51,24 @@ export function RulesetCard({
             : 'Forbidden'}
         </Row>
 
+        {/*
+          D28 — on the card because seating is the consent (§12.3).
+          
+          It narrows the ban pool, and a rule you meet for the first time *at* the ban phase is a
+          rule you never agreed to. Shown either way rather than only when on, so its absence is
+          an answer rather than an omission.
+        */}
+        <Row
+          term="Repeat bans"
+          detail={
+            ruleset.constraints.repeatBans === 'ALLOWED'
+              ? 'No history is kept between matches.'
+              : 'Your last ban against this opponent is remembered, and nothing else.'
+          }
+        >
+          {ruleset.constraints.repeatBans === 'ALLOWED' ? 'Allowed' : 'Not two sets running'}
+        </Row>
+
         <Row
           term="Banned by the host"
           detail={

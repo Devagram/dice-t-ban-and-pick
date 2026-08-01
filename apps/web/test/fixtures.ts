@@ -23,7 +23,11 @@ export const RULESET: Ruleset = {
   parameters: { draftCount: 4 },
   rosterVersion: '2026.07.28-1',
   globalBanned: [],
-  constraints: { crossSeatMirrors: 'ALLOWED', selfDuplicates: 'FORBIDDEN' },
+  constraints: {
+    crossSeatMirrors: 'ALLOWED',
+    selfDuplicates: 'FORBIDDEN',
+    repeatBans: 'FORBIDDEN',
+  },
   onTie: { scoring: 'HALF_POINT', consumesCharacters: true },
   match: { resolution: 'ALWAYS_3_ROUNDS', stopWhenDecided: true },
   overtime: { enabled: false },

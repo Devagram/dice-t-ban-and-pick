@@ -101,6 +101,14 @@ export interface CreateMatchRequest {
   parameters: Record<string, string | number>
   /** Host-set, public, applies before everything (D5). */
   globalBanned: string[]
+  /**
+   * D28 — may a player bring the same meta ban against the same person two sets running?
+   *
+   * Absent means no, which is the default the rule was asked for. Sent as a boolean rather than
+   * the ruleset's enum because this is the host's *answer*, and `rulesetFor` is where an answer
+   * becomes a rule.
+   */
+  allowRepeatBans?: boolean
 }
 
 export interface CreateMatchResponse {

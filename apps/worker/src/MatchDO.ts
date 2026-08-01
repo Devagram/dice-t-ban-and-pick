@@ -41,7 +41,36 @@ import {
   sendView,
   type SeatSocket,
 } from './outbound.js'
+import { pairKey } from './PairHistoryDO.js'
 import { RateLimiter } from './rateLimit.js'
+
+/**
+ * The two seated players, or null if either is anonymous or absent.
+ *
+ * Read off the log rather than a table: `SEAT_FILLED` carries the identity, so the record of who
+ * played is the same record everything else replays from.
+ */
+function playersOf(state: MatchState): Record<Seat, { id: string; name: string }> | null {
+  const found: Partial<Record<Seat, { id: string; name: string }>> = {}
+  for (const event of state.log) {
+    if (event.payload.type === 'SEAT_FILLED' && event.payload.player) {
+      found[event.payload.seat] = event.payload.player
+    }
+  }
+  return found.A && found.B ? { A: found.A, B: found.B } : null
+}
+
+/** The claim body, treated as untrusted — an older client sends none at all. */
+async function readPlayer(request: Request): Promise<{ id: string; name: string } | null> {
+  try {
+    const body = (await request.json()) as { playerId?: unknown; displayName?: unknown }
+    if (typeof body?.playerId !== 'string' || !body.playerId) return null
+    const name = typeof body.displayName === 'string' ? body.displayName.slice(0, 40) : ''
+    return { id: body.playerId.slice(0, 64), name }
+  } catch {
+    return null
+  }
+}
 
 const ROSTER = rosterAsset as Roster
 
@@ -140,7 +169,8 @@ export class MatchDO extends DurableObject<Env> {
       (id) => typeof id === 'string',
     )
     globalBanned.sort()
-    const viability = this.checkRosterViability(variant, globalBanned)
+    const allowRepeatBans = body.allowRepeatBans === true
+    const viability = this.checkRosterViability(variant, globalBanned, allowRepeatBans)
     if (viability) return json(viability, 400)
 
     const seed = crypto.randomUUID()
@@ -152,7 +182,7 @@ export class MatchDO extends DurableObject<Env> {
       payload: {
         type: 'MATCH_CREATED',
         seed,
-        ruleset: rulesetFor(variant, ROSTER.rosterVersion, globalBanned),
+        ruleset: rulesetFor(variant, ROSTER.rosterVersion, globalBanned, allowRepeatBans),
         roster: ROSTER,
         mode: variant.mode,
         engineVersion: ENGINE_VERSION,
@@ -181,10 +211,20 @@ export class MatchDO extends DurableObject<Env> {
   private checkRosterViability(
     variant: BundledVariant,
     globalBanned: string[],
+    allowRepeatBans: boolean,
   ): { error: string; detail: string } | null {
     const banned = new Set(globalBanned)
     const available = activeRoster(ROSTER).filter((id) => !banned.has(id)).length
-    const floor = draftCountOf(variant) + 1
+    /*
+     * §13's floor, plus D28.
+     *
+     * The rule can deny one further character — the ban you brought last set. This check runs at
+     * creation, before anyone has sat down and therefore before there is a pairing to look up, so
+     * it assumes the worst case rather than the actual history. Guessing optimistically here
+     * would move the failure to the ban phase, in front of two people who have already consented
+     * by sitting down, which is exactly what §13 exists to prevent.
+     */
+    const floor = draftCountOf(variant) + 1 + (allowRepeatBans ? 0 : 1)
 
     if (available < floor) {
       return {
@@ -232,12 +272,21 @@ export class MatchDO extends DurableObject<Env> {
     const seat = SEATS.find((s) => !taken.has(s))
     if (!seat) return json({ error: 'MATCH_FULL', detail: 'both seats are taken' }, 409)
 
+    /*
+     * D28 — who is sitting down.
+     *
+     * Optional, and the match plays exactly as before without it: an older client sends no body,
+     * and a seat with no id simply has no history to carry. Self-asserted and unverified (§1's
+     * trust model), which is why the *id* is what the rule keys on and the name is only a label.
+     */
+    const player = await readPlayer(request)
+
     const event: EventEnvelope = {
       v: 1,
       seq: state.log.length,
       tag: `seat:${seat}`,
       actor: seat,
-      payload: { type: 'SEAT_FILLED', seat },
+      payload: player ? { type: 'SEAT_FILLED', seat, player } : { type: 'SEAT_FILLED', seat },
     }
     const result = reduce(state, event)
     if (!result.ok) return json({ error: result.code, detail: result.detail }, 409)
@@ -254,7 +303,12 @@ export class MatchDO extends DurableObject<Env> {
       return json({ error: 'SEAT_TAKEN', detail: 'somebody just took that seat' }, 409)
     }
     claimSeat(this.sql, seat, tokenHash, Date.now())
-    this.settleAndBroadcast(result.state)
+
+    // D28 — the second seat is the first moment there is a pairing to ask about. A room is opened
+    // before anyone sits, so this cannot ride on MATCH_CREATED beside the roster and the ruleset.
+    const withHistory = await this.resolvePairing(result.state)
+
+    this.settleAndBroadcast(withHistory)
     this.touch()
 
     const roomCode = getMeta(this.sql, 'roomCode') ?? ''
@@ -266,6 +320,81 @@ export class MatchDO extends DurableObject<Env> {
       websocketUrl: `${origin.replace(/^http/, 'ws')}/api/match/${roomCode}/ws`,
     }
     return json(response, 201)
+  }
+
+  /**
+   * D28 — reads the pairing's history and puts it in the log.
+   *
+   * Returns the state unchanged whenever there is nothing to say: the rule is off, a seat is
+   * still empty, either player is anonymous, or the two have never met. Silence is the common
+   * case and must cost nothing.
+   *
+   * The engine learns this the same way it learns the roster — by being handed it — so a replay
+   * reproduces the match without consulting a history that has since moved on.
+   */
+  private async resolvePairing(state: MatchState): Promise<MatchState> {
+    if (state.ruleset.constraints.repeatBans !== 'FORBIDDEN') return state
+    if (state.log.some((e) => e.payload.type === 'PAIRING_RESOLVED')) return state
+
+    const players = playersOf(state)
+    if (!players) return state
+
+    const history = await this.history(players.A.id, players.B.id).fetch('https://pair/recent')
+    if (!history.ok) return state
+    const { lastBanBy } = (await history.json()) as { lastBanBy: Record<string, string> }
+
+    const denied: Record<Seat, string[]> = {
+      A: lastBanBy[players.A.id] ? [lastBanBy[players.A.id]!] : [],
+      B: lastBanBy[players.B.id] ? [lastBanBy[players.B.id]!] : [],
+    }
+    if (denied.A.length === 0 && denied.B.length === 0) return state
+
+    const event: EventEnvelope = {
+      v: 1,
+      seq: state.log.length,
+      tag: 'pairing:resolved',
+      actor: 'SYSTEM',
+      payload: { type: 'PAIRING_RESOLVED', deniedMetaBans: denied },
+    }
+    const result = reduce(state, event)
+    // A rejection here means the match moved on underneath us, which cannot happen inside a
+    // single-threaded DO — but the rule is cosmetic enough that failing the seat claim over it
+    // would be the wrong trade.
+    if (!result.ok || !tryAppendEvent(this.sql, event)) return state
+    return result.state
+  }
+
+  /**
+   * D28 — records both meta bans once they are placed, for the next set.
+   *
+   * Fired after a commit settles rather than on a timer: `metaBanPlaced` is the fact, and it is
+   * only complete when both seats have it. Writing one at a time would let a half-finished match
+   * bind the next one.
+   */
+  private async recordBans(state: MatchState): Promise<void> {
+    if (state.ruleset.constraints.repeatBans !== 'FORBIDDEN') return
+
+    const players = playersOf(state)
+    if (!players) return
+
+    const bans: Record<string, string> = {}
+    for (const seat of SEATS) {
+      const placed = state.seats[seat].metaBanPlaced.value
+      if (placed) bans[players[seat].id] = placed
+    }
+    // Both, or neither. A single ban means the other seat has not committed yet.
+    if (Object.keys(bans).length !== SEATS.length) return
+
+    await this.history(players.A.id, players.B.id).fetch('https://pair/record', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bans }),
+    })
+  }
+
+  private history(a: string, b: string): DurableObjectStub {
+    const name = pairKey(a, b)
+    return this.env.PAIR_HISTORY.get(this.env.PAIR_HISTORY.idFromName(name))
   }
 
   // --- WebSocket -------------------------------------------------------------------------------
@@ -453,7 +582,17 @@ export class MatchDO extends DurableObject<Env> {
         code: null,
         detail: null,
       })
-      this.settleAndBroadcast(result.state)
+      const settled = this.settleAndBroadcast(result.state)
+
+      /*
+       * D28 — remember the bans for next time.
+       *
+       * Deliberately not awaited. Recording history is bookkeeping for a *future* match; making a
+       * player wait on a second Durable Object round trip before their commit is acknowledged
+       * would trade a real interaction for a speculative one. `waitUntil` keeps the object alive
+       * until it lands, and a failure costs one forgotten ban rather than a stuck match.
+       */
+      this.ctx.waitUntil(this.recordBans(settled))
       return
     }
 
@@ -472,7 +611,7 @@ export class MatchDO extends DurableObject<Env> {
    * This is the integration point `systemStep` was designed for: `reduce` stays single-event and
    * pure, and the cascade lives here where a log and a socket exist.
    */
-  private settleAndBroadcast(state: MatchState): void {
+  private settleAndBroadcast(state: MatchState): MatchState {
     let current = state
     for (let guard = 0; guard < 256; guard++) {
       const event = systemStep(current)
@@ -495,6 +634,7 @@ export class MatchDO extends DurableObject<Env> {
       current = result.state
     }
     broadcastView(this.sockets(), current)
+    return current
   }
 
   // --- State -----------------------------------------------------------------------------------

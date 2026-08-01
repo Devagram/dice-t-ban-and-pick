@@ -17,9 +17,34 @@ beforeEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('sound is off until asked for', () => {
-  it('starts muted', () => {
-    expect(soundEnabled()).toBe(false)
+describe('sound is on unless turned off', () => {
+  /**
+   * The default is read once, at import.
+   *
+   * So testing it means a fresh module — the previous version of this test asserted the default
+   * while `beforeEach` had already set the value explicitly, which made it a test of the setter
+   * wearing the name of a test of the default.
+   */
+  const freshDefault = async (stored: string | null): Promise<boolean> => {
+    localStorage.clear()
+    if (stored !== null) localStorage.setItem('banpick:sound', stored)
+    vi.resetModules()
+    const fresh: { soundEnabled: () => boolean } = await import('../src/sound.js')
+    return fresh.soundEnabled()
+  }
+
+  it('is on when nothing has been stored', async () => {
+    expect(await freshDefault(null)).toBe(true)
+  })
+
+  it('stays off once it has been turned off', async () => {
+    expect(await freshDefault('off')).toBe(false)
+  })
+
+  it('treats a cleared storage as the default rather than as off', async () => {
+    // Reading it the other way round would silently mute anyone who cleared their browser data.
+    expect(await freshDefault('on')).toBe(true)
+    expect(await freshDefault(null)).toBe(true)
   })
 
   it('never touches the audio API while muted', () => {

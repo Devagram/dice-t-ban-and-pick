@@ -34,7 +34,11 @@ function created(overrides: Partial<Ruleset> = {}): EventEnvelope {
     parameters: mode.parameters,
     rosterVersion: ROSTER_10.rosterVersion,
     globalBanned: ['vagrant'],
-    constraints: { crossSeatMirrors: 'ALLOWED', selfDuplicates: 'FORBIDDEN' },
+    constraints: {
+      crossSeatMirrors: 'ALLOWED',
+      selfDuplicates: 'FORBIDDEN',
+      repeatBans: 'FORBIDDEN',
+    },
     onTie: mode.onTie,
     match: mode.match,
     overtime: mode.overtime,
