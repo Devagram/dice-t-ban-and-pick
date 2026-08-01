@@ -234,7 +234,7 @@ Deliberately thin (§14.4). The client's job is to render `PlayerView` and post 
 - Two humans play a full match in two browsers on two devices — **not automated; needs you.** Everything under it is verified: two headless clients play complete matches over WebSocket (Phase 3), and the lobby flow was driven end to end against `wrangler dev`
 - CI dependency rule proves the client imports `@banpick/types` and never `@banpick/engine` (G5) ✔ — and observed failing on a deliberate violation in `apps/web`
 - Disabling JavaScript-side validation entirely changes nothing about which actions succeed ✔ — **there is none to disable.** 14 tests assert that every control is a rendering of a `legalActions` entry: remove the entry and the control goes with it
-- Usable at 390px width ✔ **by construction, not by measurement** — base styles are the phone styles, the single media query only widens, nothing has a fixed width, and touch targets are 44px. A real device check is still worth doing
+- ~~Usable at 390px width~~ — **struck 2026-07-31. The app is desktop-first.** This was true when the client was a stack of lists. It stopped being true when the board became a fixed arena: `Stage` positions cells absolutely on a 132px pitch, which makes the board 1152px wide at `draftCount: 4` and gave it no media query at all — it overflowed a 390px phone by roughly 760px. Offered as a bug to fix; the owner chose the descope, because reflowing the board onto a phone means a second layout to maintain and the game is being played on laptops. Recorded here rather than left quietly failing, which is the only version of this that is honest. The board now scales as a whole below its natural width so a small laptop or a half-width window still works
 
 ### Do not build yet
 

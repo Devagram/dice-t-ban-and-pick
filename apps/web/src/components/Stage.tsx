@@ -84,6 +84,52 @@ const CARD_HEIGHT_PX = CELL_PX * (300 / 199) + CARD_CHROME_PX
 const RING_PAD_PX = 12
 
 /**
+ * The board's natural width, at the largest draft the modes allow.
+ *
+ * Four cells a side on a fixed pitch, twice, plus the gaps and the "vs" column. Everything on the
+ * board is positioned from this arithmetic, which is what makes the movement animate — and also
+ * what makes the board a fixed object rather than a reflowing one.
+ */
+function naturalWidth(slots: number): number {
+  const side = slots * CELL_PX + Math.max(0, slots - 1) * GAP_PX
+  return side * 2 + SIDES_GAP_PX * 2 + VS_WIDTH_PX
+}
+
+/** Below this the board is unreadable however you scale it; let the page scroll instead. */
+const MIN_SCALE = 0.6
+
+/**
+ * Scales the whole board to fit its container.
+ *
+ * A transform rather than a reflow, deliberately. Every position on this board is arithmetic —
+ * the pitch, the ring, the reveal offsets — and a second, narrower layout would mean maintaining
+ * that arithmetic twice and animating between two of them. Scaling keeps one board and one set of
+ * numbers; it just makes them smaller.
+ *
+ * The app is desktop-first as of 2026-07-31 (see the struck exit criterion in the delivery plan),
+ * so this is about a small laptop or a half-width window, not a phone.
+ */
+function useBoardScale(natural: number): {
+  ref: (node: HTMLDivElement | null) => void
+  scale: number
+} {
+  const [scale, setScale] = useState(1)
+  const [node, setNode] = useState<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!node || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry?.contentRect.width ?? natural
+      setScale(Math.max(MIN_SCALE, Math.min(1, width / natural)))
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [node, natural])
+
+  return { ref: setNode, scale }
+}
+
+/**
  * Stacking on the board, in one place.
  *
  * The ring is deliberately the top layer. It is wider than the pair it encloses — that is the
@@ -235,82 +281,98 @@ export function Stage({
     return () => clearTimeout(t)
   }, [bothChosen])
 
+  const natural = naturalWidth(Math.max(expected, view.you.slotCount, view.opponent.slotCount))
+  const { ref: fitRef, scale } = useBoardScale(natural)
+
   return (
-    <section className="stage" aria-label="Draft board">
+    <section className="stage" aria-label="Draft board" ref={fitRef}>
       <BanBar view={view} byId={byId} mine={mine} theirs={theirs} />
 
-      <div className={`stage__sides ${lockedIn ? 'stage__sides--locked' : ''}`}>
-        {/*
+      {/* The board keeps its natural size and is scaled to fit, so nothing inside has to know
+          how wide the window is. The wrapper reserves the scaled height so the page below it
+          does not sit under a shrunken board. */}
+      <div
+        className="stage__fit"
+        style={{ height: scale < 1 ? `${Math.round(rowHeight * scale) + 40}px` : undefined }}
+      >
+        <div
+          className="stage__board"
+          style={{ width: `${natural}px`, transform: `scale(${scale})` }}
+        >
+          <div className={`stage__sides ${lockedIn ? 'stage__sides--locked' : ''}`}>
+            {/*
           One ring around the pair, sized from the same arithmetic that places the cards: two
           blown-up cells, the gaps either side of the "vs", and the "vs" column itself.
         */}
-        {lockedIn ? (
-          <span
-            className="lockin"
-            aria-hidden="true"
-            style={{
-              zIndex: Z_LOCK_IN,
-              width: `${Math.round(CELL_PX * CHOSEN_SCALE) * 2 + SIDES_GAP_PX * 2 + VS_WIDTH_PX + RING_PAD_PX * 2}px`,
-              height: `${Math.round(CARD_HEIGHT_PX * CHOSEN_SCALE) + RING_PAD_PX * 2}px`,
-              bottom: `${-RING_PAD_PX}px`,
-            }}
-          />
-        ) : null}
-        <Side
-          title="You"
-          seat={view.seat}
-          seatView={view.you}
-          byId={byId}
-          expected={expected}
-          pending={mine}
-          currentRound={round}
-          selectable={selectableOwn}
-          chosenSlot={chosenOwn}
-          outcomes={outcomes(view.seat)}
-          rowHeight={rowHeight}
-          finish={
-            finished === null
-              ? null
-              : finished === 'DRAW'
-                ? 'draw'
-                : finished === view.seat
-                  ? 'won'
-                  : 'lost'
-          }
-          onSelect={onSelectOwn}
-          onRemove={onRemoveOwn}
-          revealing={revealing}
-          own
-        />
-        <span className="stage__vs" aria-hidden="true">
-          vs
-        </span>
-        <Side
-          title="Them"
-          seat={view.opponent.seat}
-          seatView={view.opponent}
-          byId={byId}
-          expected={expected}
-          pending={theirs}
-          currentRound={round}
-          selectable={selectableOpponent}
-          chosenSlot={chosenOpponent}
-          outcomes={outcomes(view.opponent.seat)}
-          rowHeight={rowHeight}
-          finish={
-            finished === null
-              ? null
-              : finished === 'DRAW'
-                ? 'draw'
-                : finished === view.opponent.seat
-                  ? 'won'
-                  : 'lost'
-          }
-          onSelect={onSelectOpponent}
-          onRemove={undefined}
-          revealing={revealing}
-          own={false}
-        />
+            {lockedIn ? (
+              <span
+                className="lockin"
+                aria-hidden="true"
+                style={{
+                  zIndex: Z_LOCK_IN,
+                  width: `${Math.round(CELL_PX * CHOSEN_SCALE) * 2 + SIDES_GAP_PX * 2 + VS_WIDTH_PX + RING_PAD_PX * 2}px`,
+                  height: `${Math.round(CARD_HEIGHT_PX * CHOSEN_SCALE) + RING_PAD_PX * 2}px`,
+                  bottom: `${-RING_PAD_PX}px`,
+                }}
+              />
+            ) : null}
+            <Side
+              title="You"
+              seat={view.seat}
+              seatView={view.you}
+              byId={byId}
+              expected={expected}
+              pending={mine}
+              currentRound={round}
+              selectable={selectableOwn}
+              chosenSlot={chosenOwn}
+              outcomes={outcomes(view.seat)}
+              rowHeight={rowHeight}
+              finish={
+                finished === null
+                  ? null
+                  : finished === 'DRAW'
+                    ? 'draw'
+                    : finished === view.seat
+                      ? 'won'
+                      : 'lost'
+              }
+              onSelect={onSelectOwn}
+              onRemove={onRemoveOwn}
+              revealing={revealing}
+              own
+            />
+            <span className="stage__vs" aria-hidden="true">
+              vs
+            </span>
+            <Side
+              title="Them"
+              seat={view.opponent.seat}
+              seatView={view.opponent}
+              byId={byId}
+              expected={expected}
+              pending={theirs}
+              currentRound={round}
+              selectable={selectableOpponent}
+              chosenSlot={chosenOpponent}
+              outcomes={outcomes(view.opponent.seat)}
+              rowHeight={rowHeight}
+              finish={
+                finished === null
+                  ? null
+                  : finished === 'DRAW'
+                    ? 'draw'
+                    : finished === view.opponent.seat
+                      ? 'won'
+                      : 'lost'
+              }
+              onSelect={onSelectOpponent}
+              onRemove={undefined}
+              revealing={revealing}
+              own={false}
+            />
+          </div>
+        </div>
       </div>
     </section>
   )
@@ -617,7 +679,14 @@ function Side({
                     {body}
                   </button>
                 ) : (
-                  <div className={classes}>{body}</div>
+                  /*
+                   * The label goes on the wrapper when there is no button to carry it. A played
+                   * or banned card is not pressable, but it still has something to say — without
+                   * this a screen reader hears the character's name and none of its state.
+                   */
+                  <div className={classes} aria-label={label} role="img">
+                    {body}
+                  </div>
                 )}
               </li>
             )

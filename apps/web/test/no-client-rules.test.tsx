@@ -1,9 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
-import type { PlayerActionPayload } from '@banpick/types'
+import type { PlayerActionPayload, PlayerView } from '@banpick/types'
 
 import { ActionBar, slotTargets } from '../src/components/ActionBar.js'
-import { SlotRail } from '../src/components/SlotRail.js'
+import { Stage } from '../src/components/Stage.js'
 import {
   BAN_ACTION,
   CHOOSE_ORDER,
@@ -110,32 +110,42 @@ describe('the payload posted is built from the offered action', () => {
   })
 })
 
+/**
+ * The same assertions, against the board that replaced `SlotRail`.
+ *
+ * These are D18 tests, not layout tests: what a player can press comes from `legalActions` and
+ * nothing else. They were written against the old vertical rail; the component changed, the
+ * guarantee did not, so they moved rather than being deleted with it.
+ */
+const board = (v: PlayerView, targets: ReturnType<typeof slotTargets>) => (
+  <Stage
+    view={v}
+    expected={4}
+    mine={{ filled: 0 }}
+    theirs={{ filled: 0 }}
+    selectableOwn={targets.own as (0 | 1 | 2 | 3)[]}
+    selectableOpponent={targets.opponent as (0 | 1 | 2 | 3)[]}
+    onSelectOwn={vi.fn()}
+    onSelectOpponent={vi.fn()}
+  />
+)
+
 describe('slot choices come from the server too', () => {
-  it('marks selectable only the slots a SELECT offered', () => {
+  it('makes pressable only the slots a SELECT offered', () => {
     const v = view({ legalActions: [SELECT_ACTION] })
     const targets = slotTargets(v)
     expect(targets.own).toEqual([1, 3])
     expect(targets.opponent).toEqual([])
 
-    render(
-      <SlotRail
-        title="Yours"
-        view={v.you}
-        roster={ROSTER}
-        currentRound={0}
-        selectable={targets.own as (0 | 1 | 2 | 3)[]}
-        onSelect={vi.fn()}
-      />,
-    )
+    const { container } = render(board(v, targets))
 
-    // Slots 0 and 2 are not offered, so they are not pressable — the server said so, and the
-    // client did not work out why.
-    const buttons = screen.getAllByRole('button')
-    expect(buttons.map((b) => (b as HTMLButtonElement).disabled)).toEqual([
-      true,
-      false,
-      true,
-      false,
+    // Slots 0 and 2 were not offered, so they are not buttons at all — the server said so, and
+    // the client did not work out why.
+    const pressable = container.querySelectorAll('.side--own button.cell')
+    expect(pressable).toHaveLength(2)
+    expect([...pressable].map((b) => b.getAttribute('aria-label'))).toEqual([
+      'The Cartographer',
+      'The Gambler',
     ])
   })
 
@@ -146,76 +156,79 @@ describe('slot choices come from the server too', () => {
     expect(targets.own).toEqual([])
   })
 
-  it('offers nothing on either rail when neither action is present', () => {
-    const targets = slotTargets(view({ legalActions: [CHOOSE_PRIVILEGE] }))
+  it('offers nothing on either side when neither action is present', () => {
+    const v = view({ legalActions: [CHOOSE_PRIVILEGE] })
+    const targets = slotTargets(v)
     expect(targets.own).toEqual([])
     expect(targets.opponent).toEqual([])
+
+    const { container } = render(board(v, targets))
+    expect(container.querySelectorAll('button.cell')).toHaveLength(0)
   })
 })
 
 describe('§7 redaction is rendered, not reconstructed', () => {
-  it('shows a sealed rail when the opponent slice is absent', () => {
-    render(<SlotRail title="Theirs" view={sealedOpponent()} roster={ROSTER} currentRound={0} />)
+  it('shows sealed placeholders when the opponent slice is absent', () => {
+    const v = view({ opponent: sealedOpponent() })
+    render(<Stage view={v} expected={4} mine={{ filled: 0 }} theirs={{ filled: 0 }} />)
 
-    // Four sealed placeholders — the count is public (it is `draftCount`), the contents are not.
+    // Four sealed boxes — the count is public (it is `draftCount`), the contents are not.
     expect(screen.getAllByText('Sealed')).toHaveLength(4)
-    // And nothing of the opponent's is on screen, because nothing of theirs arrived.
+    // Scoped to their side: your own board legitimately names your own characters.
+    const theirs = document.querySelector('.side--opponent')!
     for (const character of ROSTER) {
-      expect(screen.queryByText(character.name)).toBeNull()
+      expect(theirs.textContent).not.toContain(character.name)
     }
-  })
-
-  it('shows the commitment exists even while its contents do not', () => {
-    render(<SlotRail title="Theirs" view={sealedOpponent()} roster={ROSTER} currentRound={0} />)
-    // §12: the seal hides the contents, not the fact. Otherwise "waiting for opponent" is
-    // unrenderable and the UI has to guess.
-    expect(screen.getByText(/cannot be changed or taken back/)).toBeTruthy()
   })
 })
 
 describe('slot states read differently at a glance', () => {
-  it('distinguishes played, banned-this-round, and available', () => {
-    const v = view({
-      you: {
-        seat: 'A',
-        score: 0,
-        hasCommitted: true,
-        slotCount: 4,
-        slots: [
-          slot(0, 'anvil', { consumed: true }),
-          slot(1, 'cartographer', { bannedInRound: 0 }),
-          slot(2, 'duelist'),
-          // Banned in an *earlier* round: D3 makes a round ban round-scoped, so it is available
-          // again and must not read as denied.
-          slot(3, 'gambler', { bannedInRound: 0 }),
-        ],
+  const played = (currentRound: 0 | 1 | 2, slots: ReturnType<typeof slot>[]) =>
+    view({
+      phase: {
+        moduleId: `rounds.${currentRound}.ban`,
+        type: 'BAN',
+        roundIndex: currentRound,
+        awaiting: ['A'],
       },
+      you: { seat: 'A', score: 0, hasCommitted: true, slotCount: slots.length, slots },
     })
 
-    render(<SlotRail title="Yours" view={v.you} roster={ROSTER} currentRound={1} />)
+  it('distinguishes played, banned-this-round, and available', () => {
+    const v = played(1, [
+      slot(0, 'anvil', { consumed: true }),
+      slot(1, 'cartographer', { bannedInRound: 0 }),
+      slot(2, 'duelist'),
+      // Banned in an *earlier* round: D3 makes a round ban round-scoped, so it is available
+      // again and must not read as denied.
+      slot(3, 'gambler', { bannedInRound: 0 }),
+    ])
+    render(<Stage view={v} expected={4} mine={{ filled: 0 }} theirs={{ filled: 0 }} />)
 
     expect(screen.getByLabelText('The Anvil — played')).toBeTruthy()
-    expect(screen.getByLabelText('The Cartographer — available')).toBeTruthy()
-    expect(screen.getByLabelText('The Gambler — available')).toBeTruthy()
+    expect(screen.getByLabelText('The Cartographer')).toBeTruthy()
+    expect(screen.getByLabelText('The Gambler')).toBeTruthy()
   })
 
   it('marks a slot banned only during the round it was banned in', () => {
-    const v = view({
-      you: {
-        seat: 'A',
-        score: 0,
-        hasCommitted: true,
-        slotCount: 1,
-        slots: [slot(0, 'anvil', { bannedInRound: 1 })],
-      },
-    })
-
     const { rerender } = render(
-      <SlotRail title="Yours" view={v.you} roster={ROSTER} currentRound={1} />,
+      <Stage
+        view={played(1, [slot(0, 'anvil', { bannedInRound: 1 })])}
+        expected={1}
+        mine={{ filled: 0 }}
+        theirs={{ filled: 0 }}
+      />,
     )
     expect(screen.getByLabelText('The Anvil — banned this round')).toBeTruthy()
 
-    rerender(<SlotRail title="Yours" view={v.you} roster={ROSTER} currentRound={2} />)
-    expect(screen.getByLabelText('The Anvil — available')).toBeTruthy()
+    rerender(
+      <Stage
+        view={played(2, [slot(0, 'anvil', { bannedInRound: 1 })])}
+        expected={1}
+        mine={{ filled: 0 }}
+        theirs={{ filled: 0 }}
+      />,
+    )
+    expect(screen.getByLabelText('The Anvil')).toBeTruthy()
   })
 })

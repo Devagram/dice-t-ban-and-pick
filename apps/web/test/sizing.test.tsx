@@ -203,3 +203,50 @@ describe('BEM modifiers still have their base rule', () => {
     expect(CSS).toMatch(/^\.cell \{[^}]*padding:/m)
   })
 })
+
+/**
+ * The board is a fixed object that scales, not a reflowing one.
+ *
+ * Desktop-first as of 2026-07-31 — the 390px criterion was struck rather than left quietly
+ * failing (see docs/DELIVERY-PLAN.md). What remains is that a small laptop or a half-width window
+ * still gets a whole board, by shrinking it rather than by rearranging it.
+ */
+describe('the board fits its container by scaling', () => {
+  it('keeps its natural width in the markup and scales with a transform', () => {
+    const v = view({
+      you: { seat: 'A', score: 0, hasCommitted: false, slotCount: 0, slots: [] },
+      opponent: { seat: 'B', score: 0, hasCommitted: false, slotCount: 0, slots: [] },
+    })
+    const { container } = render(
+      <Stage view={v} expected={4} mine={{ filled: 0 }} theirs={{ filled: 0 }} />,
+    )
+
+    const board = container.querySelector('.stage__board') as HTMLElement
+    // 4 cells a side on a 132px pitch with 6px gaps, twice, plus 8px either side of a 44px "vs".
+    const side = 4 * 132 + 3 * 6
+    expect(board.style.width).toBe(`${side * 2 + 8 * 2 + 44}px`)
+    expect(board.style.transform).toContain('scale(')
+  })
+
+  it('scales the whole board rather than resizing the cells', () => {
+    // The cells' own arithmetic must not move — that is what keeps one set of numbers driving the
+    // pitch, the ring and the reveal offsets.
+    const v = view({
+      you: { seat: 'A', score: 0, hasCommitted: false, slotCount: 0, slots: [] },
+      opponent: { seat: 'B', score: 0, hasCommitted: false, slotCount: 0, slots: [] },
+    })
+    const { container } = render(
+      <Stage view={v} expected={4} mine={{ filled: 0 }} theirs={{ filled: 0 }} />,
+    )
+    const cell = container.querySelector('.cell-slot') as HTMLElement
+    expect(cell.style.width).toBe('132px')
+  })
+
+  it('does not claim to support a phone anywhere in the delivery plan', () => {
+    // The criterion is struck, with the reason recorded. A criterion left silently failing is
+    // worse than one deliberately dropped, and this is what stops it drifting back in.
+    const PLAN = readFileSync('docs/DELIVERY-PLAN.md', 'utf8')
+    expect(PLAN).toContain('~~Usable at 390px width~~')
+    expect(PLAN).toContain('desktop-first')
+  })
+})
