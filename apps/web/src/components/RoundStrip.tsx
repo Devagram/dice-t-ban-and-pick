@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import type { PlayerView } from '@banpick/types'
 
 import { DRAW_HEADLINE, DRAW_NOTE } from '../copy.js'
+import { play } from '../sound.js'
 
 /**
  * Three rounds, and where the match stands.
@@ -79,6 +81,19 @@ function PrivilegeLabel({
  * matches end this way, which is often enough that a player will meet it.
  */
 export function Outcome({ view }: { view: PlayerView }) {
+  /**
+   * The result speaks last.
+   *
+   * The board tells the story first — the losing side recedes, the winner's cards rise and hold
+   * gold — and this arrives after that has played. Announcing the winner on the same frame the
+   * cards start moving would answer the question the sequence is asking, in the same way showing
+   * the ban buttons under a still-tumbling die once did.
+   */
+  useEffect(() => {
+    if (view.status !== 'COMPLETE' || view.outcome === null) return
+    play(view.outcome === 'DRAW' ? 'reveal' : view.outcome === view.seat ? 'win' : 'lose')
+  }, [view.status, view.outcome, view.seat])
+
   if (view.status !== 'COMPLETE' || view.outcome === null) return null
 
   if (view.outcome === 'DRAW') {

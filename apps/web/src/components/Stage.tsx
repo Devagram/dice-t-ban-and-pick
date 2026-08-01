@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Character, CharId, PlayerView, Seat, Slot, SlotIdx } from '@banpick/types'
 
 import { Portrait } from './Portrait.js'
+import { play } from '../sound.js'
 
 /**
  * The board, always in the same place.
@@ -277,7 +278,10 @@ export function Stage({
       setLockedIn(true)
       return
     }
-    const t = setTimeout(() => setLockedIn(true), LOCK_IN_DELAY_MS)
+    const t = setTimeout(() => {
+      setLockedIn(true)
+      play('lockIn')
+    }, LOCK_IN_DELAY_MS)
     return () => clearTimeout(t)
   }, [bothChosen])
 
@@ -450,6 +454,33 @@ function BanCell({
   )
 }
 
+/**
+ * A score that moves when it changes.
+ *
+ * Half points are real here — D21 scores a tied round 0.5 each — so this formats in halves rather
+ * than assuming integers, and it flashes on change so a point landing is visible even if you were
+ * reading the other side of the board when it happened.
+ */
+function Score({ value }: { value: number }) {
+  const previous = useRef(value)
+  const [bumped, setBumped] = useState(false)
+
+  useEffect(() => {
+    if (value === previous.current) return
+    previous.current = value
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    setBumped(true)
+    const t = setTimeout(() => setBumped(false), 600)
+    return () => clearTimeout(t)
+  }, [value])
+
+  return (
+    <span className={`side__score ${bumped ? 'side__score--bumped' : ''}`}>
+      {Number.isInteger(value) ? value : value.toFixed(1)}
+    </span>
+  )
+}
+
 function Side({
   title,
   seat,
@@ -561,7 +592,7 @@ function Side({
       <div className="side__head">
         <h3 className="side__title">{title}</h3>
         <span className="side__seat">{seat}</span>
-        <span className="side__score">{seatView.score}</span>
+        <Score value={seatView.score} />
       </div>
 
       {/*

@@ -27,9 +27,11 @@ export const META_BAN_HELP =
 
 export const MODE_BLURBS: Record<string, string> = {
   base: 'Both players draft in secret, then three rounds of ban and pick.',
+  // Rewritten 2026-07-31, when the ban moved in front of the draft and took the repick with it.
+  // The old copy still promised "anyone hit picks again", which no longer happens.
   'bring-ban1':
-    'Both players draft in secret and name one character to deny the other. Bans are revealed ' +
-    'first; anyone hit picks again before drafts are shown.',
+    'Each of you names one character to deny the other. Both bans are revealed, then you draft ' +
+    'in secret knowing what is gone.',
 }
 
 /** D23/D24 — the turn-order holder *decides*, and may put themselves second. */

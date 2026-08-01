@@ -72,11 +72,16 @@ export function Lobby({
 
   return (
     <main className="screen">
-      <header className="matchbar">
-        <span className="matchbar__room">{preview.roomCode}</span>
-        <span className="matchbar__seat">
-          {full ? 'Both seats taken' : `${preview.seatsAvailable.length} seat(s) open`}
-        </span>
+      {/*
+        The code is the whole reason this screen exists — it is what one person reads aloud to
+        another. It gets the room, not a line in a bar.
+      */}
+      <header className="codehero">
+        <p className="codehero__label">Room code</p>
+        <p className="codehero__code">{preview.roomCode}</p>
+        <p className={`codehero__seats ${full ? '' : 'codehero__seats--open'}`}>
+          {full ? 'Both seats taken' : `Waiting — ${preview.seatsAvailable.length} of 2 seats open`}
+        </p>
       </header>
 
       <RulesetCard

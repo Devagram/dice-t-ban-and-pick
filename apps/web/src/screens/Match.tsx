@@ -6,6 +6,8 @@ import { connect, type Transport, type TransportState } from '../transport.js'
 import { ActionBar, slotTargets } from '../components/ActionBar.js'
 import { DiceRoll } from '../components/DiceRoll.js'
 import { OpponentActivity } from '../components/OpponentActivity.js'
+import { PhaseTitle } from '../components/PhaseTitle.js'
+import { SoundToggle } from '../components/SoundToggle.js'
 import { DraftPanel, RecommitPanel } from '../components/DraftPanel.js'
 import { Outcome, RoundStrip } from '../components/RoundStrip.js'
 import { Stage, revealDurationMs } from '../components/Stage.js'
@@ -172,9 +174,11 @@ function MatchBody({
       <header className="matchbar">
         <span className="matchbar__room">{roomCode}</span>
         <span className="matchbar__seat">You are seat {view.seat}</span>
+        <SoundToggle />
         <ResumeLink roomCode={roomCode} seatToken={seatToken} />
       </header>
 
+      <PhaseTitle view={view} />
       <Outcome view={view} />
       <RoundStrip view={view} />
 

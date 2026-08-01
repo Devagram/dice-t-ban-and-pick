@@ -3,6 +3,7 @@ import type { Action, CharId, PlayerActionPayload, PlayerView } from '@banpick/t
 
 import { META_BAN_HELP, META_BAN_PROMPT, SEALED_NOTE } from '../copy.js'
 import { noteDrafted } from '../favourites.js'
+import { play } from '../sound.js'
 import { CharacterPicker } from './CharacterPicker.js'
 
 /**
@@ -106,6 +107,7 @@ export function DraftPanel({
   const removeId = removeRequest?.id ?? ''
   useEffect(() => {
     if (removeCount === 0) return
+    play('unpick')
     setPicks((p) => p.filter((x) => x !== removeId))
     setMetaBan((b) => (b === removeId ? null : b))
     // `removeId` is deliberately not a dependency: the counter is what marks a *new* request.
@@ -143,7 +145,10 @@ export function DraftPanel({
               roster={view.roster}
               selected={picks}
               remaining={commit.picks!.count - picks.length}
-              onSelect={(id) => setPicks((p) => [...p, id])}
+              onSelect={(id) => {
+                play('pick')
+                setPicks((p) => [...p, id])
+              }}
             />
           ) : null}
         </>

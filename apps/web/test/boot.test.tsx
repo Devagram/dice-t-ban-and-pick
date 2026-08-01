@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import { App } from '../src/App.js'
 import { ROSTER } from './fixtures.js'
@@ -15,10 +15,17 @@ import { ROSTER } from './fixtures.js'
  * So this mounts the real `App`, at each real route, against a stubbed network.
  */
 
+// Both shipped modes, because the home screen now *presents* the choice rather than hiding it in
+// a dropdown — and a card list with one card proves nothing about how a choice reads.
 const MODES = [
   {
     modeId: 'base',
     label: 'Standard Bo3 — draft ${draftCount}',
+    parameters: { draftCount: { values: [3, 4], default: 4, label: 'Characters drafted' } },
+  },
+  {
+    modeId: 'bring-ban1',
+    label: 'Bring ${draftCount}, Ban 1',
     parameters: { draftCount: { values: [3, 4], default: 4, label: 'Characters drafted' } },
   },
 ]
@@ -156,5 +163,55 @@ describe('the app boots', () => {
 
     await waitFor(() => expect(screen.getByRole('status')).toBeTruthy())
     expect(screen.getByRole('status').textContent).toContain('Connecting')
+  })
+})
+
+/**
+ * The front door looks like the thing it opens.
+ *
+ * These are structure tests, not taste tests: the mode choice is a set of cards carrying their
+ * own blurb rather than a `<select>` that hides it, the ban list shows faces rather than
+ * forty-five labels, and the lobby leads with the code somebody has to read aloud.
+ */
+describe('the front door', () => {
+  it('presents modes as cards, each carrying its own blurb', async () => {
+    goTo('/')
+    render(<App />)
+
+    // A dropdown shows one option at a time and gives the blurb nowhere to live.
+    expect(document.querySelector('select')).toBeNull()
+
+    await waitFor(() => expect(document.querySelectorAll('.modecard').length).toBeGreaterThan(1))
+    const cards = [...document.querySelectorAll('.modecard')]
+    for (const card of cards) {
+      expect(card.querySelector('.modecard__name')?.textContent).toBeTruthy()
+      expect(card.querySelector('.modecard__blurb')?.textContent).toBeTruthy()
+    }
+    // Exactly one is selected, and it says so to assistive tech as well as to the eye.
+    expect(cards.filter((c) => c.getAttribute('aria-checked') === 'true')).toHaveLength(1)
+  })
+
+  it('offers the global ban list as portraits, and marks a ban on the face', async () => {
+    goTo('/')
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /The Anvil/ })).toBeTruthy())
+    const tile = document.querySelector('.banpick')!
+    expect(tile.querySelector('.portrait')).toBeTruthy()
+
+    fireEvent.click(tile)
+    expect(tile.getAttribute('aria-pressed')).toBe('true')
+    // Greyed the same way a banned character is greyed everywhere else on the board.
+    expect(tile.querySelector('.portrait--dim')).toBeTruthy()
+  })
+
+  it('leads the lobby with the room code, not with a bar', async () => {
+    goTo('/j/ABC123')
+    render(<App />)
+
+    await waitFor(() => expect(document.querySelector('.codehero__code')).toBeTruthy())
+    expect(document.querySelector('.codehero__code')?.textContent).toBe('ABC123')
+    // Waiting is a state, not a caption — the open-seat line carries the live marker.
+    expect(document.querySelector('.codehero__seats--open')).toBeTruthy()
   })
 })

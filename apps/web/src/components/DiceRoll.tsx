@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { PlayerView, Seat } from '@banpick/types'
 
+import { play } from '../sound.js'
+
 /**
  * The priority roll, played out rather than reported.
  *
@@ -49,7 +51,12 @@ export function DiceRoll({
     let elapsed = 0
 
     throws.forEach((_, i) => {
-      timers.push(setTimeout(() => setStage({ index: i, phase: 'tumbling' }), elapsed))
+      timers.push(
+        setTimeout(() => {
+          setStage({ index: i, phase: 'tumbling' })
+          play('dice')
+        }, elapsed),
+      )
       elapsed += TUMBLE_MS
       timers.push(setTimeout(() => setStage({ index: i, phase: 'landed' }), elapsed))
       // A tie gets an extra beat to register before the next throw starts.

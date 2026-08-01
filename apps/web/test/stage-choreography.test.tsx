@@ -781,7 +781,10 @@ describe('the winner keeps its colour at the end', () => {
     expect(CSS_TEXT).toMatch(/\.side--won \.portrait--dim \{[^}]*filter:\s*none/)
   })
 
-  it('greys the losing side whole', () => {
-    expect(CSS_TEXT).toMatch(/\.side--lost \.cell \{[^}]*filter:\s*saturate/)
+  it('greys the losing side whole, as part of the end sequence', () => {
+    // The greying moved into the `recede` animation when the ending became ordered — the loser
+    // steps back *first*, then the winner rises. A static filter could not express that.
+    expect(CSS_TEXT).toMatch(/\.side--lost \.cell \{[^}]*animation:\s*recede/)
+    expect(CSS_TEXT).toMatch(/@keyframes recede \{[^]*?filter:\s*saturate\(0\.25\)/)
   })
 })

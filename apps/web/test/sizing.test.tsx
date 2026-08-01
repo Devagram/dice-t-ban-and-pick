@@ -250,3 +250,73 @@ describe('the board fits its container by scaling', () => {
     expect(PLAN).toContain('desktop-first')
   })
 })
+
+/**
+ * The design system, asserted where it can be.
+ *
+ * happy-dom does no cascade, so these read the stylesheet — which is the right level anyway: the
+ * failures worth catching here are structural (a token declared but never used, a modifier whose
+ * base was deleted, the same number written twice) rather than visual.
+ */
+describe('one visual system, not a pile of one-offs', () => {
+  it('ships the display face from public/, with no external request', () => {
+    // Same rule as the hero art: nothing in the critical path comes from a CDN.
+    expect(CSS).toMatch(/@font-face \{[^}]*url\('\/fonts\/barlow-condensed-\d+\.woff2'\)/)
+    expect(CSS).not.toMatch(/@import|fonts\.googleapis|fonts\.gstatic/)
+  })
+
+  it('states reduced motion once, not once per animation', () => {
+    // It used to appear eight times, each disabling a different animation by hand — eight
+    // chances to add a ninth and forget it.
+    const occurrences = CSS.match(/@media \(prefers-reduced-motion/g) ?? []
+    expect(occurrences).toHaveLength(1)
+  })
+
+  it('keeps a static ring on the three effects that carry meaning', () => {
+    // The chosen card, the lock-in ring and the winner are not decoration — they say which
+    // character is being played, that both are committed, and who won. Reduced motion removes
+    // the movement, not the message.
+    const block = /@media \(prefers-reduced-motion[^]*$/.exec(CSS)![0]
+    for (const selector of ['.cell--chosen', '.lockin', '.side--won .cell']) {
+      expect(block).toContain(selector)
+    }
+  })
+
+  it('uses its own type and motion tokens rather than redeclaring the values', () => {
+    for (const token of ['--font-display', '--step-3', '--t-base', '--ease-out', '--clip-corner']) {
+      expect(CSS, `${token} is declared`).toContain(`${token}:`)
+      expect(CSS, `${token} is used`).toContain(`var(${token})`)
+    }
+  })
+})
+
+/**
+ * No selector declared twice.
+ *
+ * Five bugs this session came from one shape: a rule appended rather than edited, so two rules
+ * claimed one selector and the later one silently dropped or overrode what the first said. The
+ * `.tile__name` padding, the `.cell` base, `.cell--chosen`, `.side--lost .cell`, and `.outcome`
+ * all went that way. This is the check that would have caught every one of them.
+ */
+describe('each selector is declared once', () => {
+  it('has no top-level rule declared twice', () => {
+    const seen = new Map<string, number>()
+    // Top-level only: a selector repeated *inside* a media query is how an override is spelled,
+    // and is not the mistake being looked for.
+    for (const line of CSS.split(/\r?\n/)) {
+      const match = /^([.#][a-z][^{]*?) \{$/.exec(line)
+      if (!match) continue
+      const selector = match[1]!.trim()
+      seen.set(selector, (seen.get(selector) ?? 0) + 1)
+    }
+
+    const duplicated = [...seen.entries()]
+      .filter(([, n]) => n > 1)
+      // The one intentional pair: `.portrait--card, .cell__frame` share a geometry rule, and
+      // `.cell__frame` adds its own appearance on top. Documented where it is written.
+      .filter(([selector]) => selector !== '.cell__frame')
+      .map(([selector, n]) => `${selector} ×${n}`)
+
+    expect(duplicated).toEqual([])
+  })
+})

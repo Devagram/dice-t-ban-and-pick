@@ -3,6 +3,7 @@ import type { Character } from '@banpick/types'
 
 import { createMatch, fetchRoster, listModes, type ModeSummary } from '../api.js'
 import { MODE_BLURBS } from '../copy.js'
+import { Portrait } from '../components/Portrait.js'
 
 /**
  * §12.1 — the host selects mode, **its parameters** (D25), and the global ban list.
@@ -60,30 +61,42 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
 
   return (
     <main className="screen">
-      <h1 className="title">Ban &amp; Pick</h1>
+      {/* The front door should look like the thing it opens. */}
+      <header className="hero">
+        <h1 className="title">Ban &amp; Pick</h1>
+        <p className="hero__sub">Dice Throne · draft, ban, and settle it</p>
+      </header>
 
       <section className="panel">
         <h2 className="panel__title">Start a match</h2>
 
-        <label className="field">
-          <span className="field__label">Mode</span>
-          <select
-            className="field__input"
-            value={modeId}
-            onChange={(e) => {
-              const next = modes.find((m) => m.modeId === e.target.value)
-              setModeId(e.target.value)
-              if (next) setParameters(defaultsOf(next))
-            }}
-          >
+        {/*
+          Modes as cards rather than a `<select>`.
+          
+          There are two of them and the difference between them is the whole decision — a dropdown
+          hides that behind a click and gives the blurb nowhere to live.
+        */}
+        <fieldset className="field">
+          <legend className="field__label">Mode</legend>
+          <div className="modes" role="radiogroup" aria-label="Mode">
             {modes.map((m) => (
-              <option key={m.modeId} value={m.modeId}>
-                {m.label.replace(/\$\{\w+\}/g, '…')}
-              </option>
+              <button
+                key={m.modeId}
+                type="button"
+                role="radio"
+                aria-checked={modeId === m.modeId}
+                className={`modecard ${modeId === m.modeId ? 'modecard--on' : ''}`}
+                onClick={() => {
+                  setModeId(m.modeId)
+                  setParameters(defaultsOf(m))
+                }}
+              >
+                <span className="modecard__name">{m.label.replace(/\$\{\w+\}/g, '…')}</span>
+                <span className="modecard__blurb">{MODE_BLURBS[m.modeId] ?? ''}</span>
+              </button>
             ))}
-          </select>
-        </label>
-        <p className="field__help">{MODE_BLURBS[modeId] ?? ''}</p>
+          </div>
+        </fieldset>
 
         {mode
           ? Object.entries(mode.parameters).map(([name, spec]) => (
@@ -110,28 +123,35 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
           <fieldset className="field">
             <legend className="field__label">Ban for tonight (optional)</legend>
             <p className="field__help">Out for both of you, before anything else.</p>
+            {/* Faces, not a wall of names. People recognise a portrait long before they read
+                forty-five labels, and the banned ones grey out the way they do everywhere else. */}
             <div className="banlist">
-              {roster.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`chip ${globalBanned.includes(c.id) ? 'chip--ban' : ''}`}
-                  aria-pressed={globalBanned.includes(c.id)}
-                  onClick={() =>
-                    setGlobalBanned((b) =>
-                      b.includes(c.id) ? b.filter((x) => x !== c.id) : [...b, c.id],
-                    )
-                  }
-                >
-                  {c.name}
-                </button>
-              ))}
+              {roster.map((c) => {
+                const banned = globalBanned.includes(c.id)
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`banpick ${banned ? 'banpick--on' : ''}`}
+                    aria-pressed={banned}
+                    title={c.blurb}
+                    onClick={() =>
+                      setGlobalBanned((b) =>
+                        b.includes(c.id) ? b.filter((x) => x !== c.id) : [...b, c.id],
+                      )
+                    }
+                  >
+                    <Portrait character={c} size="head" dimmed={banned} />
+                    <span className="banpick__name">{c.name}</span>
+                  </button>
+                )
+              })}
             </div>
           </fieldset>
         ) : null}
 
         <button type="button" className="btn btn--primary" disabled={busy} onClick={create}>
-          Create match
+          {busy ? 'Creating…' : 'Create match'}
         </button>
       </section>
 
