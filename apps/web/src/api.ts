@@ -78,3 +78,63 @@ export function claimSeat(roomCode: string): Promise<ClaimSeatResponse> {
     body: JSON.stringify({ playerId: player.id, displayName: player.name }),
   }).then(json<ClaimSeatResponse>)
 }
+
+// --- D29: names, standings, head-to-head ---------------------------------------------------
+
+export interface Standing {
+  playerId: string
+  name: string
+  wins: number
+  losses: number
+  draws: number
+}
+
+export interface MatchRecord {
+  roomCode: string
+  playedAt: number
+  a: { id: string; name: string }
+  b: { id: string; name: string }
+  winnerId: string | null
+  scoreA: number
+  scoreB: number
+  detail: {
+    rounds: (string | null)[]
+    seats: Record<'A' | 'B', { drafted: string[]; played: string[]; metaBan: string | null }>
+  } | null
+}
+
+export interface HeadToHead {
+  wins: number
+  losses: number
+  draws: number
+  matches: MatchRecord[]
+}
+
+/**
+ * Claims a name for this browser.
+ *
+ * Resolves to `null` on success, or the reason it failed. A rejection rather than a throw because
+ * "somebody already has that name" is an ordinary answer the field should show, not an error.
+ */
+export async function claimName(playerId: string, displayName: string): Promise<string | null> {
+  const response = await fetch('/api/player/name', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId, displayName }),
+  })
+  if (response.ok) return null
+  const body = (await response.json().catch(() => ({}))) as { error?: string }
+  return body.error === 'NAME_TAKEN'
+    ? 'Somebody here already uses that name.'
+    : 'Could not save that name.'
+}
+
+export function fetchStandings(): Promise<{ standings: Standing[] }> {
+  return fetch('/api/standings').then(json<{ standings: Standing[] }>)
+}
+
+export function fetchHeadToHead(a: string, b: string): Promise<HeadToHead> {
+  return fetch(`/api/head-to-head?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`).then(
+    json<HeadToHead>,
+  )
+}

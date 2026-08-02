@@ -126,6 +126,31 @@ describe('you are told what you may not ban, and only about yourself', () => {
   })
 })
 
+describe('D29 — who is in each seat is public', () => {
+  it('shows both players, because a name is shown to the other side by design', () => {
+    // Unlike the ban denial above, this is *not* per-seat: the opponent's name is displayed all
+    // match, and their id is what a head-to-head record is looked up by.
+    const state = startMatch({
+      mode: bringBan1Mode,
+      draftCount: 4,
+      roster: ROSTER_10,
+      players: { A: { id: 'p-a', name: 'Tom' }, B: { id: 'p-b', name: 'Alex' } },
+    })
+
+    const view = project(state, 'A')
+    expect(view.you.player).toEqual({ id: 'p-a', name: 'Tom' })
+    expect(view.opponent.player).toEqual({ id: 'p-b', name: 'Alex' })
+  })
+
+  it('omits the field for a seat that never gave one', () => {
+    // Absent rather than an empty object — the same shape §7 uses throughout, and an older
+    // client sends no identity at all.
+    const state = startMatch({ mode: bringBan1Mode, draftCount: 4, roster: ROSTER_10 })
+    expect('player' in project(state, 'A').you).toBe(false)
+    expect('player' in project(state, 'A').opponent).toBe(false)
+  })
+})
+
 describe('the history is a fact in the log, not a lookup', () => {
   it('arrives before anything is committed, and is refused afterwards', () => {
     // Late would mean a pool narrowing under a player mid-decision.

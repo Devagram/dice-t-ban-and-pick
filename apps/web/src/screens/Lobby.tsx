@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { LobbyPreview } from '@banpick/types'
 
-import { claimSeat, fetchPreview } from '../api.js'
+import { claimName, claimSeat, fetchPreview } from '../api.js'
 import { RulesetCard } from '../components/RulesetCard.js'
-import { playerName, setPlayerName } from '../player.js'
+import { playerId, playerName, setPlayerName } from '../player.js'
 import { rememberSeat } from '../transport.js'
 
 /**
@@ -24,6 +24,8 @@ export function Lobby({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState(playerName)
+  /** D29 — "somebody already uses that name" is an ordinary answer, shown beside the field. */
+  const [nameError, setNameError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchPreview(roomCode)
@@ -121,8 +123,24 @@ export function Lobby({
               onChange={(e) => {
                 setName(e.target.value)
                 setPlayerName(e.target.value)
+                setNameError(null)
+              }}
+              /*
+               * Claimed on blur rather than on every keystroke: the first browser to use a name
+               * owns it (D29), and claiming mid-typing would reserve "T", "To", "Tom" on the way
+               * past — locking three names out of a group of four people.
+               */
+              onBlur={() => {
+                const trimmed = name.trim()
+                if (!trimmed) return
+                void claimName(playerId(), trimmed).then(setNameError)
               }}
             />
+            {nameError ? (
+              <p className="field__error" role="alert">
+                {nameError}
+              </p>
+            ) : null}
             <p className="field__help">
               Shown to your opponent, and used to remember which ban you brought last time. Kept in
               this browser only — optional, and the match plays fine without it.

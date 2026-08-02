@@ -17,6 +17,8 @@ declare namespace Cloudflare {
     MATCH: DurableObjectNamespace
     /** D28 — one per pairing, keyed by the two player ids sorted. */
     PAIR_HISTORY: DurableObjectNamespace
+    /** D29 — one per deployment: names, results, standings. */
+    REGISTRY: DurableObjectNamespace
   }
 }
 

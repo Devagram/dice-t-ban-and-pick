@@ -91,6 +91,8 @@ export interface MatchOptions {
   globalBanned?: CharId[]
   /** Overridable so a test can exercise G3's blast-radius case with D12 relaxed. */
   constraints?: Partial<DraftConstraints>
+  /** D29 — who sat down. Omitted, both seats are anonymous, which is what an older client does. */
+  players?: Partial<Record<Seat, { id: string; name: string }>>
 }
 
 /**
@@ -136,7 +138,12 @@ export function startMatch(opts: MatchOptions): MatchState {
   )
 
   for (const seat of SEATS) {
-    state = apply(state, seat, { type: 'SEAT_FILLED', seat })
+    const player = opts.players?.[seat]
+    state = apply(
+      state,
+      seat,
+      player ? { type: 'SEAT_FILLED', seat, player } : { type: 'SEAT_FILLED', seat },
+    )
   }
   return state
 }

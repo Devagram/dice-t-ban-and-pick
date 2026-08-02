@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { Home } from './screens/Home.js'
+import { Leaderboard } from './screens/Leaderboard.js'
 import { Lobby } from './screens/Lobby.js'
 import { Match } from './screens/Match.js'
 import { recallSeat, rememberSeat } from './transport.js'
@@ -23,6 +24,7 @@ type Route =
   | { screen: 'home' }
   | { screen: 'lobby'; roomCode: string }
   | { screen: 'match'; roomCode: string; seatToken: string; websocketUrl: string }
+  | { screen: 'leaderboard' }
 
 function readRoute(): Route {
   const path = location.pathname
@@ -55,6 +57,8 @@ function readRoute(): Route {
       : { screen: 'lobby', roomCode }
   }
 
+  if (/^\/leaderboard\/?$/.test(path)) return { screen: 'leaderboard' }
+
   return { screen: 'home' }
 }
 
@@ -73,6 +77,16 @@ export function App() {
   }, [])
 
   switch (route.screen) {
+    case 'leaderboard':
+      return (
+        <Leaderboard
+          onBack={() => {
+            history.pushState(null, '', '/')
+            setRoute({ screen: 'home' })
+          }}
+        />
+      )
+
     case 'home':
       return (
         <Home

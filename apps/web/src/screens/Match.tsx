@@ -6,6 +6,7 @@ import { connect, type Transport, type TransportState } from '../transport.js'
 import { ActionBar, slotTargets } from '../components/ActionBar.js'
 import { DiceRoll } from '../components/DiceRoll.js'
 import { OpponentActivity } from '../components/OpponentActivity.js'
+import { HeadToHead } from '../components/HeadToHead.js'
 import { PhaseTitle } from '../components/PhaseTitle.js'
 import { SoundToggle } from '../components/SoundToggle.js'
 import { DraftPanel, RecommitPanel } from '../components/DraftPanel.js'
@@ -180,6 +181,8 @@ function MatchBody({
 
       <PhaseTitle view={view} />
       <Outcome view={view} />
+      {/* Under the result, so a win lands with what it means for the series. */}
+      <HeadToHead view={view} />
       <RoundStrip view={view} />
 
       {/*

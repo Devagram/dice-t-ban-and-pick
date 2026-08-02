@@ -60,6 +60,16 @@ function playersOf(state: MatchState): Record<Seat, { id: string; name: string }
   return found.A && found.B ? { A: found.A, B: found.B } : null
 }
 
+/** What one seat drafted, played, and banned. Display data; the log remains the record. */
+function seatDetail(state: MatchState, seat: Seat) {
+  const slots = state.seats[seat].slots.value
+  return {
+    drafted: slots.map((s) => s.characterId),
+    played: slots.filter((s) => s.consumed).map((s) => s.characterId),
+    metaBan: state.seats[seat].metaBanPlaced.value,
+  }
+}
+
 /** The claim body, treated as untrusted — an older client sends none at all. */
 async function readPlayer(request: Request): Promise<{ id: string; name: string } | null> {
   try {
@@ -392,6 +402,53 @@ export class MatchDO extends DurableObject<Env> {
     })
   }
 
+  /**
+   * D29 — files the result, once the match has one.
+   *
+   * Upserted by room code, so this is safe to call on every settle and safe to call again after
+   * D15's undo reopens a finished match and it finishes differently. Doing it here rather than on
+   * a MATCH_COMPLETE hook is deliberate: an undo-then-recomplete produces a *second* completion,
+   * and a hook that only fired the first time would leave the leaderboard describing a match that
+   * did not happen.
+   */
+  private async recordResult(state: MatchState): Promise<void> {
+    if (state.status !== 'COMPLETE' || state.outcome === null) return
+
+    const players = playersOf(state)
+    if (!players) return // an anonymous seat has nothing to put on a leaderboard
+
+    const roomCode = getMeta(this.sql, 'roomCode') ?? ''
+    if (!roomCode) return
+
+    const winnerId = state.outcome === 'DRAW' ? null : players[state.outcome as Seat].id
+
+    await this.env.REGISTRY.get(this.env.REGISTRY.idFromName('registry')).fetch(
+      'https://registry/record',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          roomCode,
+          playedAt: Date.now(),
+          a: players.A,
+          b: players.B,
+          winnerId,
+          scoreA: state.seats.A.score,
+          scoreB: state.seats.B.score,
+          // Enough to answer "what do they always play?" — §15's open O6 question — without
+          // keeping the event log, which is a separate feature with separate retention.
+          detail: {
+            rounds: state.rounds.map((r) => r.result),
+            seats: {
+              A: seatDetail(state, 'A'),
+              B: seatDetail(state, 'B'),
+            },
+          },
+        }),
+      },
+    )
+  }
+
   private history(a: string, b: string): DurableObjectStub {
     const name = pairKey(a, b)
     return this.env.PAIR_HISTORY.get(this.env.PAIR_HISTORY.idFromName(name))
@@ -593,6 +650,7 @@ export class MatchDO extends DurableObject<Env> {
        * until it lands, and a failure costs one forgotten ban rather than a stuck match.
        */
       this.ctx.waitUntil(this.recordBans(settled))
+      this.ctx.waitUntil(this.recordResult(settled))
       return
     }
 

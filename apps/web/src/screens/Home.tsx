@@ -4,7 +4,6 @@ import type { Character } from '@banpick/types'
 import { createMatch, fetchRoster, listModes, type ModeSummary } from '../api.js'
 import { MODE_BLURBS } from '../copy.js'
 import { Portrait } from '../components/Portrait.js'
-import { playerName, setPlayerName } from '../player.js'
 
 /**
  * §12.1 — the host selects mode, **its parameters** (D25), and the global ban list.
@@ -18,7 +17,6 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
   const [parameters, setParameters] = useState<Record<string, string | number>>({})
   const [globalBanned, setGlobalBanned] = useState<string[]>([])
   const [roster, setRoster] = useState<Character[]>([])
-  const [name, setName] = useState(playerName)
   /** D28 — the host's answer; `rulesetFor` on the server turns it into a rule. */
   const [allowRepeatBans, setAllowRepeatBans] = useState(false)
   const [joinCode, setJoinCode] = useState('')
@@ -69,32 +67,10 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
       <header className="hero">
         <h1 className="title">Ban &amp; Pick</h1>
         <p className="hero__sub">Dice Throne · draft, ban, and settle it</p>
+        <a className="btn btn--quiet" href="/leaderboard">
+          Leaderboard
+        </a>
       </header>
-
-      <section className="panel">
-        <h2 className="panel__title">You</h2>
-        <label className="field">
-          <span className="field__label">Your name</span>
-          <input
-            className="field__input"
-            // Named explicitly: the wrapping label also holds the help paragraph, so the computed
-            // accessible name would otherwise be "Your name" followed by a sentence of
-            // explanation — technically labelled, useless to listen to.
-            aria-label="Your name"
-            value={name}
-            placeholder="Tom"
-            maxLength={40}
-            onChange={(e) => {
-              setName(e.target.value)
-              setPlayerName(e.target.value)
-            }}
-          />
-          <p className="field__help">
-            Shown to your opponent, and used to remember which ban you brought last time. Kept in
-            this browser only.
-          </p>
-        </label>
-      </section>
 
       <section className="panel">
         <h2 className="panel__title">Start a match</h2>

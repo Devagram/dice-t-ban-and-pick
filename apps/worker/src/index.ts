@@ -10,6 +10,7 @@ const ROSTER = rosterAsset as Roster
 
 export { MatchDO } from './MatchDO.js'
 export { PairHistoryDO } from './PairHistoryDO.js'
+export { RegistryDO } from './RegistryDO.js'
 
 /**
  * The Worker entry point: a router, and nothing more.
@@ -41,6 +42,24 @@ export default {
       // lobby concern with no match attached — so it is served here rather than by conjuring a
       // Durable Object to ask. Display data only; §16 says the roster is public.
       return json({ rosterVersion: ROSTER.rosterVersion, characters: ROSTER.characters })
+    }
+
+    /*
+     * D29 — the registry, one object for the deployment.
+     *
+     * Routed here rather than through a match DO because none of it belongs to a match: a name is
+     * claimed before you have a room, and a leaderboard outlives every room on it.
+     */
+    if (
+      path.startsWith('/api/player/') ||
+      path === '/api/standings' ||
+      path === '/api/head-to-head'
+    ) {
+      const registry = env.REGISTRY.get(env.REGISTRY.idFromName('registry'))
+      const action = path === '/api/player/name' ? 'claim' : path.slice('/api/'.length)
+      const target = new URL(`${url.origin}/${action}`)
+      target.search = url.search
+      return registry.fetch(new Request(target, request))
     }
 
     if (path === '/api/match' && request.method === 'POST') {

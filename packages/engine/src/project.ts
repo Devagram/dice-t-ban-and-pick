@@ -30,6 +30,15 @@ import { moduleFor } from './modules/index.js'
 export function project(state: MatchState, seat: Seat): PlayerView {
   const revealed = new Set(state.log.map((e) => e.tag))
 
+  // D29 — who sat down, read off the log. Public on both seats: the name is shown to the other
+  // player by design, and the id is what a head-to-head record is looked up by.
+  const players: Partial<Record<Seat, { id: string; name: string }>> = {}
+  for (const event of state.log) {
+    if (event.payload.type === 'SEAT_FILLED' && event.payload.player) {
+      players[event.payload.seat] = event.payload.player
+    }
+  }
+
   /** The §7 predicate itself, in one place so there is one place to get it wrong. */
   const visible = (slice: Slice<unknown>): boolean =>
     slice.owner === null ||
@@ -48,6 +57,8 @@ export function project(state: MatchState, seat: Seat): PlayerView {
     // the difference real, and the difference is the whole guarantee.
     if (visible(src.slots)) view.slots = src.slots.value
     if (visible(src.metaBanPlaced)) view.metaBanPlaced = src.metaBanPlaced.value
+    const player = players[s]
+    if (player) view.player = player
     // D28 — your own denial, and only your own. Theirs would say what they banned last set.
     if (s === seat && state.deniedMetaBans[s].length > 0) {
       view.deniedMetaBans = [...state.deniedMetaBans[s]]

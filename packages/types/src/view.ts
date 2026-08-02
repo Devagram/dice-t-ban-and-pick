@@ -31,6 +31,11 @@ export interface SeatView {
    */
   deniedMetaBans?: CharId[]
   /**
+   * D29 — who is in this seat, when they said. Public: the name is shown to the other player by
+   * design, and the id is needed to look up a head-to-head record. Absent for an anonymous seat.
+   */
+  player?: { id: string; name: string }
+  /**
    * That a commitment *exists* is public — the UI has to render "waiting for opponent".
    * What it contains is not. Sealing the fact as well would make the wait unexplainable.
    */

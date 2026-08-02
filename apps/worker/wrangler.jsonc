@@ -15,6 +15,9 @@
       // D28 — one object per *pairing*, holding the last meta ban between those two players. The
       // only state in this app that outlives a match; see the decision for why it stays that small.
       { "name": "PAIR_HISTORY", "class_name": "PairHistoryDO" },
+      // D29 — one per deployment: claimed names, match results, and the standings derived from
+      // them. Single object by design; see the scale note in RegistryDO.ts.
+      { "name": "REGISTRY", "class_name": "RegistryDO" },
     ],
   },
 
@@ -43,6 +46,10 @@
       // edited, and rewriting one is how a deployed object loses its storage.
       "tag": "v2",
       "new_sqlite_classes": ["PairHistoryDO"],
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": ["RegistryDO"],
     },
   ],
 

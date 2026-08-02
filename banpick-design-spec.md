@@ -433,7 +433,7 @@ Cutting `COMPENSATION` takes the whole `advantageHolder` apparatus with it — t
 
 **D27 — the concurrency guarantee is also in the data model.** `seq` is the event log's primary key, so two writers who both read a log of length N both try to write `seq = N` and exactly one can win; the loser re-reads and re-_judges_ rather than re-appending, because the opponent's event may have made the action illegal. Under a Durable Object this can never fire — §11's single-threading is what makes simultaneous commits safe, and Phase 3 tests that it holds. It exists because that guarantee currently lives in the **runtime**, and a guarantee that lives in the runtime is one a future deployment decision can remove silently. In the data model it holds on any host that can run two processes, which is every host except this one. Cost: one conditional insert and a bounded retry.
 
-**D28 — the same meta ban may not be brought against the same person two sets running, and that is the first state in this app that outlives a match.** The rule is small; the precedent is not, so it is written down rather than absorbed. **D19 said no tournament layer**, and one honest reading of that was "no persistent player state at all" — this breaks that reading and keeps the rest: identity is a name you type plus an id your browser generates, there are no accounts, no passwords, nothing that crosses devices except the resume link D17 already mints, and the only thing remembered is _the last ban between one pair of players_. Not a history, not a record, not a ranking.
+**D28 — the same meta ban may not be brought against the same person two sets running, and that is the first state in this app that outlives a match.** The rule is small; the precedent is not, so it is written down rather than absorbed. **D19 said no tournament layer**, and one honest reading of that was "no persistent player state at all" — this breaks that reading and keeps the rest: identity is a name you type plus an id your browser generates, there are no accounts, no passwords, nothing that crosses devices except the resume link D17 already mints, and the only thing remembered is _the last ban between one pair of players_. ~~Not a history, not a record, not a ranking.~~ **That last clause is superseded by D29 (2026-08-01):** results, head-to-head records and a leaderboard now exist. D28's _mechanism_ is unchanged — the ban rule still keys on the generated id and still reaches the engine only through the log — but its promise that nothing else would be remembered no longer holds, and is struck here rather than quietly outgrown.
 
 Three consequences shaped the implementation, and each is a place this could have gone wrong.
 
@@ -444,6 +444,20 @@ Three consequences shaped the implementation, and each is a place this could hav
 **The rule is a term, not a branch.** `legalMetaBanPoolExpr` takes the constraints and pushes `DENIED_META_BAN` into the difference when the host has it on — the same test D12's `selfDuplicates` had to pass, and the same reason: a rule expressed as configuration can be turned off, audited, and replayed, while a rule expressed as an `if` inside the evaluator cannot. §13's roster floor moves with it: with the rule on, viability must assume one further character is unavailable, and that check runs at creation before the pairing is known, so it assumes the worst case rather than the actual history.
 
 Names are self-asserted and deliberately unverified — §1's trust model is friendly opponents. The generated id is what the history keys on, so a mistyped name costs a wrong label rather than a bypassed rule; typing someone else's name does not inherit their history.
+
+**D29 — there are standings now, and the boundary moved rather than dissolved.** §17 said "no standings" and D28 said "not a record, not a ranking". Both are amended at their own sites, because a spec that still forbids what the app ships is worse than one that never forbade it.
+
+**What changed and why.** D19's reasoning was about _scheduling apparatus_ — events, organizers, brackets, the resolution paths and nullable fields that come with them. A scoreboard among people who share a deployment link is not that. It is the same group of friends §1 already assumes, keeping track of who is ahead. The premium D19 declined to pay was generality for an unknown use case; this is a known one, asked for after the tool had been played.
+
+**What still holds, and should be quoted back at the next request:** no events, no organizers, no brackets, no scheduling, no seasons, no rating systems. D19 is amended, not repealed.
+
+Three things this forced, each of which is where it could have gone wrong.
+
+**A name became an identifier, so it has to be ownable.** D28 could leave names unverified because a wrong one cost a wrong label. A ranking makes that a wrong _record_, so names are claimed on first use per deployment and bound to the browser id that claimed them. Still no passwords, and losing the browser still loses the name — the same trade D17 makes for seats, now with a consequence worth stating in the UI rather than discovering.
+
+**Recording had to be idempotent, because D15 lets a finished match un-finish.** Either seat may undo the last result, _including on the final round_, which reopens a completed match — so a match can complete, un-complete, and complete again with a different winner. Results are therefore upserted by room code and the totals derived from what is stored, never incremented. A counter would double-count an undo-then-recomplete and nothing downstream would ever notice, which is the kind of wrong that survives for months.
+
+**It is a scoreboard, not an archive.** Each match keeps its result and the characters drafted, played and banned — about a kilobyte, and enough to answer "what do they always play?", which is the open O6 question about whether the meta ban earns its place. It does _not_ keep the event log: §14.5's export is a separate feature with different retention consequences, and conflating them would decide a data-retention question by accident.
 
 Free plan headroom, verified July 2026 and **re-verified at the start of Phase 3** against the current published limits. Every row held; two are new.
 
@@ -597,7 +611,9 @@ That does not sink the mode for its actual use case. In casual play against the 
 
 ## 17. Scope boundary (D19)
 
-**There will be no tournament layer.** No events, no organizers, no brackets, no standings. This tool is for casual games between people who know each other.
+**There will be no tournament layer.** No events, no organizers, no brackets. This tool is for casual games between people who know each other.
+
+> **Amended 2026-08-01 by D29.** This sentence read "no brackets, **no standings**" until a leaderboard and match history were added. The standings clause is struck; everything else in it stands. Read D29 before adding to this — the line it draws is between a scoreboard among people who share a link, and the scheduling apparatus D19 rejected.
 
 This reverses earlier advice to "keep the door open" with a nullable `eventId` and an organizer-resolvable ruleset. That advice was insurance priced against an unknown. The unknown is now known, and the premium is no longer worth paying — carrying two unused fields and a generalized resolution path forever, to serve a use case that has been ruled out, is exactly the speculative generality the rest of this design avoids.
 

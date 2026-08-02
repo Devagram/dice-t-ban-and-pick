@@ -272,7 +272,16 @@ describe('the rule you are consenting to is on the card', () => {
  * `/j/CODE` and go straight to the seat button — so without a field here, seat B could generate
  * an id and never a name, and the host would face a blank label all match.
  */
-describe('the joiner can name themselves', () => {
+describe('both players are named at the moment they sit', () => {
+  it('does not ask on the home screen, before there is anything to sit at', async () => {
+    // The host lands on the lobby after creating, so they are asked in the same place and at the
+    // same moment as the joiner. Asking up front made naming a step before choosing a mode.
+    goTo('/')
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('Start a match')).toBeTruthy())
+    expect(screen.queryByLabelText('Your name')).toBeNull()
+  })
+
   it('offers a name field before the seat button', async () => {
     goTo('/j/ABC123')
     render(<App />)
