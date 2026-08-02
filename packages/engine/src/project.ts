@@ -6,6 +6,7 @@ import {
   type Seat,
   type SeatView,
   type Slice,
+  type Slot,
   type SlotIdx,
 } from '@banpick/types'
 
@@ -55,7 +56,7 @@ export function project(state: MatchState, seat: Seat): PlayerView {
     }
     // Assigned conditionally rather than set to undefined: `exactOptionalPropertyTypes` makes
     // the difference real, and the difference is the whole guarantee.
-    if (visible(src.slots)) view.slots = src.slots.value
+    if (visible(src.slots)) view.slots = src.slots.value.map((slot) => maskConsumed(slot, s))
     if (visible(src.metaBanPlaced)) view.metaBanPlaced = src.metaBanPlaced.value
     const player = players[s]
     if (player) view.player = player
@@ -64,6 +65,27 @@ export function project(state: MatchState, seat: Seat): PlayerView {
       view.deniedMetaBans = [...state.deniedMetaBans[s]]
     }
     return view
+  }
+
+  /**
+   * §7 — a slot must not report itself spent before the selection that spent it is visible.
+   *
+   * Selecting consumes the slot immediately (D6 consumes it even on a tie), and `slots` is public
+   * once the draft reveals. In round 2 that combination leaked the whole point of the round: the
+   * select is `SIMULTANEOUS_HIDDEN`, so `selection` is correctly sealed — but the opponent could
+   * see *which* of your characters had just become consumed, which is the same fact by another
+   * route. Whoever picked second could simply read the board.
+   *
+   * So `consumed` is derived from the selection that caused it, and inherits that selection's
+   * visibility. The flag was always in the projection; it only became *legible* when the board
+   * started using position and colour to say "spent".
+   */
+  const maskConsumed = (slot: Slot, owner: Seat): Slot => {
+    if (!slot.consumed || owner === seat) return slot
+    const consumedVisibly = state.rounds.some(
+      (round) => round.selection[owner].value === slot.index && visible(round.selection[owner]),
+    )
+    return consumedVisibly ? slot : { ...slot, consumed: false }
   }
 
   const roundView = (index: number): RoundView => {
