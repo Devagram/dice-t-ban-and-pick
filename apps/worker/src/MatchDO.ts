@@ -290,6 +290,16 @@ export class MatchDO extends DurableObject<Env> {
      * trust model), which is why the *id* is what the rule keys on and the name is only a label.
      */
     const player = await readPlayer(request)
+    /*
+     * D29 — a seat needs a name.
+     *
+     * The lobby disables the button without one, but a disabled button is a suggestion. An
+     * unnamed seat leaves the match off the leaderboard and gives the no-repeat-ban rule nothing
+     * to key on, so the game would behave differently for that player without saying so.
+     */
+    if (!player || !player.name) {
+      return json({ error: 'NAME_REQUIRED', detail: 'take a seat with a name' }, 400)
+    }
 
     const event: EventEnvelope = {
       v: 1,

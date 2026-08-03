@@ -151,6 +151,43 @@ describe('head-to-head is one record read from either side', () => {
   })
 })
 
+describe('rounds are counted as well as matches', () => {
+  it('turns a 2–1 win into two round wins and one round loss', async () => {
+    const r = registry()
+    await record(r, { winnerId: 'p-a', detail: { rounds: ['A', 'B', 'A'] } })
+
+    const [tom, alex] = await standings(r).then((t) => [
+      t.find((s) => s.playerId === 'p-a')!,
+      t.find((s) => s.playerId === 'p-b')!,
+    ])
+    expect(tom).toMatchObject({ wins: 1, roundWins: 2, roundLosses: 1, roundDraws: 0 })
+    expect(alex).toMatchObject({ losses: 1, roundWins: 1, roundLosses: 2, roundDraws: 0 })
+  })
+
+  it('counts a tied round for both sides', async () => {
+    const r = registry()
+    await record(r, { winnerId: null, detail: { rounds: ['TIE', 'TIE', 'TIE'] } })
+    const table = await standings(r)
+    expect(table.every((s) => s.roundDraws === 3 && s.roundWins === 0)).toBe(true)
+  })
+
+  it('ignores a round nobody played', async () => {
+    // `stopWhenDecided` ends a match at 2–0, leaving the third round null. Counting it as
+    // anything would invent a result.
+    const r = registry()
+    await record(r, { winnerId: 'p-a', detail: { rounds: ['A', 'A', null] } })
+    const tom = (await standings(r)).find((s) => s.playerId === 'p-a')!
+    expect(tom.roundWins + tom.roundLosses + tom.roundDraws).toBe(2)
+  })
+
+  it('survives a record with no round detail at all', async () => {
+    const r = registry()
+    await record(r, { winnerId: 'p-a', detail: null })
+    const tom = (await standings(r)).find((s) => s.playerId === 'p-a')!
+    expect(tom).toMatchObject({ wins: 1, roundWins: 0 })
+  })
+})
+
 describe('the table ranks and refuses nonsense', () => {
   it('orders by wins, then by fewer losses', async () => {
     const r = registry()

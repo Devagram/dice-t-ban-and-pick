@@ -74,11 +74,13 @@ const VS_WIDTH_PX = 44
 /** `.stage__sides` gap — the space either side of the "vs", not the space between cells. */
 const SIDES_GAP_PX = 8
 /**
- * Everything on a card that is not the portrait: its padding, the gap under the art, and the
- * name. The ring has to clear all of it, and sizing from the portrait alone left it cutting
- * across the names.
+ * Everything on a card that is not the portrait: 6px padding top and bottom, the 4px gap under
+ * the art, and the name's line box. Measured rather than guessed — the first value was 26, four
+ * short, so every card overflowed its own row by four pixels and rode up over the text above it.
+ * `.cell` is given this height explicitly in CSS so the arithmetic and the rendering cannot
+ * disagree again.
  */
-const CARD_CHROME_PX = 26
+const CARD_CHROME_PX = 30
 /** Card height at rest. The portrait keeps the source art's 199×300, plus the chrome above. */
 const CARD_HEIGHT_PX = CELL_PX * (300 / 199) + CARD_CHROME_PX
 /** Breathing room, so the ring encloses the pair rather than tracing them. */

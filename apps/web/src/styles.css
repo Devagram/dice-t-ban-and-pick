@@ -844,6 +844,11 @@ select {
   font-size: 0.9rem;
 }
 
+/* Why the button above cannot be pressed. Warm rather than red: nothing has gone wrong yet. */
+.seatcta__note--blocking {
+  color: var(--warn, #e0b341);
+}
+
 /* --- Portraits ----------------------------------------------------------- */
 /*
  * Art is optional everywhere. The initials fallback is styled to the same footprint as a real
@@ -1367,6 +1372,9 @@ select {
  * the drawing and none of them had ever been asked to.
  */
 .cell {
+  /* Fills the slot, whose height is pinned from `CARD_HEIGHT_PX`. Without this the card sizes
+     itself from its contents and overflows the row it was measured for. */
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1524,14 +1532,18 @@ select {
 .cell__stamp {
   position: absolute;
   left: 50%;
-  top: 40%;
+  /* Centred on the portrait rather than the whole card, and sized to the band it sits in — it
+     was tall enough to cover most of the art it was supposed to annotate. */
+  top: 42%;
+  max-width: 92%;
   transform: translate(-50%, -50%) rotate(-8deg);
-  padding: 2px 6px;
+  padding: 1px 5px;
   border: 1px solid var(--danger);
   border-radius: 4px;
   background: color-mix(in srgb, #3a1f24 88%, transparent);
   color: #ffd7d7;
-  font-size: 0.55rem;
+  font-size: 0.5rem;
+  line-height: 1.4;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2119,7 +2131,7 @@ select {
 
 .table__row {
   display: grid;
-  grid-template-columns: 2.5rem 1fr 3rem 3rem 3rem;
+  grid-template-columns: 2.5rem 1fr 7.5rem 7.5rem;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -2162,6 +2174,30 @@ select {
 .table__num {
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+/* Matches and rounds, side by side — two questions about the same player. */
+.table__group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  text-align: center;
+  font-size: var(--step--1);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+
+.table__row:not(.table__row--head):not(.table__row--sub) .table__group {
+  color: inherit;
+  font-size: inherit;
+  letter-spacing: normal;
+}
+
+.table__row--sub {
+  background: transparent;
+  padding-top: 0;
+  padding-bottom: 4px;
 }
 
 /* A name somebody already owns is an ordinary answer, not an alarm — stated beside the field. */

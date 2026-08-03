@@ -46,9 +46,22 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
             <li className="table__row table__row--head" aria-hidden="true">
               <span className="table__rank" />
               <span className="table__name">Player</span>
-              <span className="table__num">W</span>
-              <span className="table__num">L</span>
-              <span className="table__num">D</span>
+              <span className="table__group">Matches</span>
+              <span className="table__group">Rounds</span>
+            </li>
+            <li className="table__row table__row--sub" aria-hidden="true">
+              <span className="table__rank" />
+              <span className="table__name" />
+              <span className="table__group">
+                <span className="table__num">W</span>
+                <span className="table__num">L</span>
+                <span className="table__num">D</span>
+              </span>
+              <span className="table__group">
+                <span className="table__num">W</span>
+                <span className="table__num">L</span>
+                <span className="table__num">D</span>
+              </span>
             </li>
             {standings.map((s, i) => (
               <li
@@ -60,9 +73,18 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
                   {s.name || 'Unnamed'}
                   {s.playerId === me ? <span className="table__you"> you</span> : null}
                 </span>
-                <span className="table__num">{s.wins}</span>
-                <span className="table__num">{s.losses}</span>
-                <span className="table__num">{s.draws}</span>
+                {/* Matches, then the rounds inside them — a 2–1 win is one match and three
+                    rounds, and the two answer different questions about a player. */}
+                <span className="table__group">
+                  <span className="table__num">{s.wins}</span>
+                  <span className="table__num">{s.losses}</span>
+                  <span className="table__num">{s.draws}</span>
+                </span>
+                <span className="table__group">
+                  <span className="table__num">{s.roundWins}</span>
+                  <span className="table__num">{s.roundLosses}</span>
+                  <span className="table__num">{s.roundDraws}</span>
+                </span>
               </li>
             ))}
           </ol>

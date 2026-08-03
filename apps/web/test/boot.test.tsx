@@ -241,7 +241,6 @@ describe('the rule you are consenting to is on the card', () => {
     const position = screen
       .getByText('Repeat bans')
       .compareDocumentPosition(screen.getByRole('button', { name: 'Take a seat' }))
-    // eslint-disable-next-line no-bitwise
     expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
@@ -294,7 +293,6 @@ describe('both players are named at the moment they sit', () => {
     const position = field.compareDocumentPosition(
       screen.getByRole('button', { name: 'Take a seat' }),
     )
-    // eslint-disable-next-line no-bitwise
     expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
@@ -307,13 +305,26 @@ describe('both players are named at the moment they sit', () => {
     expect(localStorage.getItem('banpick:playerName')).toBe('Alex')
   })
 
-  it('lets a seat be taken without one', async () => {
-    // Optional throughout: the match plays exactly as it always did for an unnamed seat, which
-    // is also what an older client does.
+  it('will not seat you without one', async () => {
+    /*
+     * The reverse of what this test used to assert, on purpose (D29). A name became a record — an
+     * unnamed seat leaves the match off the leaderboard and gives the no-repeat-ban rule nothing to
+     * key on — so "optional" became "required" rather than staying quietly inconsistent.
+     */
     goTo('/j/ABC123')
     render(<App />)
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Take a seat' })).toBeTruthy())
-    expect(screen.getByRole('button', { name: 'Take a seat' })).not.toHaveProperty('disabled', true)
+    const seat = await screen.findByRole('button', { name: 'Take a seat' })
+    expect(seat).toHaveProperty('disabled', true)
+    // And it says why, rather than leaving a dead button to be poked at.
+    expect(screen.getByText('Enter your name to sit down.')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Tom' } })
+    await waitFor(() => expect(seat).toHaveProperty('disabled', false))
+    expect(screen.queryByText('Enter your name to sit down.')).toBeNull()
+
+    // Whitespace is not a name.
+    fireEvent.change(screen.getByLabelText('Your name'), { target: { value: '   ' } })
+    await waitFor(() => expect(seat).toHaveProperty('disabled', true))
   })
 })

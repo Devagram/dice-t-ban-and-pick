@@ -12,8 +12,26 @@ import { Leaderboard } from '../src/screens/Leaderboard.js'
  */
 
 const STANDINGS = [
-  { playerId: 'p-tom', name: 'Tom', wins: 7, losses: 3, draws: 1 },
-  { playerId: 'p-alex', name: 'Alex', wins: 5, losses: 4, draws: 0 },
+  {
+    playerId: 'p-tom',
+    name: 'Tom',
+    wins: 7,
+    losses: 3,
+    draws: 1,
+    roundWins: 16,
+    roundLosses: 9,
+    roundDraws: 2,
+  },
+  {
+    playerId: 'p-alex',
+    name: 'Alex',
+    wins: 5,
+    losses: 4,
+    draws: 0,
+    roundWins: 11,
+    roundLosses: 13,
+    roundDraws: 1,
+  },
 ]
 
 beforeEach(() => {
@@ -28,16 +46,19 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('the standings read at a glance', () => {
-  it('lists players in order with wins, losses and draws apart', async () => {
+  it('lists players in order, with matches and rounds counted separately', async () => {
     render(<Leaderboard onBack={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
-    const rows = [...document.querySelectorAll('.table__row:not(.table__row--head)')]
+    const rows = [
+      ...document.querySelectorAll('.table__row:not(.table__row--head):not(.table__row--sub)'),
+    ]
     expect(rows).toHaveLength(2)
 
+    // Matches W/L/D, then rounds W/L/D. A 2–1 win is one match and three rounds, and the two
+    // answer different questions — draws stay their own column in both.
     const numbers = [...rows[0]!.querySelectorAll('.table__num')].map((n) => n.textContent)
-    // W / L / D as three columns: a draw is not half a win.
-    expect(numbers).toEqual(['7', '3', '1'])
+    expect(numbers).toEqual(['7', '3', '1', '16', '9', '2'])
   })
 
   it('marks which row is you, so you need not read every name', async () => {

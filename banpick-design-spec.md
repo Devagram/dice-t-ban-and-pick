@@ -451,6 +451,10 @@ Names are self-asserted and deliberately unverified — §1's trust model is fri
 
 **What still holds, and should be quoted back at the next request:** no events, no organizers, no brackets, no scheduling, no seasons, no rating systems. D19 is amended, not repealed.
 
+**A name is now required to sit down, and that is a consequence rather than a preference.** D28 made the name optional on purpose: it was decoration, and a match played identically without one. D29 ended that. An unnamed seat cannot appear on the leaderboard, cannot accumulate a head-to-head, and gives the no-repeat-ban rule nothing to key on — so the same room would apply different rules to the two seats depending on whether one of them typed something. The alternative to requiring a name is a seat that is quietly exempt from a rule the lobby told both players was in force. The client disables the button and the server returns `400 NAME_REQUIRED`, because a disabled button is a suggestion.
+
+**The cost, stated plainly:** you can no longer play a completely anonymous match. Losing the browser still loses the name (§17's trade, unchanged), so this is a low wall rather than an account — but it is a wall, and it was not there before.
+
 Three things this forced, each of which is where it could have gone wrong.
 
 **A name became an identifier, so it has to be ownable.** D28 could leave names unverified because a wrong one cost a wrong label. A ranking makes that a wrong _record_, so names are claimed on first use per deployment and bound to the browser id that claimed them. Still no passwords, and losing the browser still loses the name — the same trade D17 makes for seats, now with a consequence worth stating in the UI rather than discovering.

@@ -41,9 +41,14 @@ export interface MatchRecord {
 export interface Standing {
   playerId: string
   name: string
+  /** Matches. */
   wins: number
   losses: number
   draws: number
+  /** Individual rounds across those matches — a 2–1 win is two round wins and one round loss. */
+  roundWins: number
+  roundLosses: number
+  roundDraws: number
 }
 
 export interface HeadToHead {
@@ -184,41 +189,94 @@ export class RegistryDO extends DurableObject<Env> {
     return Response.json({ ok: true })
   }
 
-  /** Counted from `matches` every time, so an undone result simply stops counting. */
+  /**
+   * Counted from `matches` every time, so an undone result simply stops counting.
+   *
+   * Aggregated in JavaScript rather than SQL because round results live inside each match's
+   * `detail`. Extracting them in SQL would mean JSON functions or a second set of columns that
+   * can drift from the record they summarise — and at this scale, reading every row is cheap.
+   */
   private standings(): Standing[] {
     const rows = this.sql
       .exec<{
-        player_id: string
-        name: string
-        wins: number
-        losses: number
-        draws: number
-      }>(
-        `WITH sides AS (
-           SELECT a_id AS player_id, a_name AS name, winner_id FROM matches
-           UNION ALL
-           SELECT b_id AS player_id, b_name AS name, winner_id FROM matches
-         )
-         SELECT player_id,
-                MAX(name) AS name,
-                SUM(CASE WHEN winner_id = player_id THEN 1 ELSE 0 END) AS wins,
-                SUM(CASE WHEN winner_id IS NOT NULL AND winner_id != player_id THEN 1 ELSE 0 END)
-                  AS losses,
-                SUM(CASE WHEN winner_id IS NULL THEN 1 ELSE 0 END) AS draws
-         FROM sides
-         GROUP BY player_id`,
-      )
+        a_id: string
+        a_name: string
+        b_id: string
+        b_name: string
+        winner_id: string | null
+        detail: string
+      }>('SELECT a_id, a_name, b_id, b_name, winner_id, detail FROM matches')
       .toArray()
 
-    return rows
-      .map((r) => ({
-        playerId: r.player_id,
-        name: r.name,
-        wins: Number(r.wins),
-        losses: Number(r.losses),
-        draws: Number(r.draws),
-      }))
-      .sort((x, y) => y.wins - x.wins || x.losses - y.losses || x.name.localeCompare(y.name))
+    const table = new Map<string, Standing>()
+    const seat = (id: string, name: string): Standing => {
+      const existing = table.get(id)
+      if (existing) {
+        // Latest name wins, so renaming shows up rather than sticking at whatever was first.
+        if (name) existing.name = name
+        return existing
+      }
+      const fresh: Standing = {
+        playerId: id,
+        name,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        roundWins: 0,
+        roundLosses: 0,
+        roundDraws: 0,
+      }
+      table.set(id, fresh)
+      return fresh
+    }
+
+    for (const row of rows) {
+      const a = seat(row.a_id, row.a_name)
+      const b = seat(row.b_id, row.b_name)
+
+      if (row.winner_id === null) {
+        a.draws++
+        b.draws++
+      } else if (row.winner_id === row.a_id) {
+        a.wins++
+        b.losses++
+      } else {
+        b.wins++
+        a.losses++
+      }
+
+      // `rounds` is the per-round outcome as the engine recorded it: 'A', 'B', 'TIE', or null for
+      // a round `stopWhenDecided` meant nobody played.
+      let rounds: unknown
+      try {
+        rounds = (JSON.parse(row.detail) as { rounds?: unknown } | null)?.rounds ?? null
+      } catch {
+        rounds = null
+      }
+      if (!Array.isArray(rounds)) continue
+
+      for (const outcome of rounds) {
+        if (outcome === 'TIE') {
+          a.roundDraws++
+          b.roundDraws++
+        } else if (outcome === 'A') {
+          a.roundWins++
+          b.roundLosses++
+        } else if (outcome === 'B') {
+          b.roundWins++
+          a.roundLosses++
+        }
+        // null — a dead rubber nobody played. Not a result for either side.
+      }
+    }
+
+    return [...table.values()].sort(
+      (x, y) =>
+        y.wins - x.wins ||
+        x.losses - y.losses ||
+        y.roundWins - x.roundWins ||
+        x.name.localeCompare(y.name),
+    )
   }
 
   /**

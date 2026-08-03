@@ -142,17 +142,36 @@ export function Lobby({
               </p>
             ) : null}
             <p className="field__help">
-              Shown to your opponent, and used to remember which ban you brought last time. Kept in
-              this browser only — optional, and the match plays fine without it.
+              Shown to your opponent, used to remember which ban you brought last time, and how the
+              leaderboard knows you. Kept in this browser only — losing the browser loses the name.
             </p>
           </label>
 
           <p className="seatcta__note">
             Taking a seat accepts these rules. The host cannot change them afterwards.
           </p>
-          <button type="button" className="btn btn--primary" disabled={busy} onClick={sit}>
+          {/*
+            A name is required (D29).
+
+            It stopped being decoration when it became a record: an unnamed seat leaves a match off
+            the leaderboard entirely and gives the no-repeat-ban rule nothing to key on, so the game
+            would silently behave differently for that player. Better to ask than be inconsistent.
+
+            The button keeps its name while disabled rather than relabelling itself to explain — a
+            control that renames itself is one a screen reader announces as a different control, and
+            the reason belongs beside the field you have to fix, not on the thing you cannot press.
+          */}
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={busy || name.trim().length === 0 || nameError !== null}
+            onClick={sit}
+          >
             Take a seat
           </button>
+          {name.trim().length === 0 ? (
+            <p className="seatcta__note seatcta__note--blocking">Enter your name to sit down.</p>
+          ) : null}
         </div>
       )}
 

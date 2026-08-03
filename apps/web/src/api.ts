@@ -65,10 +65,12 @@ export function fetchPreview(roomCode: string): Promise<LobbyPreview> {
 }
 
 /**
- * D28 — the claim carries who is sitting down.
+ * D28/D29 — the claim carries who is sitting down, and the server requires it.
  *
- * Optional on the server, so an older client still seats fine; sending it is what makes the
- * no-repeat-ban rule able to find a history.
+ * It was optional when a name was decoration. It stopped being optional when a name became a
+ * record: without one the match cannot reach the leaderboard and the no-repeat-ban rule has
+ * nothing to key on, so the seat would play by quietly different rules. The lobby will not send
+ * an empty name, and the server refuses one — `400 NAME_REQUIRED`.
  */
 export function claimSeat(roomCode: string): Promise<ClaimSeatResponse> {
   const player = currentPlayer()
@@ -87,6 +89,9 @@ export interface Standing {
   wins: number
   losses: number
   draws: number
+  roundWins: number
+  roundLosses: number
+  roundDraws: number
 }
 
 export interface MatchRecord {

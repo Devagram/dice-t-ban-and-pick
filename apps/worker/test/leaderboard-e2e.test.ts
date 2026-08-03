@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { SELF } from 'cloudflare:test'
 
-import { playToCompletion, seatedMatch } from './client.js'
+import { createMatch, playToCompletion, seatedMatch } from './client.js'
 import type { HeadToHead, Standing } from '../src/RegistryDO.js'
 
 /**
@@ -83,13 +83,27 @@ describe('a finished match reaches the leaderboard', () => {
     expect(record).toMatchObject({ wins: 0, losses: 0, draws: 1 })
   })
 
-  it('leaves anonymous matches off it entirely', async () => {
-    // No identity, nothing to rank. An older client behaves exactly as it always did.
-    const before = (await standings()).length
-    const { a, b } = await seatedMatch({ modeId: 'base', draftCount: 4 })
-    await playToCompletion(a, b, ['A', 'A', 'A'])
-    await a.settle(40)
-    expect((await standings()).length).toBe(before)
+  it('refuses an unnamed seat outright', async () => {
+    /*
+     * A name stopped being decoration when it became a record. An unnamed seat would leave the
+     * match off the leaderboard and give the no-repeat-ban rule nothing to key on — the game
+     * would quietly behave differently for that player. The lobby disables the button, but a
+     * disabled button is a suggestion; this is the rule.
+     */
+    const { roomCode } = await createMatch({ modeId: 'base', draftCount: 4 })
+    const anonymous = await SELF.fetch(`https://example.com/api/match/${roomCode}/seat`, {
+      method: 'POST',
+    })
+    expect(anonymous.status).toBe(400)
+    expect(((await anonymous.json()) as { error: string }).error).toBe('NAME_REQUIRED')
+
+    // And the seat is still free afterwards — a refused claim must not consume one.
+    const named = await SELF.fetch(`https://example.com/api/match/${roomCode}/seat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ playerId: 'lb-named', displayName: 'Named' }),
+    })
+    expect(named.status).toBe(201)
   })
 
   it('claims a name over HTTP, and refuses a second claimant', async () => {

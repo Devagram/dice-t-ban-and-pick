@@ -40,15 +40,26 @@ export class TestClient {
     private readonly claimedSeat: Seat | null,
   ) {}
 
-  /** `player` is D28's identity. Omitted, the seat is anonymous and carries no ban history. */
+  /**
+   * `player` is the seated identity (D28/D29).
+   *
+   * Defaulted rather than optional: since a name became a record, the server refuses an unnamed
+   * seat outright, so a test client that could seat anonymously would be testing something no
+   * real client can do. Pass `null` to exercise the refusal deliberately.
+   */
   static async claimSeat(
     roomCode: string,
-    player?: { playerId: string; displayName?: string },
+    player: { playerId: string; displayName?: string } | null = {
+      playerId: `p-${crypto.randomUUID()}`,
+    },
   ): Promise<TestClient> {
+    const claim = player
+      ? { playerId: player.playerId, displayName: player.displayName ?? player.playerId }
+      : null
     const response = await SELF.fetch(`https://example.com/api/match/${roomCode}/seat`, {
       method: 'POST',
-      ...(player
-        ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(player) }
+      ...(claim
+        ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(claim) }
         : {}),
     })
     if (!response.ok)
