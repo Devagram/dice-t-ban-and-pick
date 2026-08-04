@@ -29,6 +29,7 @@ export type ResolutionErrorCode =
   | 'SELECT_OVERRIDE_TARGET'
   | 'NESTED_ROUND_LOOP'
   | 'ROUND_INDEX_RANGE'
+  | 'REPORT_OVERRIDE_TARGET'
 
 export class ModeResolutionError extends Error {
   readonly code: ResolutionErrorCode
@@ -60,8 +61,17 @@ export function resolveMode(
 
   const flat: ResolvedModule[] = []
   for (const spec of def.modules) {
-    if (spec.type === 'ROUND_LOOP') flat.push(...expandRoundLoop(spec, resolved))
-    else flat.push(toResolved(spec, null, resolved))
+    /*
+     * D30 — overtime is expanded like any other round, not bolted on at run time.
+     *
+     * The whole point of flattening here is that `reduce` is a cursor over an array rather than
+     * an interpreter. A tiebreaker that materialised mid-match would put loop control back into
+     * the reducer and break replay, so the round is always *in* the program and the terminal
+     * rule decides whether the cursor ever reaches it.
+     */
+    if (spec.type === 'ROUND_LOOP') {
+      flat.push(...expandRoundLoop(spec, resolved, def.overtime.enabled ? 1 : 0))
+    } else flat.push(toResolved(spec, null, resolved))
   }
 
   bindRevealTags(flat)
@@ -132,10 +142,11 @@ function resolveCount(n: NumberOrParam, params: Record<string, string | number>)
 function expandRoundLoop(
   loop: RoundLoopSpec,
   params: Record<string, string | number>,
+  overtimeRounds: number,
 ): ResolvedModule[] {
   const out: ResolvedModule[] = []
 
-  for (let i = 0; i < loop.count; i++) {
+  for (let i = 0; i < loop.count + overtimeRounds; i++) {
     if (!isRoundIdx(i))
       throw new ModeResolutionError('ROUND_INDEX_RANGE', `round index ${i} out of range`)
     const override = loop.overrides[i] ?? {}
@@ -213,6 +224,19 @@ function applyOverride(template: RoundModuleSpec[], o: RoundOverride): RoundModu
       ...modules.slice(0, first).concat([merged]),
       ...modules.slice(first).filter((m) => !isSelect(m)),
     ]
+  }
+
+  // D30 — overtime turns ties off, so the round it exists to decide cannot end level.
+  if (o.report) {
+    const target = modules.findIndex((m) => m.type === 'REPORT_RESULT')
+    if (target === -1)
+      throw new ModeResolutionError(
+        'REPORT_OVERRIDE_TARGET',
+        'report override with no REPORT_RESULT to configure',
+      )
+    modules = modules.map((m, i) =>
+      i === target && m.type === 'REPORT_RESULT' ? { ...m, allowTie: o.report!.allowTie } : m,
+    )
   }
 
   return modules

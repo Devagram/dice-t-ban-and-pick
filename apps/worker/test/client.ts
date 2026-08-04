@@ -32,6 +32,7 @@ export class TestClient {
   private errors: Extract<ServerMessage, { type: 'ERROR' }>[] = []
   /** Opponent progress pings — cosmetic, ephemeral, and asserted on for what they must NOT carry. */
   readonly progress: Extract<ServerMessage, { type: 'OPPONENT_PROGRESS' }>[] = []
+  readonly rematches: Extract<ServerMessage, { type: 'REMATCH' }>[] = []
 
   private constructor(
     readonly seatToken: string,
@@ -116,6 +117,10 @@ export class TestClient {
       if (message.type === 'VIEW') this.views.push(message.view)
       else if (message.type === 'REJECTED') this.rejections.push(message)
       else if (message.type === 'OPPONENT_PROGRESS') this.progress.push(message)
+      else if (message.type === 'REMATCH') this.rematches.push(message)
+      // Everything left really is an error. Named types are listed above so that adding a
+      // server message and forgetting this line is a type error rather than a silent
+      // reclassification into `errors`.
       else this.errors.push(message)
     })
 
@@ -219,6 +224,27 @@ export class TestClient {
     )
   }
 
+  /**
+   * Waits for the next PROGRESS frame, rather than for a number of turns.
+   *
+   * `settle(n)` is right for proving a frame *never* arrives and wrong for proving one did: it
+   * passes on a fast machine and fails under load, which is a test that reports the scheduler
+   * instead of the server. Same reasoning as `waitForError`.
+   */
+  async waitForProgress(
+    timeoutTurns = 200,
+  ): Promise<Extract<ServerMessage, { type: 'OPPONENT_PROGRESS' }>> {
+    const before = this.progress.length
+    for (let i = 0; i < timeoutTurns; i++) {
+      const frame = this.progress.at(-1)
+      if (this.progress.length > before && frame) return frame
+      await scheduler.wait(1)
+    }
+    throw new Error(
+      `client ${this.seatToken.slice(0, 8)} received no PROGRESS within ${timeoutTurns} turns.`,
+    )
+  }
+
   /** As `waitForError`, for an action the engine refused rather than a protocol fault. */
   async waitForRejection(
     timeoutTurns = 200,
@@ -275,6 +301,8 @@ export interface CreateOptions {
   modeId?: string
   draftCount?: 3 | 4
   globalBanned?: string[]
+  /** D28. Omitted means the server default, which is the same as the create endpoint's. */
+  allowRepeatBans?: boolean
 }
 
 export async function createMatch(opts: CreateOptions = {}): Promise<CreateMatchResponse> {
@@ -285,6 +313,7 @@ export async function createMatch(opts: CreateOptions = {}): Promise<CreateMatch
       modeId: opts.modeId ?? 'base',
       parameters: { draftCount: opts.draftCount ?? 4 },
       globalBanned: opts.globalBanned ?? [],
+      ...(opts.allowRepeatBans === undefined ? {} : { allowRepeatBans: opts.allowRepeatBans }),
     }),
   })
   if (!response.ok) throw new Error(`create failed: ${response.status} ${await response.text()}`)

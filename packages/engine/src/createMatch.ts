@@ -27,7 +27,10 @@ export function createMatch(event: EventEnvelope): MatchState {
   const p = event.payload as PayloadOf<'MATCH_CREATED'>
 
   const rounds: RoundState[] = []
-  for (let i = 0; i < ROUND_COUNT; i++) {
+  // D30 — one extra round state when the mode declares overtime. It may never be played;
+  // `isDecided` is what decides that, and it needs the round to exist to reason about.
+  const roundCount = ROUND_COUNT + (p.mode.overtime.enabled ? 1 : 0)
+  for (let i = 0; i < roundCount; i++) {
     if (!isRoundIdx(i)) throw new RangeError(`round index ${i} out of range`)
     rounds.push({
       index: i,

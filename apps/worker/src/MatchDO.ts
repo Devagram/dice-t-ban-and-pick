@@ -18,7 +18,7 @@ import {
 } from '@banpick/types'
 
 import rosterAsset from '../../../roster/roster.json' with { type: 'json' }
-import { hashToken, mintSeatToken, resumeUrl } from './identity.js'
+import { generateRoomCode, hashToken, mintSeatToken, resumeUrl } from './identity.js'
 import { draftCountOf, findMode, findVariant, rulesetFor, type BundledVariant } from './modes.js'
 import {
   tryAppendEvent,
@@ -34,6 +34,7 @@ import {
   setMeta,
 } from './persistence.js'
 import {
+  announceRematch,
   broadcastView,
   relayProgress,
   sendProtocolError,
@@ -132,6 +133,8 @@ export class MatchDO extends DurableObject<Env> {
         return this.handleClaimSeat(request, url)
       case 'ws':
         return this.handleWebSocket(request, url)
+      case 'rematch':
+        return this.handleRematch(url)
       default:
         return json({ error: 'NOT_FOUND', detail: `no route for ${url.pathname}` }, 404)
     }
@@ -209,6 +212,15 @@ export class MatchDO extends DurableObject<Env> {
     }
     setMeta(this.sql, 'roomCode', body.roomCode ?? '')
     this.touch()
+    // D31 — the room joins the lobby list the moment it exists. `waitUntil` for the same reason
+    // as every other registry write: bookkeeping must not sit between a host and their room.
+    this.ctx.waitUntil(
+      this.announceRoom(body.roomCode ?? '', {
+        modeLabel: variant.mode.label,
+        seatsTaken: 0,
+        status: 'OPEN',
+      }),
+    )
     return json({ ok: true }, 201)
   }
 
@@ -332,6 +344,23 @@ export class MatchDO extends DurableObject<Env> {
     this.touch()
 
     const roomCode = getMeta(this.sql, 'roomCode') ?? ''
+    /*
+     * D31 — the listing follows the seats.
+     *
+     * It stays listed once both are taken rather than dropping off, because the room is still
+     * worth finding: the owner asked for people to be able to join and watch. `status` is what
+     * the list uses to say "join" or "watch", so it has to be accurate at exactly this moment.
+     */
+    const filled = SEATS.filter((s) => withHistory.seatsFilled[s]).length
+    this.ctx.waitUntil(
+      this.announceRoom(roomCode, {
+        seatsTaken: filled,
+        status: filled >= 2 ? 'PLAYING' : 'OPEN',
+        // The host is whoever sat in A. Sent only when it is this claim, so a B-seat claim does
+        // not overwrite a name already recorded.
+        ...(seat === 'A' && player?.name ? { hostName: player.name } : {}),
+      }),
+    )
     const origin = new URL(request.url).origin || url.origin
     const response: ClaimSeatResponse = {
       seat,
@@ -457,6 +486,134 @@ export class MatchDO extends DurableObject<Env> {
         }),
       },
     )
+  }
+
+  /**
+   * **D32 — play the same match again, without building it again.**
+   *
+   * A series is the normal way this gets used, and the loop was: go home, re-pick the mode, the
+   * parameters and the global bans, create, copy the link, send it. All of that is already known
+   * — it is `state.ruleset`, which §5 snapshotted into the creation event precisely so it could
+   * be read back later.
+   *
+   * **Idempotent by room, which is what makes the race a non-event.** Both players will click
+   * this; the first creates a room and the second is handed the same code. Stored in meta rather
+   * than held in memory because the DO can hibernate between the two clicks.
+   *
+   * **Does not seat anyone.** It creates the room and points both clients at its ordinary join
+   * page. Auto-seating would be a nicer click count and a worse idea: §12.3 makes seating the act
+   * of consent, and consenting on someone's behalf because their opponent pressed a button is
+   * exactly the thing that rule exists to prevent — even when the ruleset is identical.
+   */
+  private async handleRematch(url: URL): Promise<Response> {
+    const token = url.searchParams.get('token')
+    const seat = token ? seatForTokenHash(this.sql, await hashToken(token)) : null
+    if (!seat) {
+      return json({ error: 'UNAUTHENTICATED', detail: 'a valid seat token is required' }, 401)
+    }
+
+    const state = this.rebuild()
+    if (!state) return json({ error: 'NO_MATCH', detail: 'nothing has been created here' }, 404)
+    if (state.status !== 'COMPLETE') {
+      // D15's undo can reopen a finished match, so this is a live condition rather than a
+      // formality: a rematch offered mid-match would be a room nobody is coming to.
+      return json({ error: 'NOT_COMPLETE', detail: 'the match is still going' }, 409)
+    }
+
+    /*
+     * Serialised, because the read and the write are separated by an await.
+     *
+     * Both players press this at once — that is the expected traffic, not an edge case. Without
+     * the barrier both requests read an empty `rematchCode`, both create a room, and the two of
+     * them end up in different rooms waiting for each other. Reserving the code before the await
+     * would fix the race and introduce a worse one: the second client can navigate to a room that
+     * does not exist yet. Blocking is the primitive that actually means "one at a time".
+     */
+    const opened = await this.ctx.blockConcurrencyWhile(async () => {
+      const existing = getMeta(this.sql, 'rematchCode')
+      if (existing) return { roomCode: existing, fresh: false }
+
+      const created = await this.openRematchRoom(state)
+      if (!created) return null
+      setMeta(this.sql, 'rematchCode', created)
+      return { roomCode: created, fresh: true }
+    })
+
+    if (!opened) {
+      return json({ error: 'ROOM_CODE_EXHAUSTED', detail: 'could not open a rematch' }, 503)
+    }
+    if (!opened.fresh) return json({ roomCode: opened.roomCode }, 200)
+    const created = opened.roomCode
+    // The completed match is the only channel these two still share. Without this the opponent
+    // has no way to learn the code, and "play again" is back to sending a link.
+    announceRematch(this.sockets(), created, seat)
+    return json({ roomCode: created }, 201)
+  }
+
+  /**
+   * Creates the new room, carrying this match's ruleset across verbatim.
+   *
+   * Retried on collision for the same reason the router retries: a code that lands on an existing
+   * room comes back 409, and silently joining two strangers together would be far worse than a
+   * failed button.
+   */
+  private async openRematchRoom(state: MatchState): Promise<string | null> {
+    const { ruleset } = state
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const roomCode = generateRoomCode()
+      const response = await this.env.MATCH.get(this.env.MATCH.idFromName(roomCode)).fetch(
+        'https://match/create',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            roomCode,
+            modeId: ruleset.modeId,
+            parameters: ruleset.parameters,
+            globalBanned: ruleset.globalBanned,
+            // D28 travels with it. A rematch is precisely "the next set", so carrying the host's
+            // answer across is the difference between the no-repeat rule applying and quietly
+            // lapsing at the moment it was written for.
+            allowRepeatBans: ruleset.constraints.repeatBans === 'ALLOWED',
+          }),
+        },
+      )
+      if (response.status === 409) continue
+      if (response.ok) return roomCode
+      return null
+    }
+    return null
+  }
+
+  /**
+   * D31 — tells the registry what this room currently is.
+   *
+   * Failures are swallowed on purpose. A room missing from the lobby list is a discovery problem
+   * the join link already solves, and there is no version of this worth failing a seat claim or
+   * a completed match over. The TTL sweep is the backstop for anything lost here.
+   */
+  private async announceRoom(
+    roomCode: string,
+    fields: {
+      modeLabel?: string
+      hostName?: string
+      seatsTaken?: number
+      status: 'OPEN' | 'PLAYING' | 'CLOSED'
+    },
+  ): Promise<void> {
+    if (!roomCode) return
+    try {
+      await this.env.REGISTRY.get(this.env.REGISTRY.idFromName('registry')).fetch(
+        'https://registry/room',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ roomCode, ...fields }),
+        },
+      )
+    } catch {
+      // See the note above.
+    }
   }
 
   private history(a: string, b: string): DurableObjectStub {
@@ -661,6 +818,17 @@ export class MatchDO extends DurableObject<Env> {
        */
       this.ctx.waitUntil(this.recordBans(settled))
       this.ctx.waitUntil(this.recordResult(settled))
+      // D31 — and it leaves the lobby list. Only on COMPLETE, so D15's undo reopening a match
+      // does not strand a finished room on the list: `settleAndBroadcast` runs again and the
+      // room is re-announced by the same code path that removed it.
+      this.ctx.waitUntil(
+        settled.status === 'COMPLETE'
+          ? this.announceRoom(getMeta(this.sql, 'roomCode') ?? '', { status: 'CLOSED' })
+          : this.announceRoom(getMeta(this.sql, 'roomCode') ?? '', {
+              seatsTaken: 2,
+              status: 'PLAYING',
+            }),
+      )
       return
     }
 

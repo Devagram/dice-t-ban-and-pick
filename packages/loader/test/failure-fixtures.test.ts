@@ -6,7 +6,7 @@ import {
   validateTermination,
   type LoadErrorCode,
 } from '@banpick/loader'
-import type { MatchRule, OvertimeRule, Roster, TieRule } from '@banpick/types'
+import type { MatchRule, ModuleSpec, OvertimeRule, Roster, TieRule } from '@banpick/types'
 
 import { loadShipped, modeSource, mutate, removeModule, GAME_ROSTER } from './helpers.js'
 
@@ -249,6 +249,56 @@ describe('NON_TERMINATING', () => {
       terminating[2],
       'fixture',
     )
+    expect(issues[0]!.code).toBe('NON_TERMINATING')
+  })
+
+  /**
+   * D30 — enabling overtime is not on its own a termination argument.
+   *
+   * The triple `HALF_POINT|ALWAYS_3_ROUNDS|true` is in the legal table, but only because the
+   * overtime round forbids ties. A mode that turns overtime on and lets it tie reaches 2.0-2.0
+   * with every character consumed — G14's deadlock by a longer road — so the validator looks at
+   * the round rather than trusting the flag.
+   */
+  const overtimeLoop = (allowTie: boolean): ModuleSpec[] => [
+    {
+      type: 'ROUND_LOOP',
+      id: 'rounds',
+      count: 3,
+      template: [],
+      overrides: { 3: { report: { allowTie } } },
+    } as ModuleSpec,
+  ]
+
+  it('accepts overtime when the round it adds cannot tie', () => {
+    const issues = validateTermination(
+      terminating[0],
+      terminating[1],
+      { enabled: true },
+      'fixture',
+      overtimeLoop(false),
+    )
+    expect(issues).toEqual([])
+  })
+
+  it('rejects overtime that can tie, which only moves the deadlock', () => {
+    const issues = validateTermination(
+      terminating[0],
+      terminating[1],
+      { enabled: true },
+      'fixture',
+      overtimeLoop(true),
+    )
+    expect(issues).toHaveLength(1)
+    expect(issues[0]!.code).toBe('NON_TERMINATING')
+    expect(issues[0]!.message).toContain('allowTie: false')
+  })
+
+  it('rejects overtime that never declares the round at all', () => {
+    // The override is how a mode says what overtime looks like. Silence is not a default.
+    const issues = validateTermination(terminating[0], terminating[1], { enabled: true }, 'f', [
+      { type: 'ROUND_LOOP', id: 'rounds', count: 3, template: [], overrides: {} } as ModuleSpec,
+    ])
     expect(issues[0]!.code).toBe('NON_TERMINATING')
   })
 })

@@ -1,5 +1,7 @@
 import {
   otherSeat,
+  ROUND_COUNT,
+  SEATS,
   type MatchState,
   type PlayerView,
   type RoundView,
@@ -107,6 +109,7 @@ export function project(state: MatchState, seat: Seat): PlayerView {
       },
       playOrder: src.playOrder,
       result: src.result,
+      overtime: src.index >= ROUND_COUNT,
     }
   }
 
@@ -125,7 +128,17 @@ export function project(state: MatchState, seat: Seat): PlayerView {
     roster: state.roster.characters,
     you: seatView(seat),
     opponent: seatView(otherSeat(seat)),
-    rounds: state.rounds.map((_, i) => roundView(i)),
+    /*
+     * D30 — the overtime round is dropped from the view unless it can still matter.
+     *
+     * It exists in every match's state so the terminal rule has something to reason about, but a
+     * round strip showing an "OT" that can never be reached is a lie told to a player at
+     * `draftCount: 3`, where regulation spends the last character. Decided here rather than in
+     * the client for the usual reason (§11): whether a round is reachable is a rule.
+     */
+    rounds: state.rounds
+      .map((_, i) => roundView(i))
+      .filter((r) => !r.overtime || r.result !== null || overtimeStillPossible(state)),
     phase:
       mod && state.status === 'IN_PROGRESS'
         ? {
@@ -139,4 +152,24 @@ export function project(state: MatchState, seat: Seat): PlayerView {
     outcome: state.outcome,
     seq: state.log.length,
   }
+}
+
+/**
+ * D30 — could the tiebreaker still be reached from here?
+ *
+ * Not "is it owed now" but "is it possible at all", which is the question a round strip is
+ * asking: a seat that will have spent every character by the end of regulation can never play
+ * it, and at `draftCount: 3` that is both of them from the opening frame.
+ *
+ * Deliberately generous. It answers yes for a match that is about to be decided 2-0 in
+ * regulation, because "you might have gone to overtime" was true right up until it wasn't, and
+ * a pip that vanishes the instant the outcome firms up is more startling than one that greys.
+ *
+ * Does not re-check `mode.overtime.enabled`, deliberately. `createMatch` only builds the fourth
+ * round state when the mode declares one, so a round that reports `overtime: true` is already
+ * proof the mode enabled it — and the caller only asks about those. A second check here would be
+ * a branch no state can reach, which is worse than no check: it reads as a case someone handled.
+ */
+function overtimeStillPossible(state: MatchState): boolean {
+  return SEATS.every((seat) => state.seats[seat].slots.value.length > ROUND_COUNT)
 }

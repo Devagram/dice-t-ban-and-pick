@@ -23,7 +23,8 @@ import { apply, currentAction, expectRejected, playMatch, startMatch } from './h
 
 describe('HALF_POINT scoring (D21)', () => {
   it('awards half a point to each seat on a tie, and spends both characters (D6)', () => {
-    const final = playMatch(startMatch({ mode: baseMode, draftCount: 4 }), ['TIE', 'A', 'B'])
+    // At 3, so the scoring can be observed without D30's overtime deciding the level match.
+    const final = playMatch(startMatch({ mode: baseMode, draftCount: 3 }), ['TIE', 'A', 'B'])
 
     expect(final.rounds[0]!.result).toBe('TIE')
     // 0.5 + 1 + 0 for A; 0.5 + 0 + 1 for B.
@@ -37,26 +38,33 @@ describe('HALF_POINT scoring (D21)', () => {
     }
   })
 
-  it('ends 1.5–1.5 as a DRAW, which is a legal terminal state', () => {
-    const final = playMatch(startMatch({ mode: baseMode, draftCount: 4 }), ['TIE', 'TIE', 'TIE'])
+  it('ends 1.5–1.5 as a DRAW when there is nothing left to play', () => {
+    // D21's terminal state, now reachable only at 3 — see D30 and the overtime suite.
+    const final = playMatch(startMatch({ mode: baseMode, draftCount: 3 }), ['TIE', 'TIE', 'TIE'])
 
     expect(final.status).toBe('COMPLETE')
     expect(final.outcome).toBe('DRAW')
     expect(final.seats.A.score).toBe(1.5)
     expect(final.seats.B.score).toBe(1.5)
-    expect(final.rounds.map((r) => r.result)).toEqual(['TIE', 'TIE', 'TIE'])
+    expect(final.rounds.map((r) => r.result)).toEqual(['TIE', 'TIE', 'TIE', null])
   })
 
-  it('terminates with no unconsumed slot left over, at both parameter values', () => {
+  it('leaves nothing playable behind when every round is tied', () => {
     for (const draftCount of [3, 4] as const) {
       const final = playMatch(startMatch({ mode: baseMode, draftCount }), ['TIE', 'TIE', 'TIE'])
       expect(final.status).toBe('COMPLETE')
       const unconsumed = (['A', 'B'] as const).flatMap((s) =>
         final.seats[s].slots.value.filter((slot) => !slot.consumed),
       )
-      // At 3 every slot is spent; at 4 one slot per seat is never reached, which is the
-      // design and not an escape.
-      expect(unconsumed).toHaveLength(draftCount === 3 ? 0 : 2)
+      /*
+       * Zero at both values now, for two different reasons — which is the point.
+       *
+       * At 3 regulation spends everything. At 4 it used to leave one per seat sitting there
+       * unplayable, and this test asserted that as "the design and not an escape". D30 is the
+       * admission that it was an escape: the characters were right there, and the match was
+       * calling itself a draw next to them.
+       */
+      expect(unconsumed).toHaveLength(0)
     }
   })
 })
@@ -82,7 +90,9 @@ describe('stopWhenDecided (D21)', () => {
 
   it('plays all three rounds on a 1–1 split', () => {
     const final = playMatch(startMatch({ mode: baseMode, draftCount: 4 }), ['A', 'B', 'A'])
-    expect(final.rounds.every((r) => r.result !== null)).toBe(true)
+    // Regulation only: 2–1 is decided, so D30's overtime round is not owed and stays null.
+    expect(final.rounds.slice(0, 3).every((r) => r.result !== null)).toBe(true)
+    expect(final.rounds[3]!.result).toBeNull()
     expect(final.outcome).toBe('A')
   })
 

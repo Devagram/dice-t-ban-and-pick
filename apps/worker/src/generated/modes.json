@@ -130,6 +130,21 @@
                   "actor": "BOTH",
                   "pool": "legalRoundPick"
                 }
+              },
+              "3": {
+                "remove": [
+                  "privilegeChoice",
+                  "ban"
+                ],
+                "rollAssigns": "TURN_ORDER",
+                "select": {
+                  "mode": "SIMULTANEOUS_HIDDEN",
+                  "actor": "BOTH",
+                  "pool": "legalRoundPick"
+                },
+                "report": {
+                  "allowTie": false
+                }
               }
             }
           }
@@ -143,7 +158,7 @@
           "stopWhenDecided": true
         },
         "overtime": {
-          "enabled": false
+          "enabled": true
         }
       },
       "variants": [
@@ -328,6 +343,44 @@
                 "id": "rounds.2.report",
                 "allowTie": true,
                 "roundIndex": 2
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.3.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "TURN_ORDER",
+                "roundIndex": 3
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.3.select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 3
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.3.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 3
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.3.report",
+                "allowTie": false,
+                "roundIndex": 3
               }
             ],
             "onTie": {
@@ -339,10 +392,10 @@
               "stopWhenDecided": true
             },
             "overtime": {
-              "enabled": false
+              "enabled": true
             }
           },
-          "modeContentHash": "c6985e696c87"
+          "modeContentHash": "fc2b16b58952"
         },
         {
           "parameters": {
@@ -525,6 +578,44 @@
                 "id": "rounds.2.report",
                 "allowTie": true,
                 "roundIndex": 2
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.3.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "TURN_ORDER",
+                "roundIndex": 3
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.3.select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 3
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.3.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 3
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.3.report",
+                "allowTie": false,
+                "roundIndex": 3
               }
             ],
             "onTie": {
@@ -536,10 +627,10 @@
               "stopWhenDecided": true
             },
             "overtime": {
-              "enabled": false
+              "enabled": true
             }
           },
-          "modeContentHash": "33afd51b56ca"
+          "modeContentHash": "9d679874651c"
         }
       ]
     },
@@ -695,6 +786,21 @@
                   "actor": "BOTH",
                   "pool": "legalRoundPick"
                 }
+              },
+              "3": {
+                "remove": [
+                  "privilegeChoice",
+                  "ban"
+                ],
+                "rollAssigns": "TURN_ORDER",
+                "select": {
+                  "mode": "SIMULTANEOUS_HIDDEN",
+                  "actor": "BOTH",
+                  "pool": "legalRoundPick"
+                },
+                "report": {
+                  "allowTie": false
+                }
               }
             }
           }
@@ -708,7 +814,7 @@
           "stopWhenDecided": true
         },
         "overtime": {
-          "enabled": false
+          "enabled": true
         }
       },
       "variants": [
@@ -923,6 +1029,44 @@
                 "id": "rounds.2.report",
                 "allowTie": true,
                 "roundIndex": 2
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.3.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "TURN_ORDER",
+                "roundIndex": 3
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.3.select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 3
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.3.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 3
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.3.report",
+                "allowTie": false,
+                "roundIndex": 3
               }
             ],
             "onTie": {
@@ -934,10 +1078,10 @@
               "stopWhenDecided": true
             },
             "overtime": {
-              "enabled": false
+              "enabled": true
             }
           },
-          "modeContentHash": "d3e0f22018cb"
+          "modeContentHash": "3777fc670408"
         },
         {
           "parameters": {
@@ -1150,6 +1294,44 @@
                 "id": "rounds.2.report",
                 "allowTie": true,
                 "roundIndex": 2
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.3.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "TURN_ORDER",
+                "roundIndex": 3
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.3.select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 3
+              },
+              {
+                "type": "CHOOSE",
+                "id": "rounds.3.declareOrder",
+                "actor": "turnOrderHolder",
+                "options": [
+                  "SELF_FIRST",
+                  "OPPONENT_FIRST"
+                ],
+                "loserGets": null,
+                "roundIndex": 3
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.3.report",
+                "allowTie": false,
+                "roundIndex": 3
               }
             ],
             "onTie": {
@@ -1161,10 +1343,10 @@
               "stopWhenDecided": true
             },
             "overtime": {
-              "enabled": false
+              "enabled": true
             }
           },
-          "modeContentHash": "c4c1f2758235"
+          "modeContentHash": "0f462892be9a"
         }
       ]
     }

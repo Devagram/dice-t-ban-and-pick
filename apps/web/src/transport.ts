@@ -25,6 +25,14 @@ export interface TransportState {
    * a bar left showing "2 of 4" after the draft resolved would be worse than showing nothing.
    */
   progress: { filled: number; of: number; ban: boolean } | null
+  /**
+   * D32 — the room a rematch opened, once either seat has asked for one.
+   *
+   * Survives a new VIEW deliberately, unlike `progress`: the offer stays true until someone acts
+   * on it, and the match screen keeps re-rendering underneath it (an undo can reopen a completed
+   * match, and the rematch room is still there when it closes again).
+   */
+  rematch: { roomCode: string; by: string } | null
 }
 
 export interface Transport {
@@ -87,6 +95,9 @@ export function connect(
           break
         case 'OPPONENT_PROGRESS':
           onChange({ progress: { filled: message.filled, of: message.of, ban: message.ban } })
+          break
+        case 'REMATCH':
+          onChange({ rematch: { roomCode: message.roomCode, by: message.by } })
           break
       }
     })

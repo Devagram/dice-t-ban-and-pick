@@ -269,7 +269,9 @@ describe('engine internals that guard against a bad program', () => {
 
   it('builds initial state with every round pre-created and empty', () => {
     const state: MatchState = createMatch(created())
-    expect(state.rounds).toHaveLength(3)
+    // Three regulation rounds plus D30's overtime round, which exists from the start and is
+    // simply never reported unless it is owed.
+    expect(state.rounds).toHaveLength(4)
     for (const round of state.rounds) {
       expect(round.result).toBeNull()
       expect(round.privilegeHolder).toBeNull()

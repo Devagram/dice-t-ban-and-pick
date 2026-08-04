@@ -1,4 +1,5 @@
 import {
+  ROUND_COUNT,
   SEATS,
   type EventEnvelope,
   type MatchOutcome,
@@ -184,20 +185,58 @@ function undoLastResult(state: MatchState, event: EventEnvelope): ReduceResult {
 // --- Match resolution (§10, D21) ------------------------------------------------------------
 
 /**
- * `ALWAYS_3_ROUNDS` with `stopWhenDecided`.
+ * `ALWAYS_3_ROUNDS` with `stopWhenDecided`, and D30's overtime.
  *
- * The general form is `|lead| > roundsRemaining`, which reduces to exactly what D21 describes:
- * after two rounds only 2–0 is settled, because at 1.5–0.5 a draw is still reachable and a
- * draw is a legal terminal state.
+ * Regulation is the general form `|lead| > roundsRemaining`, which reduces to exactly what D21
+ * describes: after two rounds only 2–0 is settled, because at 1.5–0.5 a draw is still reachable
+ * and a draw is a legal terminal state.
+ *
+ * **Overtime is counted separately, and that separation is the whole trick.** It is a round in
+ * the program but not a round anyone can win the match in during regulation, so folding it into
+ * `remaining` would make a 2–0 lead after two rounds look unsettled and drag a dead rubber back
+ * onto the board. `ROUND_COUNT` is therefore the regulation count and `state.rounds.length` is
+ * the array size — see the note on both in `@banpick/types`.
  */
 export function isDecided(state: MatchState): boolean {
   if (state.cursor >= state.mode.program.length) return true
-  if (!state.mode.match.stopWhenDecided) return false
 
-  const played = state.rounds.filter((r) => r.result !== null).length
-  const remaining = state.rounds.length - played
+  const regulation = state.rounds.filter((r) => r.index < ROUND_COUNT)
+  const remaining = regulation.length - regulation.filter((r) => r.result !== null).length
   const lead = Math.abs(state.seats.A.score - state.seats.B.score)
-  return lead > remaining
+
+  if (remaining > 0) return state.mode.match.stopWhenDecided ? lead > remaining : false
+
+  // Regulation is over. Everything past here is about whether overtime is owed.
+  if (!state.mode.overtime.enabled) return true
+  if (lead > 0) return true
+
+  return !bothSeatsCanPlayOn(state)
+}
+
+/**
+ * D30 — enabled is not the same as playable.
+ *
+ * At `draftCount: 3` every character is spent by the end of regulation, so a level match is a
+ * draw exactly as D21 says. At 4 each seat holds one back and there is a decider to play. The
+ * same mode file covers both because this is a question about the board, not about the
+ * parameter — which also means a mode that spends its characters some other way gets the right
+ * answer without anyone remembering to special-case it.
+ */
+function bothSeatsCanPlayOn(state: MatchState): boolean {
+  const overtime = state.rounds.find((r) => r.index >= ROUND_COUNT)
+  return SEATS.every(
+    (seat) =>
+      state.seats[seat].slots.value.some((slot) => !slot.consumed) ||
+      /*
+       * Or has already played it. Overtime's own SELECT consumes the very character that made
+       * the round available, so a bare "is anything left?" flips to false halfway through and
+       * ends the match in the gap between the select and the result — which is exactly what it
+       * did before this clause. Read together the two say "had a character when regulation
+       * ended", which is the question, and they keep saying it while the round is underway and
+       * again if D15 undoes the result.
+       */
+      overtime?.selection[seat].value !== null,
+  )
 }
 
 export function matchOutcome(state: MatchState): MatchOutcome {

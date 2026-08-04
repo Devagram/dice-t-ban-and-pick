@@ -232,11 +232,18 @@ describe('every module rejects an event that is not its own', () => {
 
 describe('between reduce and settle', () => {
   it('offers nothing when the program is exhausted but the match is not yet closed', () => {
-    // The state a Durable Object holds for one tick: `reduce` has consumed the final report,
-    // the cursor is past the last module, and MATCH_COMPLETE has not been drained yet.
+    /*
+     * The state a Durable Object holds for one tick: `reduce` has consumed the final report,
+     * the cursor is past the last module, and MATCH_COMPLETE has not been drained yet.
+     *
+     * The last module is D30's overtime report now, not round 2's, so the drive has to tie its
+     * way through regulation to get there. Round 2's report no longer exhausts the program —
+     * the cursor stops on the overtime round instead, which is the whole mechanism.
+     */
     let state = driveUntil(
       startMatch({ mode: baseMode, draftCount: 4 }),
-      atModule('rounds.2.report'),
+      atModule('rounds.3.report'),
+      ['TIE', 'TIE', 'TIE'],
     )
     const report = legalActions(state, 'A').find((a) => a.type === 'REPORT_RESULT')!
 
@@ -249,9 +256,10 @@ describe('between reduce and settle', () => {
         payload: {
           type: 'REPORT_RESULT',
           moduleId: report.moduleId,
-          roundIndex: 2,
+          roundIndex: 3,
           reportedBy: 'A',
-          outcome: 'TIE',
+          // Overtime forbids ties — see D30 and `validateTermination`.
+          outcome: 'A',
         },
       }),
     )
@@ -261,7 +269,7 @@ describe('between reduce and settle', () => {
     // No module, so nothing on offer but the undo.
     expect(legalActions(unsettled, 'A').map((a) => a.type)).toEqual(['UNDO_LAST_RESULT'])
 
-    state = apply(unsettled, 'A', { type: 'UNDO_LAST_RESULT', roundIndex: 2, requestedBy: 'A' })
+    state = apply(unsettled, 'A', { type: 'UNDO_LAST_RESULT', roundIndex: 3, requestedBy: 'A' })
     expect(state.status).toBe('IN_PROGRESS')
   })
 })

@@ -53,10 +53,18 @@ export default {
     if (
       path.startsWith('/api/player/') ||
       path === '/api/standings' ||
-      path === '/api/head-to-head'
+      path === '/api/head-to-head' ||
+      // D31 — the open-room list. Same reasoning as the rest: it belongs to the deployment, not
+      // to any one match, so it never touches a MatchDO.
+      path === '/api/lobbies'
     ) {
       const registry = env.REGISTRY.get(env.REGISTRY.idFromName('registry'))
-      const action = path === '/api/player/name' ? 'claim' : path.slice('/api/'.length)
+      const action =
+        path === '/api/player/name'
+          ? 'claim'
+          : path === '/api/lobbies'
+            ? 'rooms'
+            : path.slice('/api/'.length)
       const target = new URL(`${url.origin}/${action}`)
       target.search = url.search
       return registry.fetch(new Request(target, request))
@@ -66,7 +74,7 @@ export default {
       return createMatch(request, env, url)
     }
 
-    const match = /^\/api\/match\/([^/]+)\/(preview|seat|ws)$/.exec(path)
+    const match = /^\/api\/match\/([^/]+)\/(preview|seat|ws|rematch)$/.exec(path)
     if (match) {
       const [, rawCode, action] = match
       const roomCode = normalizeRoomCode(rawCode!)

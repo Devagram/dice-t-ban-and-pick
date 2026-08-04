@@ -136,6 +136,25 @@ modules:
           actor: BOTH
           pool: legalRoundPick
 
+      # D30 — the tiebreaker. Reached only when regulation ends 1.5-1.5 *and* both seats still
+      # hold an unplayed character, which at `draftCount: 4` is exactly the one each of them held
+      # back. At 3 everything is spent by now and this round is unreachable: same file, no branch.
+      #
+      # Shaped like round 2 because by this point it is round 2's situation with one character
+      # each — nothing to ban, nothing to choose between. The roll still decides turn order and
+      # D24's declaration still matters, which in Dice Throne is the whole of it.
+      3:
+        remove: [privilegeChoice, ban]
+        rollAssigns: TURN_ORDER
+        select:
+          mode: SIMULTANEOUS_HIDDEN
+          actor: BOTH
+          pool: legalRoundPick
+        # The one thing that is not round 2: a tiebreaker that can tie is not a tiebreaker, and
+        # 2.0-2.0 with an empty board is the deadlock G14 exists to refuse.
+        report:
+          allowTie: false
+
 onTie:
   scoring: HALF_POINT
   consumesCharacters: true
@@ -144,5 +163,7 @@ match:
   resolution: ALWAYS_3_ROUNDS
   stopWhenDecided: true
 
+# D30 — see the round-3 override above for what this turns on, and §5 for why a rule that only
+# sometimes applies is still snapshotted into every match rather than looked up when it fires.
 overtime:
-  enabled: false
+  enabled: true

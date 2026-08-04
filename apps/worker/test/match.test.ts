@@ -36,16 +36,32 @@ describe('a full match over WebSocket', () => {
       for (const client of [a, b]) {
         expect(client.view.status).toBe('COMPLETE')
         expect(client.view.outcome).toBe('A')
-        expect(client.view.rounds.map((r) => r.result)).toEqual(['A', 'B', 'A'])
+        // D30 — the overtime round exists in every match and stays unreported unless
+        // regulation ends level. A 2-1 does not need it.
+        expect(client.view.rounds.map((r) => r.result)).toEqual(['A', 'B', 'A', null])
       }
     })
   }
 
   it('reaches a drawn match, which is a legal terminal state (D21)', async () => {
-    const { a, b } = await seatedMatch()
+    // At 3, where regulation spends every character and there is nothing to play on with.
+    const { a, b } = await seatedMatch({ modeId: 'base', draftCount: 3 })
     await playToCompletion(a, b, ['TIE', 'TIE', 'TIE'])
     expect(a.view.outcome).toBe('DRAW')
     expect(a.view.you.score).toBe(1.5)
+  })
+
+  it('breaks the same tie in overtime at draftCount 4 (D30)', async () => {
+    const { a, b } = await seatedMatch({ modeId: 'base', draftCount: 4 })
+    await playToCompletion(a, b, ['TIE', 'TIE', 'TIE', 'B'])
+
+    expect(a.view.outcome).toBe('B')
+    expect(a.view.rounds.map((r) => r.result)).toEqual(['TIE', 'TIE', 'TIE', 'B'])
+    // 1.5 from regulation plus the decider. Nothing left in either hand afterwards.
+    expect(b.view.you.score).toBe(2.5)
+    for (const client of [a, b]) {
+      expect(client.view.you.slots?.every((s) => s.consumed)).toBe(true)
+    }
   })
 
   it('stops at 2–0 without playing the dead rubber (D21)', async () => {

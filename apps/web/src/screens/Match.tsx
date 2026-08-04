@@ -4,6 +4,7 @@ import type { CharId, PlayerActionPayload, PlayerView, SlotIdx } from '@banpick/
 import { RESUME_LINK_WARNING, WAITING_NOTE } from '../copy.js'
 import { connect, type Transport, type TransportState } from '../transport.js'
 import { ActionBar, slotTargets } from '../components/ActionBar.js'
+import { PlayAgain } from '../components/PlayAgain.js'
 import { DiceRoll } from '../components/DiceRoll.js'
 import { OpponentActivity } from '../components/OpponentActivity.js'
 import { HeadToHead } from '../components/HeadToHead.js'
@@ -35,6 +36,7 @@ export function Match({
     rejection: null,
     error: null,
     progress: null,
+    rematch: null,
   })
   const [transport, setTransport] = useState<Transport | null>(null)
 
@@ -63,6 +65,7 @@ export function Match({
         onAct={act}
         onProgress={(filled, of, ban) => transport?.reportProgress(filled, of, ban)}
         progress={state.progress}
+        rematch={state.rematch}
         roomCode={roomCode}
         seatToken={seatToken}
       />
@@ -85,6 +88,7 @@ function MatchBody({
   onAct,
   onProgress,
   progress,
+  rematch,
   roomCode,
   seatToken,
 }: {
@@ -92,6 +96,7 @@ function MatchBody({
   onAct: (payload: PlayerActionPayload) => void
   onProgress: (filled: number, of: number, ban: boolean) => void
   progress: { filled: number; of: number; ban: boolean } | null
+  rematch: { roomCode: string; by: string } | null
   roomCode: string
   seatToken: string
 }) {
@@ -181,6 +186,8 @@ function MatchBody({
 
       <PhaseTitle view={view} />
       <Outcome view={view} />
+      {/* Under the result, because the result is what someone is reading when they decide. */}
+      <PlayAgain view={view} roomCode={roomCode} seatToken={seatToken} rematch={rematch} />
       {/* Under the result, so a win lands with what it means for the series. */}
       <HeadToHead view={view} />
       <RoundStrip view={view} />

@@ -72,9 +72,9 @@ describe('a finished match reaches the leaderboard', () => {
 
   it('records a draw as a draw for both', async () => {
     // D21 — three tied rounds is 1.5–1.5 and a legal terminal state. Half a win each would be a
-    // different game.
+    // different game. At 3, because D30's overtime decides that score at 4.
     const players: [string, string] = ['lb-d1', 'lb-d2']
-    const { a, b } = await seatedMatch({ modeId: 'base', draftCount: 4, players })
+    const { a, b } = await seatedMatch({ modeId: 'base', draftCount: 3, players })
     await playToCompletion(a, b, ['TIE', 'TIE', 'TIE'])
     await a.settle(40)
     expect(a.view.outcome).toBe('DRAW')

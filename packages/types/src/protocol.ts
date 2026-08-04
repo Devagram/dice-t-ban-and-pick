@@ -90,6 +90,15 @@ export type ServerMessage =
    * taken from the message.
    */
   | { type: 'OPPONENT_PROGRESS'; seat: Seat; filled: number; of: number; ban: boolean }
+  /**
+   * D32 — the other seat opened a rematch, and here is where it is.
+   *
+   * Pushed rather than polled because the completed match is the only channel these two players
+   * still share: without it, "play again" is back to copying a link, which is the thing it exists
+   * to remove. Carries the code and the seat that asked, and nothing else — the receiving client
+   * still joins through the ordinary lobby, so §12.3's consent-before-seating is untouched.
+   */
+  | { type: 'REMATCH'; roomCode: string; by: Seat }
 
 export type ProtocolErrorCode =
   'MALFORMED' | 'RATE_LIMITED' | 'UNKNOWN_MESSAGE' | 'NOT_YOUR_SEAT' | 'UNAUTHENTICATED'

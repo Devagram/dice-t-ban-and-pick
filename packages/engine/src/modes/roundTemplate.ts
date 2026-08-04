@@ -94,6 +94,24 @@ export const ROUND_OVERRIDES: Partial<Record<RoundIdx, RoundOverride>> = {
     rollAssigns: 'TURN_ORDER',
     select: { mode: 'SIMULTANEOUS_HIDDEN', actor: 'BOTH', pool: 'legalRoundPick' },
   },
+
+  /*
+   * D30 — the tiebreaker, reached only from 1.5-1.5 with a character still in hand.
+   *
+   * Round 2's shape, because that is what the situation has become: one character each, so
+   * nothing to ban and nothing to choose between. What still matters is the roll and D24's
+   * declaration of play order, which in Dice Throne is most of a match-up anyway.
+   *
+   * `allowTie: false` is the part that is not round 2. A tiebreaker that can tie ends 2.0-2.0
+   * with an empty board, and G14 refuses that combination for good reason — the loader checks
+   * for this flag rather than trusting the mode author, see `validateTermination`.
+   */
+  3: {
+    remove: ['privilegeChoice', 'ban'],
+    rollAssigns: 'TURN_ORDER',
+    select: { mode: 'SIMULTANEOUS_HIDDEN', actor: 'BOTH', pool: 'legalRoundPick' },
+    report: { allowTie: false },
+  },
 }
 
 export const ROUND_LOOP: RoundLoopSpec = {
@@ -104,10 +122,15 @@ export const ROUND_LOOP: RoundLoopSpec = {
   overrides: ROUND_OVERRIDES,
 }
 
-/** Spec §10, D21. One rule ships: HALF_POINT, always 3 rounds, no overtime, draws are legal. */
+/**
+ * Spec §10, D21, and D30's amendment.
+ *
+ * HALF_POINT scoring over three rounds, and a draw is still a legal terminal state — at
+ * `draftCount: 3` it is the only thing 1.5-1.5 can be. At 4 the overtime round decides it.
+ */
 export const TIE_RULE: TieRule = { scoring: 'HALF_POINT', consumesCharacters: true }
 export const MATCH_RULE: MatchRule = { resolution: 'ALWAYS_3_ROUNDS', stopWhenDecided: true }
-export const OVERTIME_RULE: OvertimeRule = { enabled: false }
+export const OVERTIME_RULE: OvertimeRule = { enabled: true }
 
 /** D25 — one parameter, declared by both modes. The 3-vs-4 question is settled by §15, not here. */
 export const DRAFT_COUNT_PARAM = {

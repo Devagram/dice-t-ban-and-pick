@@ -59,18 +59,41 @@ describe('auto-commit at draftCount 3', () => {
 })
 
 describe('auto-commit at draftCount 4', () => {
-  it('never fires in the base mode', () => {
-    // §9.3's argument, mechanically: at four slots every round contains a real drafting
-    // decision. If this test ever starts failing, the pick phase has stopped mattering
-    // somewhere and that is a design finding, not a test to update.
+  it('never fires in regulation', () => {
+    /*
+     * §9.3's argument, mechanically: at four slots every *regulation* round contains a real
+     * drafting decision. If this starts failing for rounds 0-2, the pick phase has stopped
+     * mattering somewhere and that is a design finding, not a test to update.
+     *
+     * Round 3 is excluded because it is D30's overtime, where each seat holds exactly one
+     * character by construction — see the test below, which asserts that it *is* forced.
+     */
     for (const results of [
       ['A', 'B', 'A'],
       ['B', 'A', 'TIE'],
-      ['TIE', 'TIE', 'TIE'],
+      ['TIE', 'TIE', 'TIE', 'A'],
     ] as const) {
       const final = playMatch(startMatch({ mode: baseMode, draftCount: 4 }), [...results])
-      expect(forcedSelects(final), `results ${results.join('/')}`).toHaveLength(0)
+      const inRegulation = forcedSelects(final).filter(
+        (e) => e.payload.type === 'SELECT' && e.payload.roundIndex < 3,
+      )
+      expect(inRegulation, `results ${results.join('/')}`).toHaveLength(0)
     }
+  })
+
+  it('fires in overtime, because one character each is not a decision (D30)', () => {
+    const final = playMatch(startMatch({ mode: baseMode, draftCount: 4 }), [
+      'TIE',
+      'TIE',
+      'TIE',
+      'A',
+    ])
+    const overtime = forcedSelects(final).filter(
+      (e) => e.payload.type === 'SELECT' && e.payload.roundIndex === 3,
+    )
+    // One per seat, authored by the system rather than asked of a player.
+    expect(overtime).toHaveLength(2)
+    expect(overtime.every((e) => e.actor === 'SYSTEM')).toBe(true)
   })
 
   it('offers a real select to both seats in round 2', () => {

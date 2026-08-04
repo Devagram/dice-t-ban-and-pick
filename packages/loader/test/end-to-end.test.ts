@@ -193,7 +193,9 @@ describe('a mode file plays a match', () => {
 
         expect(final.status).toBe('COMPLETE')
         expect(final.outcome).toBe('A')
-        expect(final.rounds.map((r) => r.result)).toEqual(['A', 'B', 'A'])
+        // Four round states, three played: D30 gives every match an overtime round and leaves
+        // it unreported unless regulation ends level. `null` here is the round not happening.
+        expect(final.rounds.map((r) => r.result)).toEqual(['A', 'B', 'A', null])
         // The hash the loader computed is what the match carries forever (D20).
         expect(final.ruleset.modeContentHash).toMatch(/^[0-9a-f]{12}$/)
       })
@@ -216,9 +218,17 @@ describe('a mode file plays a match', () => {
   })
 
   it('reaches a drawn match, which is a legal terminal state (D21)', () => {
-    const final = play(startFromYaml('base', 4), ['TIE', 'TIE', 'TIE'])
+    // At 3, where regulation spends every character. D30 decides the same score at 4.
+    const final = play(startFromYaml('base', 3), ['TIE', 'TIE', 'TIE'])
     expect(final.outcome).toBe('DRAW')
     expect(final.seats.A.score).toBe(1.5)
+  })
+
+  it('breaks the same tie at draftCount 4, where a character is still in hand (D30)', () => {
+    const final = play(startFromYaml('base', 4), ['TIE', 'TIE', 'TIE', 'B'])
+    expect(final.outcome).toBe('B')
+    expect(final.rounds.map((r) => r.result)).toEqual(['TIE', 'TIE', 'TIE', 'B'])
+    expect(final.seats.B.score).toBe(2.5)
   })
 })
 

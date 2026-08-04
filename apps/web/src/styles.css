@@ -434,6 +434,31 @@ select {
   color: var(--warn);
 }
 
+/*
+ * D30 — the tiebreaker reads as a different kind of round, because it is one.
+ *
+ * Dashed while it is still hypothetical, and it inherits `.round--now`'s accent border the
+ * moment it is actually being played, so "might happen" and "is happening" never look alike.
+ */
+.round--overtime {
+  border-style: dashed;
+}
+
+.round--overtime.round--now,
+.round--overtime.round--done {
+  border-style: solid;
+}
+
+.round--overtime .round__index {
+  color: var(--warn);
+  letter-spacing: 0.04em;
+}
+
+.round__conditional {
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .outcome {
   /* Resolves last: the board has already told the story by the time this speaks. */
   animation: outcome-in var(--t-slow) var(--ease-out) 1100ms both;
@@ -836,6 +861,21 @@ select {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/*
+ * Your own outcome, marked.
+ *
+ * The buttons are now in a stable order (you, them, tie), and this is the second half of the same
+ * fix: a misreport is cheap to undo but embarrassing to make, so the one that claims the win for
+ * yourself does not look identical to the one that gives it away.
+ */
+.btn--option-self {
+  border-color: color-mix(in srgb, var(--good) 55%, transparent);
+}
+
+.btn--option-self:hover {
+  border-color: var(--good);
 }
 
 .seatcta__note {
@@ -2228,4 +2268,94 @@ select {
   font-size: var(--step-1);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* --- D31: the lobby list ------------------------------------------------- */
+
+.hero__links {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.panel__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.lobbylist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/*
+ * Grid rather than flex so the mode and the age line up down the column — a list you scan for
+ * "which of these is mine" reads badly when every row sets its own tab stops.
+ */
+.lobbyrow {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.lobbyrow--playing {
+  opacity: 0.75;
+}
+
+.lobbyrow__who {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lobbyrow__status {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.lobbyrow__mode,
+.lobbyrow__age {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Stacks before the row starts eliding the one thing it exists to show. */
+@media (max-width: 34rem) {
+  .lobbyrow {
+    grid-template-columns: 1fr auto;
+  }
+
+  .lobbyrow__age {
+    display: none;
+  }
+}
+
+/* --- D32: play again ----------------------------------------------------- */
+
+.playagain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.75rem 0 0;
+}
+
+.playagain__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
 }

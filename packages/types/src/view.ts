@@ -75,6 +75,14 @@ export interface RoundView {
   selectionCommitted: Record<Seat, boolean>
   playOrder: { declaredBy: Seat; first: Seat } | null
   result: RoundOutcome | null
+  /**
+   * D30 — this is the tiebreaker, not a fourth regulation round.
+   *
+   * Projected rather than derived from the index because §11 forbids the client re-deriving a
+   * rule: "index 3 means overtime" is a rule, and one that stops being true the moment a mode
+   * ships four regulation rounds.
+   */
+  overtime: boolean
 }
 
 export interface PhaseView {

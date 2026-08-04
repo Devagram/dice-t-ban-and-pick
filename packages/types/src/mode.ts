@@ -146,6 +146,13 @@ export interface RoundOverride {
   rollAssigns?: 'TURN_ORDER'
   /** D22 — R2 replaces the two sequential selects with one simultaneous hidden one. */
   select?: { mode: 'SIMULTANEOUS_HIDDEN'; actor: 'BOTH'; pool: PoolName }
+  /**
+   * D30 — overtime forbids the tie it exists to break.
+   *
+   * Without this the tiebreaker can end 2.0–2.0 with no characters left, which is the exact
+   * deadlock G14's termination check was written to keep out of the loader.
+   */
+  report?: { allowTie: boolean }
 }
 
 export type ModuleSpec =

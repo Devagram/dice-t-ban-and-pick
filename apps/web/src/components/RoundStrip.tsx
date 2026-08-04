@@ -33,11 +33,20 @@ export function RoundStrip({ view }: { view: PlayerView }) {
       {view.rounds.map((round) => {
         const state = round.result !== null ? 'done' : round.index === current ? 'now' : 'later'
         return (
-          <li key={round.index} className={`round round--${state}`}>
-            <span className="round__index">R{round.index + 1}</span>
+          <li
+            key={round.index}
+            className={`round round--${state}${round.overtime ? ' round--overtime' : ''}`}
+          >
+            {/* D30 — "OT" rather than "R4", because it is not the fourth round of anything. It
+                only exists when regulation could not separate you. */}
+            <span className="round__index">{round.overtime ? 'OT' : `R${round.index + 1}`}</span>
             <span className="round__detail">
               {round.result !== null ? (
                 <ResultLabel view={view} result={round.result} />
+              ) : round.overtime && round.index !== current ? (
+                // Conditional until it happens, and saying so beats a blank pip nobody can
+                // place. The engine has already dropped it entirely where it cannot be reached.
+                <span className="round__conditional">if level</span>
               ) : (
                 <PrivilegeLabel view={view} round={round} />
               )}

@@ -36,8 +36,20 @@ export interface MatchRule {
   stopWhenDecided: boolean
 }
 
+/**
+ * D30 — the tiebreaker round.
+ *
+ * `HALF_POINT` scoring makes 1.5–1.5 reachable, and D21 accepted that as a legal draw because
+ * three rounds against three characters leaves nothing to play. At `draftCount: 4` that stopped
+ * being true: each seat finishes regulation holding one unplayed character, and the natural
+ * decider was sitting on the board unused.
+ *
+ * Enabled is not the same as played. The round is entered only when regulation ends level *and*
+ * both seats still hold an unconsumed character — so the same mode file covers `draftCount: 3`,
+ * where it can never fire, without a branch.
+ */
 export interface OvertimeRule {
-  enabled: false
+  enabled: boolean
 }
 
 /**

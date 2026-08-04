@@ -166,6 +166,7 @@ function translateOverride(o: SchemaShape): RoundOverride {
   if (o['selectOrder']) out.selectOrder = o['selectOrder']
   if (o['rollAssigns']) out.rollAssigns = o['rollAssigns']
   if (o['select']) out.select = o['select']
+  if (o['report']) out.report = o['report']
   return out
 }
 

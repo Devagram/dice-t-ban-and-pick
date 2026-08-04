@@ -1,9 +1,11 @@
 import { moduleFor } from '@banpick/engine'
 import {
   activeRoster,
+  ROUND_COUNT,
   type CharId,
   type MatchRule,
   type ModeDefinition,
+  type ModuleSpec,
   type OvertimeRule,
   type ResolvedModule,
   type Roster,
@@ -251,13 +253,19 @@ export function parameterCombinations(
  * the deadlock. A loader without this check accepts it happily, and the failure arrives in
  * front of two players with nothing left to play.
  */
-const TERMINATING: readonly string[] = ['HALF_POINT|ALWAYS_3_ROUNDS|false']
+const TERMINATING: readonly string[] = [
+  'HALF_POINT|ALWAYS_3_ROUNDS|false',
+  // D30. Terminating for a reason the key cannot express, which is why `validateTermination`
+  // also checks the overtime round itself: overtime is only a decider if it forbids ties.
+  'HALF_POINT|ALWAYS_3_ROUNDS|true',
+]
 
 export function validateTermination(
   onTie: TieRule,
   match: MatchRule,
   overtime: OvertimeRule,
   path: string,
+  modules: ModuleSpec[] = [],
 ): LoadIssue[] {
   const key = `${onTie.scoring}|${match.resolution}|${overtime.enabled}`
   if (!TERMINATING.includes(key)) {
@@ -270,7 +278,35 @@ export function validateTermination(
       ),
     ]
   }
-  return []
+
+  if (!overtime.enabled) return []
+
+  /*
+   * D30 — the argument that overtime terminates, checked rather than assumed.
+   *
+   * Regulation can only reach overtime level, so overtime must produce a lead. A tie-allowing
+   * overtime round ends 2.0–2.0 with every character consumed and nothing left to play, which is
+   * the same deadlock the table above was written to keep out — reached by a longer path.
+   *
+   * The check is on the round's own override rather than on the resolved program because the
+   * override is where a mode author writes it, and an error pointing at a generated module index
+   * is an error nobody can act on.
+   */
+  const issues: LoadIssue[] = []
+  for (const mod of modules) {
+    if (mod.type !== 'ROUND_LOOP') continue
+    const overtimeRound = mod.overrides[ROUND_COUNT]
+    if (overtimeRound?.report?.allowTie === false) continue
+    issues.push(
+      issue(
+        'NON_TERMINATING',
+        `${path}/${mod.id}`,
+        `overtime is enabled, so round ${ROUND_COUNT} must set 'report: { allowTie: false }'. ` +
+          `An overtime round that can tie leaves 2.0-2.0 with no characters left to play.`,
+      ),
+    )
+  }
+  return issues
 }
 
 // --- Structural: duplicate ids -----------------------------------------------------------------

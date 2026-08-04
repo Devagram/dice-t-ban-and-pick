@@ -29,6 +29,7 @@ const LOAD_CODE_OF: Record<ResolutionErrorCode, LoadErrorCode> = {
   SELECT_OVERRIDE_TARGET: 'RESOLUTION_FAILED',
   NESTED_ROUND_LOOP: 'RESOLUTION_FAILED',
   ROUND_INDEX_RANGE: 'RESOLUTION_FAILED',
+  REPORT_OVERRIDE_TARGET: 'RESOLUTION_FAILED',
 }
 
 /** One validated parameter combination (D25), ready for the lobby to offer. */
@@ -79,7 +80,7 @@ export function loadModeFromSource(source: string, ref: string, opts: LoadOption
   // Static checks — the ones that do not depend on which parameters were chosen.
   const loops = def.modules.filter((m): m is RoundLoopSpec => m.type === 'ROUND_LOOP')
   for (const loop of loops) issues.push(...validateTransitionPreservation(loop, ref))
-  issues.push(...validateTermination(def.onTie, def.match, def.overtime, ref))
+  issues.push(...validateTermination(def.onTie, def.match, def.overtime, ref, def.modules))
 
   const { combinations, issues: paramIssues } = parameterCombinations(def, ref)
   issues.push(...paramIssues)

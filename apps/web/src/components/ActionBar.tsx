@@ -1,4 +1,4 @@
-import type { Action, PlayerActionPayload, PlayerView } from '@banpick/types'
+import type { Action, PlayerActionPayload, PlayerView, Seat } from '@banpick/types'
 
 import {
   PRIVILEGE_HELP,
@@ -180,16 +180,37 @@ function ReportControl({
 }) {
   const opponent = view.seat === 'A' ? 'B' : 'A'
 
+  /*
+   * Ordered by who the button means, not by the seat letter.
+   *
+   * The engine offers outcomes as `['A', 'B', 'TIE']` — absolute seats, which is right for a
+   * payload and wrong for a row of buttons. Rendered in that order, seat A gets [I won][They won]
+   * and seat B gets [They won][I won]: the same position means opposite things depending on where
+   * you are sitting. Anyone who plays a few rounds in one seat and then takes the other clicks the
+   * position they learned and reports the opposite of what they meant, which is precisely the kind
+   * of mistake `UNDO_LAST_RESULT` exists to clean up and this ordering exists to prevent.
+   *
+   * "I won" is always first, "they won" second, the tie last.
+   */
+  const ordered = [...action.outcomes].sort(
+    (x, y) => rank(x, view.seat, opponent) - rank(y, view.seat, opponent),
+  )
+
+  const nameFor = (outcome: 'A' | 'B' | 'TIE'): string => {
+    const player = outcome === view.seat ? view.you.player : view.opponent.player
+    return player?.name ? player.name : `Seat ${outcome}`
+  }
+
   return (
     <section className="prompt">
       <h3 className="prompt__title">Who won round {action.roundIndex + 1}?</h3>
       <p className="prompt__help">{REPORT_HELP}</p>
       <div className="prompt__options">
-        {action.outcomes.map((outcome) => (
+        {ordered.map((outcome) => (
           <button
             key={outcome}
             type="button"
-            className="btn btn--option"
+            className={`btn btn--option ${outcome === view.seat ? 'btn--option-self' : ''}`}
             onClick={() =>
               onAct({
                 type: 'REPORT_RESULT',
@@ -206,15 +227,23 @@ function ReportControl({
             {outcome === 'TIE' ? (
               <span className="btn__sub">Half a point each, and both characters are spent.</span>
             ) : (
-              <span className="btn__sub">
-                {outcome === view.seat ? `Seat ${view.seat}` : `Seat ${opponent}`}
-              </span>
+              // The name rather than the seat letter: "I won" is unambiguous, but the line under
+              // it is what someone checks when they are not sure, and "Seat B" is only meaningful
+              // if you remember which seat you took.
+              <span className="btn__sub">{nameFor(outcome)}</span>
             )}
           </button>
         ))}
       </div>
     </section>
   )
+}
+
+/** You, then them, then the tie — see the note in `ReportControl`. */
+function rank(outcome: 'A' | 'B' | 'TIE', seat: Seat, opponent: Seat): number {
+  if (outcome === seat) return 0
+  if (outcome === opponent) return 1
+  return 2
 }
 
 const OPTION_LABEL: Record<string, string> = {

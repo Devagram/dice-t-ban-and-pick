@@ -70,6 +70,7 @@ export function view(over: Partial<PlayerView> = {}): PlayerView {
       selection: {},
       selectionCommitted: { A: false, B: false },
       playOrder: null,
+      overtime: false,
       result: null,
     })),
     phase: { moduleId: 'rounds.0.ban', type: 'BAN', roundIndex: 0, awaiting: [seat] },

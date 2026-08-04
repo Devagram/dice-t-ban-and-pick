@@ -143,3 +143,42 @@ export function fetchHeadToHead(a: string, b: string): Promise<HeadToHead> {
     json<HeadToHead>,
   )
 }
+
+// --- D31: the lobby list ---------------------------------------------------------------------
+
+export interface RoomListing {
+  roomCode: string
+  modeLabel: string
+  hostName: string
+  seatsTaken: number
+  status: 'OPEN' | 'PLAYING'
+  openedAt: number
+}
+
+/**
+ * Open and in-progress rooms on this deployment.
+ *
+ * Public, deliberately: the owner's call was that anyone who can reach the site can see the list
+ * and join. The room code stops being a secret at that point — it was never much of one, but it
+ * was something, and D31 records the trade rather than letting it happen quietly.
+ */
+export function fetchLobbies(): Promise<RoomListing[]> {
+  return fetch('/api/lobbies')
+    .then(json<{ rooms: RoomListing[] }>)
+    .then((r) => r.rooms)
+}
+
+/**
+ * D32 — opens (or finds) the rematch room for a finished match.
+ *
+ * Idempotent on the server, so both players pressing this lands them in the same room rather than
+ * two rooms each waiting for the other. Returns the code; joining is still the ordinary lobby
+ * flow, because §12.3 makes sitting down the act of consent and nobody else gets to do it for you.
+ */
+export function openRematch(roomCode: string, seatToken: string): Promise<string> {
+  return fetch(`/api/match/${roomCode}/rematch?token=${encodeURIComponent(seatToken)}`, {
+    method: 'POST',
+  })
+    .then(json<{ roomCode: string }>)
+    .then((r) => r.roomCode)
+}

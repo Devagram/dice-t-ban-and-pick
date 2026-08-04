@@ -17,6 +17,14 @@ import { DurableObject } from 'cloudflare:workers'
  * `PairHistoryDO` keeps doing exactly what D28 gave it, and its comment forbidding results stays
  * true.
  *
+ * **D31 adds the open-room list.** Same object, because "which games are open right now" is the
+ * same category of thing as the leaderboard — deployment-wide, outliving no single match — and a
+ * second singleton would be a second thing to keep alive for no gain. It needs no migration: a
+ * migration creates a Durable Object *class*, and this is a table on one that already exists.
+ *
+ * It is the one thing here that is *not* a record. Rooms are announced, updated, and swept; a
+ * room nobody joined is noise within the hour, not history.
+ *
  * **Totals are derived, never incremented.** D15 lets either seat undo the last result *including
  * on the final round*, which reopens a completed match — so a match can complete, un-complete,
  * and complete again with a different winner. Every write is an upsert keyed by room code, and
@@ -51,6 +59,27 @@ export interface Standing {
   roundDraws: number
 }
 
+/** D31 — one open or in-progress room, as the lobby list shows it. */
+export interface RoomListing {
+  roomCode: string
+  modeLabel: string
+  /** Empty until someone sits down and names themselves — a room predates its players. */
+  hostName: string
+  seatsTaken: number
+  status: 'OPEN' | 'PLAYING'
+  openedAt: number
+}
+
+/**
+ * How long a room stays listed without anything happening to it.
+ *
+ * A host who opens a room and wanders off is the common case, not the exception, and a lobby
+ * full of dead rooms is worse than an empty one — every entry is a click that goes nowhere.
+ * Two hours is long enough to make a coffee and short enough that the list means something.
+ * Measured from the last update, so a match in progress does not vanish underneath its players.
+ */
+const ROOM_TTL_MS = 2 * 60 * 60 * 1000
+
 export interface HeadToHead {
   /** Wins for the first id given, losses for it, and draws. */
   wins: number
@@ -72,6 +101,20 @@ export class RegistryDO extends DurableObject<Env> {
            name      TEXT NOT NULL,
            player_id TEXT NOT NULL,
            claimed_at INTEGER NOT NULL
+         )`,
+      )
+      // D31 — the lobby list. `status` is 'OPEN' (a seat free) or 'PLAYING' (both taken, still
+      // watchable). Finished rooms are deleted rather than marked: nothing lists them, and the
+      // `matches` table above is where a finished game actually lives.
+      this.sql.exec(
+        `CREATE TABLE IF NOT EXISTS rooms (
+           room_code   TEXT PRIMARY KEY,
+           opened_at   INTEGER NOT NULL,
+           updated_at  INTEGER NOT NULL,
+           mode_label  TEXT NOT NULL,
+           host_name   TEXT NOT NULL,
+           seats_taken INTEGER NOT NULL,
+           status      TEXT NOT NULL
          )`,
       )
       this.sql.exec(
@@ -99,6 +142,10 @@ export class RegistryDO extends DurableObject<Env> {
         return this.record(request)
       case 'standings':
         return Response.json({ standings: this.standings() })
+      case 'room':
+        return this.room(request)
+      case 'rooms':
+        return Response.json({ rooms: this.rooms() })
       case 'head-to-head': {
         const url = new URL(request.url)
         const a = url.searchParams.get('a') ?? ''
@@ -322,5 +369,86 @@ export class RegistryDO extends DurableObject<Env> {
     }
 
     return { wins, losses, draws, matches }
+  }
+
+  /**
+   * D31 — announce, update, or withdraw a room.
+   *
+   * One endpoint for all three because `MatchDO` calls it from three points in one lifecycle and
+   * a room that is announced but never withdrawn is the failure this table has to avoid. An
+   * upsert keyed by room code also makes it replay-safe: D15's undo can reopen a completed match,
+   * and the room simply comes back.
+   */
+  private async room(request: Request): Promise<Response> {
+    let body: {
+      roomCode?: unknown
+      modeLabel?: unknown
+      hostName?: unknown
+      seatsTaken?: unknown
+      status?: unknown
+    }
+    try {
+      body = (await request.json()) as typeof body
+    } catch {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+    if (typeof body?.roomCode !== 'string' || !body.roomCode) {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+
+    if (body.status === 'CLOSED') {
+      this.sql.exec('DELETE FROM rooms WHERE room_code = ?', body.roomCode)
+      return Response.json({ ok: true })
+    }
+
+    const status = body.status === 'PLAYING' ? 'PLAYING' : 'OPEN'
+    const now = Date.now()
+    this.sql.exec(
+      `INSERT INTO rooms (room_code, opened_at, updated_at, mode_label, host_name, seats_taken, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(room_code) DO UPDATE SET
+         updated_at  = excluded.updated_at,
+         mode_label  = excluded.mode_label,
+         -- Kept once set: the host names themselves on sitting down, and a later update from a
+         -- caller that does not know the name must not blank it out.
+         host_name   = CASE WHEN excluded.host_name = '' THEN rooms.host_name
+                            ELSE excluded.host_name END,
+         seats_taken = excluded.seats_taken,
+         status      = excluded.status`,
+      body.roomCode,
+      now,
+      now,
+      typeof body.modeLabel === 'string' ? body.modeLabel.slice(0, 60) : '',
+      typeof body.hostName === 'string' ? body.hostName.slice(0, 40) : '',
+      typeof body.seatsTaken === 'number' ? Math.max(0, Math.min(2, body.seatsTaken)) : 0,
+      status,
+    )
+    return Response.json({ ok: true })
+  }
+
+  /** Swept on read rather than on a timer: the list is the only thing that cares. */
+  private rooms(): RoomListing[] {
+    this.sql.exec('DELETE FROM rooms WHERE updated_at < ?', Date.now() - ROOM_TTL_MS)
+    return this.sql
+      .exec<{
+        room_code: string
+        mode_label: string
+        host_name: string
+        seats_taken: number
+        status: string
+        opened_at: number
+      }>(
+        `SELECT room_code, mode_label, host_name, seats_taken, status, opened_at
+           FROM rooms ORDER BY status = 'OPEN' DESC, opened_at DESC`,
+      )
+      .toArray()
+      .map((r) => ({
+        roomCode: r.room_code,
+        modeLabel: r.mode_label,
+        hostName: r.host_name,
+        seatsTaken: r.seats_taken,
+        status: r.status === 'PLAYING' ? ('PLAYING' as const) : ('OPEN' as const),
+        openedAt: r.opened_at,
+      }))
   }
 }

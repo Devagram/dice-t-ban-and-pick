@@ -67,9 +67,16 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
       <header className="hero">
         <h1 className="title">Ban &amp; Pick</h1>
         <p className="hero__sub">Dice Throne · draft, ban, and settle it</p>
-        <a className="btn btn--quiet" href="/leaderboard">
-          Leaderboard
-        </a>
+        <div className="hero__links">
+          {/* Ahead of the leaderboard: joining a game is what someone arriving at the base URL
+              most likely came to do, now that it is possible without a link. */}
+          <a className="btn btn--primary" href="/lobbies">
+            Join a game
+          </a>
+          <a className="btn btn--quiet" href="/leaderboard">
+            Leaderboard
+          </a>
+        </div>
       </header>
 
       <section className="panel">

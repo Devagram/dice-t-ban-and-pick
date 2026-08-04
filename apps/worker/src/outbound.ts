@@ -74,6 +74,18 @@ export function relayProgress(
   }
 }
 
+/**
+ * D32 — announces the rematch room to both seats.
+ *
+ * Sent to everyone including the seat that asked, so a player with the match open in two places
+ * sees it in both. Carries a room code and the seat that opened it and nothing else: it never
+ * touches `project()` because there is no match state in it, which is precisely why it is safe
+ * for it to go to both seats unfiltered.
+ */
+export function announceRematch(targets: Iterable<SeatSocket>, roomCode: string, by: Seat): void {
+  for (const target of targets) deliver(target.socket, { type: 'REMATCH', roomCode, by })
+}
+
 /** A protocol-level problem. Also carries no state. */
 export function sendProtocolError(
   socket: WebSocket,

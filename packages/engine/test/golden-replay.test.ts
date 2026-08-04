@@ -41,7 +41,9 @@ describe('golden replay — base', () => {
       expect(final.outcome).toBe('A')
       expect(final.seats.A.score).toBe(2)
       expect(final.seats.B.score).toBe(1)
-      expect(final.rounds.map((r) => r.result)).toEqual(['A', 'B', 'A'])
+      // The fourth is D30's overtime round: present in every match, played only when
+      // regulation ends level. 2-1 is not level.
+      expect(final.rounds.map((r) => r.result)).toEqual(['A', 'B', 'A', null])
 
       // Every round consumed exactly one slot per seat.
       for (const seat of ['A', 'B'] as const) {
@@ -84,10 +86,12 @@ describe('golden replay — base', () => {
   it('declares play order after both selections, in every round (D24)', () => {
     const final = playMatch(startMatch({ mode: baseMode, draftCount: 4 }), ['A', 'B', 'A'])
 
-    for (const round of final.rounds) {
+    // Regulation only — the overtime round was never played, so it declared nothing.
+    for (const round of final.rounds.slice(0, 3)) {
       expect(round.playOrder).not.toBeNull()
       expect(round.playOrder!.declaredBy).toBe(round.turnOrderHolder)
     }
+    expect(final.rounds[3]!.playOrder).toBeNull()
 
     // The order decision must come after both selects of its round — deciding it blind would
     // be a coin flip with ceremony.

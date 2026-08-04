@@ -55,19 +55,17 @@ describe('progress reaches the opponent', () => {
     // There is no seat field to forge — but the relayed frame must still name the *sender*,
     // which is the property that would matter if one were ever added.
     a.send({ type: 'PROGRESS', filled: 1, of: 4 })
-    await b.settle(10)
-    expect(b.progress.at(-1)?.seat).toBe('A')
+    expect((await b.waitForProgress()).seat).toBe('A')
   })
 
   it('clamps nonsense instead of trusting or rejecting it', async () => {
     const { a, b } = await seatedMatch()
 
     a.send({ type: 'PROGRESS', filled: 999, of: 4 })
-    await b.settle(10)
-    expect(b.progress.at(-1)).toMatchObject({ filled: 4, of: 4 })
+    expect(await b.waitForProgress()).toMatchObject({ filled: 4, of: 4 })
 
     a.send({ type: 'PROGRESS', filled: -5, of: 99999 })
-    await b.settle(10)
+    await b.waitForProgress()
     // Clamped rather than rejected: it decides nothing, so a bad count should cost a wrong
     // progress bar and not a round trip.
     const last = b.progress.at(-1)!
