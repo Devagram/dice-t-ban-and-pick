@@ -2686,6 +2686,91 @@ select {
   font-size: 0.75rem;
 }
 
+/* --- D35: player ids and consolidation -------------------------------------- */
+
+/* The key field's answer to "did that work?", which it previously had no way to give. */
+.field__status {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+}
+
+.field__status--ok {
+  color: var(--accent);
+}
+
+.field__status--bad {
+  color: var(--danger);
+}
+
+.field__status code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.adminrow__who {
+  /* Wide enough for a name plus a `p_` UUID, but never wider than the row it sits in. */
+  flex: 1 1 16rem;
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.playerrow {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.playerrow__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.playerrow__name {
+  font-weight: 600;
+}
+
+.playerrow__record {
+  font-variant-numeric: tabular-nums;
+}
+
+.playerrow__played,
+.playerrow__aka {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/*
+ * Shown whole and selectable. A truncated id cannot be compared against another one by eye or
+ * pasted anywhere, which are the only two things anyone is on this screen to do with it.
+ */
+.playerrow__id {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.merge {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.merge__title {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 .btn--tiny {
   padding: 2px 8px;
   font-size: 0.75rem;

@@ -99,6 +99,30 @@ export interface HeadToHead {
   matches: MatchRecord[]
 }
 
+/**
+ * D35 — one identity, as the dashboard has to see it: the id included, not hidden behind a name.
+ *
+ * Everything downstream keys on `playerId`, and a name is only ever a caption on top of it. That
+ * is invisible and fine right up until one person holds two ids — a second laptop, a cleared
+ * browser, a private window (`player.ts` says so plainly: "a cleared browser is a new player") —
+ * at which point the leaderboard shows them twice and no amount of renaming fixes it, because
+ * renaming was never what split them.
+ */
+export interface PlayerSummary {
+  playerId: string
+  /** The name on this id's most recent match, or its claimed name if it has never finished one. */
+  name: string
+  /** Names this id owns in `names`. More than one only after a merge. */
+  claimedNames: string[]
+  played: number
+  wins: number
+  losses: number
+  draws: number
+  /** Both 0 for an id that claimed a name but never finished a match — a real and common state. */
+  firstPlayedAt: number
+  lastPlayedAt: number
+}
+
 export class RegistryDO extends DurableObject<Env> {
   private readonly sql: SqlStorage
 
@@ -165,6 +189,10 @@ export class RegistryDO extends DurableObject<Env> {
         return this.edit(request)
       case 'delete':
         return this.remove(request)
+      case 'players':
+        return Response.json({ players: this.players() })
+      case 'merge':
+        return this.merge(request)
       case 'head-to-head': {
         const url = new URL(request.url)
         const a = url.searchParams.get('a') ?? ''
@@ -537,6 +565,177 @@ export class RegistryDO extends DurableObject<Env> {
   }
 
   /**
+   * D35 — every id this deployment has ever seen, with the games attached to it.
+   *
+   * Derived rather than stored, like every other total here, and read from *both* tables: an id
+   * that claimed a name but has not finished a match yet is exactly the one an admin is looking
+   * for — it is what a returning player's new browser looks like ten seconds after they typed
+   * their name into it and found it taken.
+   */
+  private players(): PlayerSummary[] {
+    const table = new Map<string, PlayerSummary>()
+    const entry = (id: string): PlayerSummary => {
+      const existing = table.get(id)
+      if (existing) return existing
+      const fresh: PlayerSummary = {
+        playerId: id,
+        name: '',
+        claimedNames: [],
+        played: 0,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        firstPlayedAt: 0,
+        lastPlayedAt: 0,
+      }
+      table.set(id, fresh)
+      return fresh
+    }
+
+    // Oldest first, so "the last name written wins" is genuinely the most recent one used rather
+    // than whatever order the rows happened to come back in — the bug `standings` still has.
+    const rows = this.sql
+      .exec<{
+        a_id: string
+        a_name: string
+        b_id: string
+        b_name: string
+        winner_id: string | null
+        played_at: number
+      }>('SELECT a_id, a_name, b_id, b_name, winner_id, played_at FROM matches ORDER BY played_at')
+      .toArray()
+
+    for (const row of rows) {
+      for (const side of [
+        { id: row.a_id, name: row.a_name },
+        { id: row.b_id, name: row.b_name },
+      ]) {
+        const player = entry(side.id)
+        if (side.name) player.name = side.name
+        player.played++
+        if (row.winner_id === null) player.draws++
+        else if (row.winner_id === side.id) player.wins++
+        else player.losses++
+        if (player.firstPlayedAt === 0) player.firstPlayedAt = row.played_at
+        player.lastPlayedAt = Math.max(player.lastPlayedAt, row.played_at)
+      }
+    }
+
+    for (const claim of this.sql
+      .exec<{
+        name: string
+        player_id: string
+      }>('SELECT name, player_id FROM names ORDER BY claimed_at')
+      .toArray()) {
+      const player = entry(claim.player_id)
+      player.claimedNames.push(claim.name)
+      // Only as a fallback: what they played under beats what they reserved, because the match
+      // rows are what every other screen is showing.
+      if (!player.name) player.name = claim.name
+    }
+
+    return [...table.values()].sort(
+      (x, y) => y.lastPlayedAt - x.lastPlayedAt || x.name.localeCompare(y.name),
+    )
+  }
+
+  /**
+   * D35 — two ids that are one person.
+   *
+   * The counterpart to `edit`: that fixes what a match *says*, this fixes *whose* it was. A player
+   * id is per-browser and there is no account behind it to reconcile against (`player.ts`, and
+   * D19 settled that on purpose), so the duplicate is not a bug to prevent — it is the expected
+   * cost of having no logins, and the only honest answer is a way to clean it up afterwards.
+   *
+   * **Refuses rather than guesses** when the two ids have faced each other. Those rows would
+   * become a player against themselves, which `standings` counts as a win *and* a loss for one
+   * person, and `matchups` keys as a pairing with itself. Whether such a match should be deleted
+   * or reassigned to a third id is a judgement about what actually happened that evening, and
+   * this endpoint does not have it — so it names the room codes and stops.
+   */
+  private async merge(request: Request): Promise<Response> {
+    let body: Record<string, unknown>
+    try {
+      body = (await request.json()) as Record<string, unknown>
+    } catch {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+
+    const fromId = playerRef(body['fromId'])
+    const intoId = playerRef(body['intoId'])
+    if (!fromId || !intoId) {
+      return Response.json(
+        { error: 'MALFORMED_BODY', detail: 'merge needs both fromId and intoId' },
+        { status: 400 },
+      )
+    }
+    if (fromId === intoId) {
+      return Response.json({ error: 'SAME_ID', detail: 'that is one id, not two' }, { status: 400 })
+    }
+
+    const collisions = this.sql
+      .exec<{
+        room_code: string
+      }>(
+        `SELECT room_code FROM matches
+          WHERE (a_id = ? AND b_id = ?) OR (a_id = ? AND b_id = ?)
+          ORDER BY played_at DESC`,
+        fromId,
+        intoId,
+        intoId,
+        fromId,
+      )
+      .toArray()
+      .map((r) => r.room_code)
+
+    if (collisions.length > 0) {
+      return Response.json(
+        {
+          error: 'SELF_MATCH',
+          roomCodes: collisions,
+          detail:
+            `these two ids played each other in ${collisions.join(', ')} — ` +
+            'delete or reassign those matches first, or the merge makes someone their own opponent',
+        },
+        { status: 409 },
+      )
+    }
+
+    const counted = (sql: string, ...args: string[]): number =>
+      Number(this.sql.exec<{ n: number }>(sql, ...args).toArray()[0]?.n ?? 0)
+
+    const moved = counted(
+      'SELECT COUNT(*) AS n FROM matches WHERE a_id = ? OR b_id = ?',
+      fromId,
+      fromId,
+    )
+    const names = counted('SELECT COUNT(*) AS n FROM names WHERE player_id = ?', fromId)
+
+    this.sql.exec('UPDATE matches SET a_id = ? WHERE a_id = ?', intoId, fromId)
+    this.sql.exec('UPDATE matches SET b_id = ? WHERE b_id = ?', intoId, fromId)
+    // The winner is stored as an id, not as a seat letter, so it has to move too — otherwise a
+    // merged player's wins land on nobody and the leaderboard quietly loses them.
+    this.sql.exec('UPDATE matches SET winner_id = ? WHERE winner_id = ?', intoId, fromId)
+    /*
+     * Name claims move rather than being released. "First browser to use a name owns it" should
+     * go on holding for the *person*, and freeing the old name would leave it available to a
+     * stranger while it is still printed on the merged player's older matches.
+     */
+    this.sql.exec('UPDATE names SET player_id = ? WHERE player_id = ?', intoId, fromId)
+
+    // Optional, and the reason it is here rather than in a second request: the merged rows still
+    // carry whatever name each browser used, so without this the leaderboard shows one player
+    // whose older games are captioned "Tom (laptop)".
+    const rename = str(body['name'])
+    if (rename) {
+      this.sql.exec('UPDATE matches SET a_name = ? WHERE a_id = ?', rename, intoId)
+      this.sql.exec('UPDATE matches SET b_name = ? WHERE b_id = ?', rename, intoId)
+    }
+
+    return Response.json({ ok: true, moved, names, players: this.players() })
+  }
+
+  /**
    * D34 — an admin correction to a stored match.
    *
    * **This edits the record, not the log**, and the difference is the reason it sits behind a key
@@ -547,6 +746,10 @@ export class RegistryDO extends DurableObject<Env> {
    *
    * Partial by design — only the fields present are touched, so correcting a name cannot quietly
    * reset a score.
+   *
+   * D35 adds `aId`/`bId`: reassigning a single match to a different player, for the case a merge
+   * is too broad for — one game played on a borrowed laptop, rather than an id that is wrong
+   * everywhere.
    */
   private async edit(request: Request): Promise<Response> {
     let body: Record<string, unknown>
@@ -567,24 +770,39 @@ export class RegistryDO extends DurableObject<Env> {
     if (!existing) return Response.json({ error: 'NOT_FOUND' }, { status: 404 })
 
     const record = rowToRecord(existing)
+    const seats = {
+      a: { id: playerRef(body['aId']) ?? record.a.id, name: str(body['aName']) ?? record.a.name },
+      b: { id: playerRef(body['bId']) ?? record.b.id, name: str(body['bName']) ?? record.b.name },
+    }
+    if (seats.a.id === seats.b.id) {
+      return Response.json(
+        { error: 'SELF_MATCH', detail: 'both seats would be the same player' },
+        { status: 409 },
+      )
+    }
+
     const next: MatchRecord = {
       ...record,
-      a: { id: record.a.id, name: str(body['aName']) ?? record.a.name },
-      b: { id: record.b.id, name: str(body['bName']) ?? record.b.name },
+      ...seats,
       /*
        * `winnerId` is nullable, so absent and null are different answers and `??` would conflate
        * them — a draw has to be settable, not just unsettable.
        */
-      winnerId: 'winnerId' in body ? normalizeWinner(body['winnerId'], record) : record.winnerId,
+      winnerId:
+        'winnerId' in body
+          ? normalizeWinner(body['winnerId'], { ...record, ...seats })
+          : followSeat(record.winnerId, record, seats),
       scoreA: num(body['scoreA']) ?? record.scoreA,
       scoreB: num(body['scoreB']) ?? record.scoreB,
       detail: 'rounds' in body ? withRounds(record.detail, body['rounds']) : record.detail,
     }
 
     this.sql.exec(
-      `UPDATE matches SET a_name = ?, b_name = ?, winner_id = ?, score_a = ?, score_b = ?,
-         detail = ? WHERE room_code = ?`,
+      `UPDATE matches SET a_id = ?, a_name = ?, b_id = ?, b_name = ?, winner_id = ?,
+         score_a = ?, score_b = ?, detail = ? WHERE room_code = ?`,
+      next.a.id,
       next.a.name,
+      next.b.id,
       next.b.name,
       next.winnerId,
       next.scoreA,
@@ -634,6 +852,34 @@ const str = (v: unknown): string | undefined =>
 
 const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined
+
+/**
+ * A player id, which is not a name and must not be capped like one — `p_` plus a UUID is already
+ * 38 of `str`'s 40 characters, and an id silently truncated is an id that matches nothing.
+ */
+const playerRef = (v: unknown): string | undefined => {
+  if (typeof v !== 'string') return undefined
+  const trimmed = v.trim().slice(0, 128)
+  return trimmed ? trimmed : undefined
+}
+
+/**
+ * A reassigned seat takes its result with it.
+ *
+ * The winner is stored as a player id rather than a seat letter, so moving a match to a different
+ * player without this leaves `winner_id` pointing at someone who is no longer in the match — which
+ * `standings` reads as "neither seat won" and silently scores as a loss for the winner.
+ */
+function followSeat(
+  winnerId: string | null,
+  was: MatchRecord,
+  now: { a: { id: string }; b: { id: string } },
+): string | null {
+  if (winnerId === null) return null
+  if (winnerId === was.a.id) return now.a.id
+  if (winnerId === was.b.id) return now.b.id
+  return winnerId
+}
 
 /** Accepts a seat letter, a player id, or null — the dashboard speaks seats, storage speaks ids. */
 function normalizeWinner(value: unknown, record: MatchRecord): string | null {

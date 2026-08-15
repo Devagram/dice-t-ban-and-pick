@@ -8,6 +8,22 @@ import { listModes } from './modes.js'
 
 const ROSTER = rosterAsset as Roster
 
+/**
+ * The admin surface, listed rather than pattern-matched.
+ *
+ * An allowlist because the alternative — forwarding anything under `/api/admin/` — would expose
+ * every action the registry has the moment one is added for another caller, and the whole point
+ * of this branch is that it is the only door to `edit`, `delete`, and now D35's `players` and
+ * `merge`.
+ *
+ * `players` is a read, and it is here rather than beside the public ones for two reasons: it
+ * lists ids that have never played, which no public response carries, and it is the inventory
+ * `merge` operates on. It is **not** what keeps a player id private — `/api/matches` is public
+ * and every row on it names both ids. That is a property of D19's no-accounts model rather than
+ * an oversight here, but it is the reason this comment does not claim otherwise.
+ */
+const ADMIN_ACTIONS = new Set(['edit', 'delete', 'players', 'merge'])
+
 export { MatchDO } from './MatchDO.js'
 export { PairHistoryDO } from './PairHistoryDO.js'
 export { RegistryDO } from './RegistryDO.js'
@@ -65,7 +81,7 @@ export default {
       }
       const registry = env.REGISTRY.get(env.REGISTRY.idFromName('registry'))
       const action = path.slice('/api/admin/'.length)
-      if (action !== 'edit' && action !== 'delete') {
+      if (!ADMIN_ACTIONS.has(action)) {
         return json({ error: 'NOT_FOUND', detail: `no admin route for ${path}` }, 404)
       }
       return registry.fetch(new Request(`${url.origin}/${action}`, request))

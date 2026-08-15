@@ -226,6 +226,9 @@ export function adminEditMatch(
     roomCode: string
     aName?: string
     bName?: string
+    /** D35 — reassigning one match to a different player. The winner follows the seat. */
+    aId?: string
+    bId?: string
     winnerId?: string | null
     scoreA?: number
     scoreB?: number
@@ -247,4 +250,55 @@ export function adminDeleteMatch(key: string, roomCode: string): Promise<void> {
     headers: { 'content-type': 'application/json', 'x-admin-key': key },
     body: JSON.stringify({ roomCode }),
   }).then(json<{ ok: true }>) as unknown as Promise<void>
+}
+
+// --- D35: the player directory ------------------------------------------------------------------
+
+export interface PlayerSummary {
+  playerId: string
+  name: string
+  claimedNames: string[]
+  played: number
+  wins: number
+  losses: number
+  draws: number
+  firstPlayedAt: number
+  lastPlayedAt: number
+}
+
+/**
+ * Every id this deployment has seen.
+ *
+ * Behind the admin key, though it is worth being precise about what that does and does not buy:
+ * `/api/matches` is public and every row on it already carries both players' ids, so this is not
+ * the thing keeping them secret — nothing is. What the key adds is the ids that have *never*
+ * played (a claimed name and nothing else), and a list of them sitting beside the endpoints that
+ * rewrite history is admin furniture either way.
+ *
+ * Falls back to an empty list rather than propagating a shape it did not expect: this feeds a
+ * `.map`, and a dashboard that blanks out is a worse answer to a malformed response than a
+ * dashboard that says nobody is listed.
+ */
+export function adminFetchPlayers(key: string): Promise<PlayerSummary[]> {
+  return fetch('/api/admin/players', { headers: { 'x-admin-key': key } })
+    .then(json<{ players: PlayerSummary[] }>)
+    .then((r) => r.players ?? [])
+}
+
+/**
+ * D35 — folds one id's history into another's.
+ *
+ * Returns the refreshed directory rather than `void`, because a merge changes every row it
+ * touches and the screen that asked for it needs all of them: re-reading is a second round trip
+ * to learn what this request already knows.
+ */
+export function adminMergePlayers(
+  key: string,
+  merge: { fromId: string; intoId: string; name?: string },
+): Promise<{ moved: number; names: number; players: PlayerSummary[] }> {
+  return fetch('/api/admin/merge', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-admin-key': key },
+    body: JSON.stringify(merge),
+  }).then(json<{ moved: number; names: number; players: PlayerSummary[] }>)
 }

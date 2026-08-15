@@ -71,7 +71,17 @@ describe('a disconnect is a non-event', () => {
     expect(commits).toHaveLength(2)
   })
 
-  it('survives a hard refresh at every phase boundary', async () => {
+  /*
+   * Given a timeout of its own, and it is worth saying why rather than leaving a bare number.
+   *
+   * This tears down and rebuilds *two* WebSocket connections at every phase boundary of a whole
+   * match, so it is the slowest test in the suite by a distance — it was measured at ~5.00s
+   * against vitest's 5s default, which meant the 22nd worker test file to exist failed *this*
+   * one. What it asserts is a behaviour ("nothing is lost, no user action is required"), not a
+   * latency budget, so the default was never the guarantee; it was a coincidence that happened
+   * to hold. 20s is slack for a loaded machine, not permission to get slower.
+   */
+  it('survives a hard refresh at every phase boundary', { timeout: 20_000 }, async () => {
     // "Hard-refresh both clients at every phase boundary; nothing is lost and no user action is
     // required." A refresh is a socket close plus a reconnect with the stored token.
     const match = await seatedMatch({ modeId: 'bring-ban1', draftCount: 4 })

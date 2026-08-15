@@ -80,6 +80,9 @@ configured": a deployment nobody has secured has no admin rather than an admin a
 `/history` needs none of this. It is public and read-only, showing the same rows the standings are
 already derived from.
 
+There is no link to `/admin` from anywhere in the app — type the path. Hiding it is not a security
+measure (the server's key is), it just keeps a destructive screen out of the way.
+
 **The deploy command must build, not just deploy.** `npm run deploy` is `npm run build &&
 wrangler deploy --config apps/worker/wrangler.jsonc` — one field, defined in
 [package.json](package.json), so the dashboard cannot drift from the repo. Splitting it across
@@ -106,6 +109,32 @@ measures ~60 requests. Hibernation means an idle match costs essentially nothing
 **Renaming the Worker renames the URL.** `name` in `wrangler.jsonc` is the subdomain label;
 change it before the first deploy rather than after, since existing room codes are addressed
 inside the deployment and resume links embed the origin.
+
+## Duplicate players (D35)
+
+A player id belongs to a **browser**, not a person: `player.ts` generates one on first use, and
+D19 settled that there are no accounts to reconcile it against. So the same person on a second
+laptop is a second player, appears twice on the leaderboard, and cannot be merged by renaming —
+renaming was never what split them. This is a cost of having no logins rather than a bug, which
+is why the answer is a way to clean it up afterwards.
+
+`/admin` lists every id with the record attached to it, including ids that claimed a name but
+have never finished a match — the shape a returning player's new browser has. Two fixes:
+
+- **Consolidate two ids.** Moves every match from one id onto the other, moves the name claims
+  with it, and optionally recaptions the merged history to a single name. Refused with a
+  `SELF_MATCH` conflict if the two ids ever played each other, naming the room codes in the way:
+  those rows would become a player against themselves, and whether to delete or reassign them is
+  a judgement about what actually happened that evening.
+- **Reassign one match.** The seat dropdowns on a match row, for a single game played on a
+  borrowed laptop rather than an id that is wrong everywhere. The winner follows the seat.
+
+Both rewrite the `matches` rows in place, so the leaderboard, head-to-head, and matchup tables
+follow with no recount step — all three are queries over those rows on every read.
+
+The player list is admin-only, but be clear about what that buys: `/api/matches` is public and
+every row on it already names both players' ids. The key gates the never-played ids and the
+merge itself, not the existence of ids.
 
 ## The CI checks, and why they exist
 

@@ -145,7 +145,8 @@ export function MatchCard({ match }: { match: MatchRecord }) {
   )
 }
 
-function Roster({
+/** Exported for the admin dashboard (D35), which shows the same rosters beside the edit fields. */
+export function Roster({
   name,
   side,
 }: {
