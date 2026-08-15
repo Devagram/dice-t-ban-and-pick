@@ -77,6 +77,19 @@ Deliberately **not** in `wrangler.jsonc` — a checked-in key is a key everyone 
 Until you set one the admin routes answer `503 ADMIN_DISABLED`, which is the safe reading of "not
 configured": a deployment nobody has secured has no admin rather than an admin anyone can be.
 
+**`wrangler secret put` does nothing for `npm run dev`.** It uploads to the deployed Worker;
+`wrangler dev` runs locally and reads `apps/worker/.dev.vars` instead. Both commands report
+success, so setting the secret and then testing on `127.0.0.1:8787` looks exactly like a key that
+will not take. For local runs:
+
+```bash
+# apps/worker/.dev.vars — gitignored, same reason the key is not in wrangler.jsonc
+ADMIN_KEY=whatever-you-chose
+```
+
+Restart `npm run dev` after creating it. `/admin` names which of the two you are missing rather
+than reporting both.
+
 `/history` needs none of this. It is public and read-only, showing the same rows the standings are
 already derived from.
 

@@ -136,10 +136,7 @@ describe('entering the admin key', () => {
     expect(screen.getByText(/nothing to submit/)).toBeTruthy()
   })
 
-  it('distinguishes a deployment with no key from a key that is wrong', async () => {
-    // `503 ADMIN_DISABLED` is the state of a Worker that never had `wrangler secret put` run
-    // against it — including every local `wrangler dev`, which reads `.dev.vars` instead. Calling
-    // that "wrong key" sends someone to check the one thing that is not the problem.
+  const unconfigured = () =>
     serve({
       '/api/admin/players': {
         ok: false,
@@ -147,11 +144,33 @@ describe('entering the admin key', () => {
         body: { error: 'ADMIN_DISABLED', detail: 'no ADMIN_KEY is configured' },
       },
     })
+
+  it('tells a local dev run that its secret is somewhere else entirely', async () => {
+    /*
+     * The failure that produced this message: `wrangler secret put` reports success, uploads to
+     * the deployed Worker, and a local `wrangler dev` — which reads `.dev.vars` — goes on
+     * answering 503. Both commands are correct, for different servers, and naming the wrong one
+     * costs an afternoon.
+     */
+    unconfigured()
     render(<Admin onBack={() => {}} />)
     fireEvent.change(screen.getByLabelText('Admin key'), { target: { value: 'sekrit' } })
 
-    expect(await screen.findByText(/no admin key set/i)).toBeTruthy()
-    expect(screen.getByText(/\.dev\.vars/)).toBeTruthy()
+    const status = await screen.findByText(/local/i)
+    expect(status.textContent).toContain('.dev.vars')
+    expect(status.textContent).toContain('does not read the secret set with')
+  })
+
+  it('tells a deployed origin to set the secret instead', async () => {
+    // Same 503, different advice — `.dev.vars` is not a thing a deployed Worker reads.
+    vi.stubGlobal('location', { hostname: 'banpick.example.workers.dev' })
+    unconfigured()
+    render(<Admin onBack={() => {}} />)
+    fireEvent.change(screen.getByLabelText('Admin key'), { target: { value: 'sekrit' } })
+
+    const status = await screen.findByText(/no admin key set/i)
+    expect(status.textContent).toContain('wrangler secret put ADMIN_KEY')
+    expect(status.textContent).not.toContain('.dev.vars')
   })
 
   it('says plainly when the server refuses the key', async () => {

@@ -5,3 +5,7 @@ coverage/
 .wrangler/
 .DS_Store
 apps/worker/public/
+# Local secrets for `wrangler dev`, which does not read the ones set with `wrangler secret put`.
+# Ignored for the same reason ADMIN_KEY is not in wrangler.jsonc: a committed key is everyone's.
+.dev.vars
+.dev.vars.*

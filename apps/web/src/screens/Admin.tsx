@@ -250,12 +250,29 @@ export function Admin({ onBack }: { onBack: () => void }) {
 }
 
 /**
+ * Whether this page is being served by a local `wrangler dev`.
+ *
+ * Only used to decide which half of the "no key configured" advice to give, and that is worth
+ * the sniff: the two fixes are genuinely different commands, and printing both leaves the reader
+ * to work out which deployment they are looking at — which is the exact confusion that produced
+ * this function. `wrangler dev` runs local by default and reads `apps/worker/.dev.vars`; it does
+ * not see a secret set with `wrangler secret put`, because that uploads to the deployed Worker.
+ */
+function servedLocally(): boolean {
+  try {
+    const host = location.hostname
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]'
+  } catch {
+    return false
+  }
+}
+
+/**
  * What the key field found, in the words that tell you what to do next.
  *
- * `unconfigured` is the one that earns its own message. It means the *deployment* has no key,
- * which retyping cannot fix and which a local `wrangler dev` hits by default — the secret lives
- * on the deployed Worker, and a local run reads `apps/worker/.dev.vars` instead. Reporting that
- * as "wrong key" would send someone to check the one thing that is not the problem.
+ * `unconfigured` is the one that earns its own message. It means the server has no key at all,
+ * which retyping cannot fix — reporting it as "wrong key" would send someone to check the one
+ * thing that is not the problem.
  */
 function KeyStatus({ check }: { check: KeyCheck }) {
   if (check === 'empty' || check === 'checking') return null
@@ -273,12 +290,21 @@ function KeyStatus({ check }: { check: KeyCheck }) {
       {check === 'refused' ? (
         'The server refused that key.'
       ) : check === 'unconfigured' ? (
-        <>
-          This deployment has no admin key set, so every edit is refused whatever you type. Set one
-          with <code>wrangler secret put ADMIN_KEY --config apps/worker/wrangler.jsonc</code>, or
-          for a local <code>wrangler dev</code> put <code>ADMIN_KEY=…</code> in{' '}
-          <code>apps/worker/.dev.vars</code>.
-        </>
+        servedLocally() ? (
+          <>
+            This local <code>wrangler dev</code> has no admin key, so every edit is refused whatever
+            you type. It does <strong>not</strong> read the secret set with{' '}
+            <code>wrangler secret put</code> — that one goes to the deployed Worker. Put{' '}
+            <code>ADMIN_KEY=your-key</code> in <code>apps/worker/.dev.vars</code> and restart{' '}
+            <code>npm run dev</code>.
+          </>
+        ) : (
+          <>
+            This deployment has no admin key set, so every edit is refused whatever you type. Set
+            one with{' '}
+            <code>npx wrangler secret put ADMIN_KEY --config apps/worker/wrangler.jsonc</code>.
+          </>
+        )
       ) : (
         'Could not reach the server to check that key.'
       )}
