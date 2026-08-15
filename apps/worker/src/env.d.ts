@@ -19,6 +19,14 @@ declare namespace Cloudflare {
     PAIR_HISTORY: DurableObjectNamespace
     /** D29 — one per deployment: names, results, standings. */
     REGISTRY: DurableObjectNamespace
+    /**
+     * D34 — the admin dashboard's shared secret, set with `wrangler secret put ADMIN_KEY`.
+     *
+     * Optional in the type because a deployment that has never set it is a real state, and the
+     * only safe reading of it is "no admin". Every admin route fails closed when it is missing:
+     * an unconfigured deployment must not ship an open door to editing every recorded result.
+     */
+    ADMIN_KEY?: string
   }
 }
 

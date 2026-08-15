@@ -93,3 +93,23 @@ describe('the head-to-head reads from your side', () => {
     expect(container.innerHTML).toBe('')
   })
 })
+
+/**
+ * Reported as "a new game says the score is already 1-0".
+ *
+ * It was never the score — the engine starts every match 0-0 and a worker test pins that — it was
+ * this line, unlabelled, being the only numbers on a screen where the real scoreline had not
+ * rendered yet.
+ */
+describe('it cannot be mistaken for the score of this match', () => {
+  it('says what the number counts, in a match that has not started', async () => {
+    // `namedView` scores both seats 0-0 and reports nothing, which is exactly the screen the bug
+    // was seen on: a brand-new room where the round strip has not rendered yet.
+    render(<HeadToHead view={named({ wins: 1, losses: 0, draws: 0 })} />)
+
+    expect(await screen.findByText('1–0')).toBeTruthy()
+    // The label is the fix: without it, a bold 1-0 sitting where a scoreline goes is a scoreline.
+    expect(screen.getByText('All-time')).toBeTruthy()
+    expect(screen.getByLabelText(/Head to head record/)).toBeTruthy()
+  })
+})

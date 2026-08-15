@@ -182,3 +182,69 @@ export function openRematch(roomCode: string, seatToken: string): Promise<string
     .then(json<{ roomCode: string }>)
     .then((r) => r.roomCode)
 }
+
+// --- D34: history and the admin dashboard ------------------------------------------------------
+
+export interface MatchDetail {
+  rounds: (('A' | 'B' | 'TIE') | null)[]
+  seats: Record<'A' | 'B', { drafted: string[]; played: string[]; metaBan: string | null }>
+}
+
+export interface Matchup {
+  a: { id: string; name: string }
+  b: { id: string; name: string }
+  aWins: number
+  bWins: number
+  draws: number
+  played: number
+}
+
+/** Every recorded match, newest first. Public and read-only. */
+export function fetchMatches(): Promise<MatchRecord[]> {
+  return fetch('/api/matches')
+    .then(json<{ matches: MatchRecord[] }>)
+    .then((r) => r.matches)
+}
+
+/** Pairwise records — one row per pairing, read from either side. */
+export function fetchMatchups(): Promise<Matchup[]> {
+  return fetch('/api/matchups')
+    .then(json<{ matchups: Matchup[] }>)
+    .then((r) => r.matchups)
+}
+
+/**
+ * D34 — an admin correction to a stored match.
+ *
+ * The key travels in a header rather than the URL so it stays out of browser history and out of
+ * any logging that records paths. Fields are optional and only what is sent is changed, which is
+ * what stops a name correction from resetting a score.
+ */
+export function adminEditMatch(
+  key: string,
+  patch: {
+    roomCode: string
+    aName?: string
+    bName?: string
+    winnerId?: string | null
+    scoreA?: number
+    scoreB?: number
+    rounds?: (('A' | 'B' | 'TIE') | null)[]
+  },
+): Promise<MatchRecord> {
+  return fetch('/api/admin/edit', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-admin-key': key },
+    body: JSON.stringify(patch),
+  })
+    .then(json<{ match: MatchRecord }>)
+    .then((r) => r.match)
+}
+
+export function adminDeleteMatch(key: string, roomCode: string): Promise<void> {
+  return fetch('/api/admin/delete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-admin-key': key },
+    body: JSON.stringify({ roomCode }),
+  }).then(json<{ ok: true }>) as unknown as Promise<void>
+}

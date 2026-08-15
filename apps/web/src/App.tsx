@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 
 import { Home } from './screens/Home.js'
+import { Admin } from './screens/Admin.js'
+import { History } from './screens/History.js'
 import { Lobbies } from './screens/Lobbies.js'
 import { Leaderboard } from './screens/Leaderboard.js'
 import { Lobby } from './screens/Lobby.js'
@@ -27,6 +29,8 @@ type Route =
   | { screen: 'match'; roomCode: string; seatToken: string; websocketUrl: string }
   | { screen: 'leaderboard' }
   | { screen: 'lobbies' }
+  | { screen: 'history' }
+  | { screen: 'admin' }
 
 function readRoute(): Route {
   const path = location.pathname
@@ -62,6 +66,10 @@ function readRoute(): Route {
   if (/^\/leaderboard\/?$/.test(path)) return { screen: 'leaderboard' }
   // D31 — the open-room list, so a game can be found without a link.
   if (/^\/lobbies\/?$/.test(path)) return { screen: 'lobbies' }
+  // D34 — history is public; the dashboard behind it is not (the *server* enforces that, not
+  // this route — a client-side check would only hide the buttons).
+  if (/^\/history\/?$/.test(path)) return { screen: 'history' }
+  if (/^\/admin\/?$/.test(path)) return { screen: 'admin' }
 
   return { screen: 'home' }
 }
@@ -80,7 +88,18 @@ export function App() {
     return () => removeEventListener('popstate', onPop)
   }, [])
 
+  const home = () => {
+    history.pushState(null, '', '/')
+    setRoute({ screen: 'home' })
+  }
+
   switch (route.screen) {
+    case 'history':
+      return <History onBack={home} />
+
+    case 'admin':
+      return <Admin onBack={home} />
+
     case 'lobbies':
       return (
         <Lobbies

@@ -46,8 +46,19 @@ export function HeadToHead({ view }: { view: PlayerView }) {
         ? `${them.name || 'They'} leads you`
         : `Level with ${them.name || 'them'}`
 
+  /*
+   * Labelled, because unlabelled it gets read as the score of the match you are in.
+   *
+   * Reported as a bug: a brand-new room "says the score is already 1-0". Before the first round
+   * this is the *only* thing on the screen carrying numbers — `Outcome`, `PlayAgain` and the
+   * round strip all render nothing until there is something to show — and a bold "1–0" sitting
+   * where a scoreline goes is a scoreline as far as anyone reading it is concerned. The verdict
+   * beside it said "You lead Tom", which is only unambiguous once you already know what you are
+   * looking at.
+   */
   return (
-    <p className="h2h" aria-label="Head to head">
+    <p className="h2h" aria-label="Head to head record, all matches">
+      <span className="h2h__tag">All-time</span>
       <span className="h2h__verdict">{verdict}</span>
       <span className="h2h__score">
         {record.wins}–{record.losses}

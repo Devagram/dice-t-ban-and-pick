@@ -241,9 +241,13 @@ describe('totality — reduce rejects, it does not throw', () => {
       state.status === 'IN_PROGRESS'
     ) {
       const actor = (['A', 'B'] as const).find((s) =>
-        legalActions(state, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+        legalActions(state, s).some(
+          (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+        ),
       )!
-      const action = legalActions(state, actor).find((a) => a.type !== 'UNDO_LAST_RESULT')!
+      const action = legalActions(state, actor).find(
+        (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+      )!
       if (action.type === 'ROLL') {
         // The dice wait for both seats to ask for them.
         state = apply(state, actor, {

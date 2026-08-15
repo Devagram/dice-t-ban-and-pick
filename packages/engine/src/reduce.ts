@@ -7,7 +7,7 @@ import {
   type ReduceResult,
 } from '@banpick/types'
 
-import { cloneState, currentModule, reject } from './context.js'
+import { cloneState, currentModule, reject, roundAllowsTie } from './context.js'
 import { moduleFor } from './modules/index.js'
 import { applyScore } from './modules/reportResult.js'
 import { createMatch, ENGINE_VERSION, majorOf } from './createMatch.js'
@@ -43,6 +43,7 @@ export function reduce(state: MatchState | null, event: EventEnvelope): ReduceRe
   if (event.payload.type === 'SEAT_FILLED') return fillSeat(state, event)
   if (event.payload.type === 'PAIRING_RESOLVED') return resolvePairing(state, event)
   if (event.payload.type === 'UNDO_LAST_RESULT') return undoLastResult(state, event)
+  if (event.payload.type === 'AMEND_RESULT') return amendResult(state, event)
   if (event.payload.type === 'MATCH_COMPLETE') {
     const next = cloneState(state)
     next.status = 'COMPLETE'
@@ -137,6 +138,69 @@ function resolvePairing(state: MatchState, event: EventEnvelope): ReduceResult {
   const next = cloneState(state)
   next.deniedMetaBans = { A: [...p.deniedMetaBans.A], B: [...p.deniedMetaBans.B] }
   next.log.push(event)
+  return { ok: true, state: advance(next) }
+}
+
+/**
+ * **D33 — correct a round that was reported wrong, however long ago.**
+ *
+ * D15's undo covers the result you just entered and shuts as soon as the next round starts. That
+ * is the right shape for a fat finger caught immediately and the wrong shape for the mistake you
+ * notice two rounds later, which is the one that actually survives to matter. This reopens every
+ * reported round for the whole life of the match.
+ *
+ * **What it costs, said plainly:** D15's window was also a limit on rewriting history, and this
+ * removes it. §1's trust model is the justification — friendly opponents, and the failure mode is
+ * a mistake rather than a lie — but a player *can* now change a round they lost an hour ago. The
+ * other seat is told (see `RESULT_AMENDED`), which is the check that replaces the window.
+ *
+ * **The cursor needs no rewinding, which is not obvious and was worth proving.** Changing an old
+ * result can make a round live that `stopWhenDecided` skipped, or make D30's overtime owed. The
+ * first draft of this rewound the cursor to zero and walked it forward to be safe; a mutation test
+ * then showed that removing the rewind broke nothing, because the cursor can never have got past
+ * the round in question. `advance` is the only thing that moves it forward and it stops at the
+ * first incomplete module — so a skipped round always sits at or ahead of the cursor, never
+ * behind it. Amending cannot make a completed module incomplete either: a round with a different
+ * result still has one. `advance` from where we are is therefore sufficient, and the rewind was
+ * a line that looked load-bearing while doing nothing.
+ */
+function amendResult(state: MatchState, event: EventEnvelope): ReduceResult {
+  const p = event.payload
+  if (p.type !== 'AMEND_RESULT') return reject('WRONG_PHASE', 'expected AMEND_RESULT')
+
+  const round = state.rounds[p.roundIndex]
+  if (!round || round.result === null) {
+    return reject('NOTHING_TO_UNDO', `round ${p.roundIndex} has no reported result to amend`)
+  }
+
+  // The round's own report module decides what it will accept — D30's overtime forbids the tie
+  // the others allow, and that rule lives in the program rather than here.
+  if (p.outcome === 'TIE' && !roundAllowsTie(state, p.roundIndex)) {
+    return reject('ILLEGAL_OPTION', `round ${p.roundIndex} does not allow ties`)
+  }
+  if (round.result === p.outcome) {
+    // Not an error worth a rejection code of its own, but appending a no-op event would put a
+    // correction in the log that corrected nothing.
+    return reject('DUPLICATE_COMMIT', `round ${p.roundIndex} already reads ${p.outcome}`)
+  }
+
+  const next = cloneState(state)
+  const target = next.rounds[p.roundIndex]!
+  applyScore(next, target.result!, -1)
+  applyScore(next, p.outcome, +1)
+  target.result = p.outcome
+
+  // The match re-decides itself from the new score. `settle` emits MATCH_COMPLETE again if it is
+  // still over — possibly with a different winner, which D29's upsert-by-room-code then records
+  // over the old one rather than beside it.
+  next.status = 'IN_PROGRESS'
+  next.outcome = null
+
+  next.log.push(event)
+  // `advance` is a no-op here — amending completes no module, since a round with a different
+  // result still has one — and is kept only because every other reducer ends this way. Written
+  // down because a mutation test proved it does nothing, and the next person deserves to know
+  // that before they go looking for what it fixes.
   return { ok: true, state: advance(next) }
 }
 

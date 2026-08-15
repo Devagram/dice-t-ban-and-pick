@@ -71,5 +71,21 @@ export type Action =
       moduleId: null
       roundIndex: RoundIdx
     }
+  /**
+   * D33 — correct a round that was reported wrong, however long ago.
+   *
+   * Distinct from `UNDO_LAST_RESULT`, which is D15's fat-finger window: that one covers the
+   * result you just entered and shuts as soon as the next round starts. This one covers the
+   * mistake you notice in round 3 about round 1, which the window was never going to catch.
+   *
+   * `rounds` carries every amendable round with the outcomes each will accept, because the
+   * outcomes are not uniform — D30's overtime round forbids the tie the others allow, and the
+   * client is not allowed to know that rule (§11 non-negotiable 4).
+   */
+  | {
+      type: 'AMEND_RESULT'
+      moduleId: null
+      rounds: { roundIndex: RoundIdx; current: RoundOutcome; outcomes: RoundOutcome[] }[]
+    }
 
 export type ActionType = Action['type']

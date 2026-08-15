@@ -216,7 +216,9 @@ describe('every module rejects an event that is not its own', () => {
       }
 
       const seat = SEATS.find((s) =>
-        legalActions(state, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+        legalActions(state, s).some(
+          (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+        ),
       )
       if (!seat) break
       state = advance(state, seat)
@@ -266,8 +268,12 @@ describe('between reduce and settle', () => {
 
     expect(unsettled.status).toBe('IN_PROGRESS')
     expect(unsettled.cursor).toBe(unsettled.mode.program.length)
-    // No module, so nothing on offer but the undo.
-    expect(legalActions(unsettled, 'A').map((a) => a.type)).toEqual(['UNDO_LAST_RESULT'])
+    // No module, so nothing on offer but the two corrections — neither of which is a move.
+    expect(
+      legalActions(unsettled, 'A')
+        .map((a) => a.type)
+        .sort(),
+    ).toEqual(['AMEND_RESULT', 'UNDO_LAST_RESULT'])
 
     state = apply(unsettled, 'A', { type: 'UNDO_LAST_RESULT', roundIndex: 3, requestedBy: 'A' })
     expect(state.status).toBe('IN_PROGRESS')
@@ -297,7 +303,9 @@ describe('canonical serialization edge cases', () => {
 })
 
 function advance(state: ReturnType<typeof startMatch>, seat: 'A' | 'B') {
-  const action = legalActions(state, seat).find((a) => a.type !== 'UNDO_LAST_RESULT')!
+  const action = legalActions(state, seat).find(
+    (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+  )!
   switch (action.type) {
     case 'COMMIT':
       return apply(state, seat, {

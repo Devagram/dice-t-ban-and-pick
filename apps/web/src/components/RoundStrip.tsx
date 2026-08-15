@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import type { PlayerView } from '@banpick/types'
+import { useEffect, useState } from 'react'
+import type { PlayerActionPayload, PlayerView, RoundOutcome } from '@banpick/types'
 
 import { DRAW_HEADLINE, DRAW_NOTE } from '../copy.js'
 import { play } from '../sound.js'
@@ -12,8 +12,17 @@ import { play } from '../sound.js'
  * it with no roll at all, and round 2 rolls fresh for turn order with no draft privilege in
  * existence. A player who cannot see that will think round 1's missing roll is a bug.
  */
-export function RoundStrip({ view }: { view: PlayerView }) {
+export function RoundStrip({
+  view,
+  onAct,
+}: {
+  view: PlayerView
+  /** Omitted where the strip is read-only. Given, each played round becomes correctable (D33). */
+  onAct?: (payload: PlayerActionPayload) => void
+}) {
   const current = view.phase?.roundIndex ?? null
+  const [amending, setAmending] = useState<number | null>(null)
+  const amend = view.legalActions.find((a) => a.type === 'AMEND_RESULT')
 
   /**
    * Nothing until the rounds actually start.
@@ -41,8 +50,29 @@ export function RoundStrip({ view }: { view: PlayerView }) {
                 only exists when regulation could not separate you. */}
             <span className="round__index">{round.overtime ? 'OT' : `R${round.index + 1}`}</span>
             <span className="round__detail">
-              {round.result !== null ? (
-                <ResultLabel view={view} result={round.result} />
+              {round.result !== null && amending === round.index ? (
+                <AmendPrompt
+                  view={view}
+                  options={amend?.rounds.find((r) => r.roundIndex === round.index)?.outcomes ?? []}
+                  onPick={(outcome) => {
+                    onAct?.({
+                      type: 'AMEND_RESULT',
+                      roundIndex: round.index,
+                      outcome,
+                      amendedBy: view.seat,
+                    })
+                    setAmending(null)
+                  }}
+                  onCancel={() => setAmending(null)}
+                />
+              ) : round.result !== null ? (
+                <ResultLabel
+                  view={view}
+                  result={round.result}
+                  {...(onAct && amend?.rounds.some((r) => r.roundIndex === round.index)
+                    ? { onCorrect: () => setAmending(round.index) }
+                    : {})}
+                />
               ) : round.overtime && round.index !== current ? (
                 // Conditional until it happens, and saying so beats a blank pip nobody can
                 // place. The engine has already dropped it entirely where it cannot be reached.
@@ -58,9 +88,72 @@ export function RoundStrip({ view }: { view: PlayerView }) {
   )
 }
 
-function ResultLabel({ view, result }: { view: PlayerView; result: 'A' | 'B' | 'TIE' }) {
-  if (result === 'TIE') return <span className="round__tie">Tied</span>
-  return <span>{result === view.seat ? 'You won' : 'They won'}</span>
+function ResultLabel({
+  view,
+  result,
+  onCorrect,
+}: {
+  view: PlayerView
+  result: 'A' | 'B' | 'TIE'
+  onCorrect?: () => void
+}) {
+  const label = result === 'TIE' ? 'Tied' : result === view.seat ? 'You won' : 'They won'
+  const className = result === 'TIE' ? 'round__tie' : undefined
+
+  // Read-only where there is nothing to correct with — the strip is also rendered without a way
+  // to act, and a button that does nothing is worse than text.
+  if (!onCorrect) return <span className={className}>{label}</span>
+
+  return (
+    <button type="button" className={`round__result ${className ?? ''}`} onClick={onCorrect}>
+      {label}
+      <span className="round__fix" aria-hidden="true">
+        fix
+      </span>
+      <span className="sr-only">— correct this result</span>
+    </button>
+  )
+}
+
+/**
+ * D33 — the correction itself, in the round it belongs to.
+ *
+ * Ordered the same way the live report is (D32's fix): your own win first, then theirs, then the
+ * tie. The same position meaning the same thing in both places is the whole point — someone
+ * correcting a misreport should not be handed a second chance to misreport it.
+ */
+function AmendPrompt({
+  view,
+  options,
+  onPick,
+  onCancel,
+}: {
+  view: PlayerView
+  options: RoundOutcome[]
+  onPick: (outcome: RoundOutcome) => void
+  onCancel: () => void
+}) {
+  const opponent = view.seat === 'A' ? 'B' : 'A'
+  const rank = (o: RoundOutcome) => (o === view.seat ? 0 : o === opponent ? 1 : 2)
+  const ordered = [...options].sort((x, y) => rank(x) - rank(y))
+
+  return (
+    <span className="amend">
+      {ordered.map((outcome) => (
+        <button
+          key={outcome}
+          type="button"
+          className="amend__btn amend__option"
+          onClick={() => onPick(outcome)}
+        >
+          {outcome === 'TIE' ? 'Tie' : outcome === view.seat ? 'I won' : 'They won'}
+        </button>
+      ))}
+      <button type="button" className="amend__btn amend__cancel" onClick={onCancel}>
+        Cancel
+      </button>
+    </span>
+  )
 }
 
 function PrivilegeLabel({

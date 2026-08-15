@@ -80,6 +80,17 @@ export interface RoomListing {
  */
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000
 
+/** D34 — one pairing's record, for the history page's matchup table. */
+export interface Matchup {
+  a: { id: string; name: string }
+  b: { id: string; name: string }
+  /** Wins for `a`. Counted off one row per match, so the two directions cannot drift apart. */
+  aWins: number
+  bWins: number
+  draws: number
+  played: number
+}
+
 export interface HeadToHead {
   /** Wins for the first id given, losses for it, and draws. */
   wins: number
@@ -146,6 +157,14 @@ export class RegistryDO extends DurableObject<Env> {
         return this.room(request)
       case 'rooms':
         return Response.json({ rooms: this.rooms() })
+      case 'matches':
+        return Response.json({ matches: this.matches(limitFrom(request)) })
+      case 'matchups':
+        return Response.json({ matchups: this.matchups() })
+      case 'edit':
+        return this.edit(request)
+      case 'delete':
+        return this.remove(request)
       case 'head-to-head': {
         const url = new URL(request.url)
         const a = url.searchParams.get('a') ?? ''
@@ -451,4 +470,182 @@ export class RegistryDO extends DurableObject<Env> {
         openedAt: r.opened_at,
       }))
   }
+
+  /**
+   * D34 — every recorded match, newest first.
+   *
+   * The same rows the leaderboard is derived from, handed over whole rather than aggregated: the
+   * history page wants exactly what a standings table throws away — which rounds went which way,
+   * and what each seat brought.
+   */
+  private matches(limit: number): MatchRecord[] {
+    return this.sql
+      .exec<Record<string, string | number | null>>(
+        'SELECT * FROM matches ORDER BY played_at DESC LIMIT ?',
+        limit,
+      )
+      .toArray()
+      .map(rowToRecord)
+  }
+
+  /**
+   * Pairwise records, aggregated in JavaScript for the same reason `standings` is: counted off
+   * the stored rows every time, so an edited or deleted match stops counting rather than leaving
+   * a stale total behind.
+   */
+  private matchups(): Matchup[] {
+    const table = new Map<string, Matchup>()
+
+    const rows = this.sql
+      .exec<{
+        a_id: string
+        a_name: string
+        b_id: string
+        b_name: string
+        winner_id: string | null
+      }>('SELECT a_id, a_name, b_id, b_name, winner_id FROM matches')
+      .toArray()
+
+    for (const row of rows) {
+      // Keyed by the sorted pair, like D28's `pairKey`, so "Tom vs Alex" and "Alex vs Tom" are
+      // one row read from either side rather than two that can disagree.
+      const flip = row.b_id < row.a_id
+      const first = flip ? { id: row.b_id, name: row.b_name } : { id: row.a_id, name: row.a_name }
+      const second = flip ? { id: row.a_id, name: row.a_name } : { id: row.b_id, name: row.b_name }
+      const key = `${first.id}|${second.id}`
+
+      const entry = table.get(key) ?? {
+        a: first,
+        b: second,
+        aWins: 0,
+        bWins: 0,
+        draws: 0,
+        played: 0,
+      }
+      // Latest name wins, so a rename shows up rather than sticking at whatever was first.
+      if (first.name) entry.a.name = first.name
+      if (second.name) entry.b.name = second.name
+
+      entry.played++
+      if (row.winner_id === null) entry.draws++
+      else if (row.winner_id === entry.a.id) entry.aWins++
+      else entry.bWins++
+      table.set(key, entry)
+    }
+
+    return [...table.values()].sort((x, y) => y.played - x.played)
+  }
+
+  /**
+   * D34 — an admin correction to a stored match.
+   *
+   * **This edits the record, not the log**, and the difference is the reason it sits behind a key
+   * while D33's amendment does not. D33 changes the event log and lets the record follow, so the
+   * two keep agreeing. This cannot: a match whose room has expired has no log left to amend, and
+   * the record is all that survives. So an edit here can leave the stored result saying something
+   * the log never said. That is the price of being able to fix a game from last month.
+   *
+   * Partial by design — only the fields present are touched, so correcting a name cannot quietly
+   * reset a score.
+   */
+  private async edit(request: Request): Promise<Response> {
+    let body: Record<string, unknown>
+    try {
+      body = (await request.json()) as Record<string, unknown>
+    } catch {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+    const roomCode = typeof body['roomCode'] === 'string' ? body['roomCode'] : ''
+    if (!roomCode) return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+
+    const existing = this.sql
+      .exec<Record<string, string | number | null>>(
+        'SELECT * FROM matches WHERE room_code = ?',
+        roomCode,
+      )
+      .toArray()[0]
+    if (!existing) return Response.json({ error: 'NOT_FOUND' }, { status: 404 })
+
+    const record = rowToRecord(existing)
+    const next: MatchRecord = {
+      ...record,
+      a: { id: record.a.id, name: str(body['aName']) ?? record.a.name },
+      b: { id: record.b.id, name: str(body['bName']) ?? record.b.name },
+      /*
+       * `winnerId` is nullable, so absent and null are different answers and `??` would conflate
+       * them — a draw has to be settable, not just unsettable.
+       */
+      winnerId: 'winnerId' in body ? normalizeWinner(body['winnerId'], record) : record.winnerId,
+      scoreA: num(body['scoreA']) ?? record.scoreA,
+      scoreB: num(body['scoreB']) ?? record.scoreB,
+      detail: 'rounds' in body ? withRounds(record.detail, body['rounds']) : record.detail,
+    }
+
+    this.sql.exec(
+      `UPDATE matches SET a_name = ?, b_name = ?, winner_id = ?, score_a = ?, score_b = ?,
+         detail = ? WHERE room_code = ?`,
+      next.a.name,
+      next.b.name,
+      next.winnerId,
+      next.scoreA,
+      next.scoreB,
+      JSON.stringify(next.detail ?? null),
+      roomCode,
+    )
+    return Response.json({ ok: true, match: next })
+  }
+
+  /** Removing a junk record, which is otherwise permanent — see the note on `edit`. */
+  private async remove(request: Request): Promise<Response> {
+    let body: { roomCode?: unknown }
+    try {
+      body = (await request.json()) as { roomCode?: unknown }
+    } catch {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+    if (typeof body?.roomCode !== 'string' || !body.roomCode) {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+    this.sql.exec('DELETE FROM matches WHERE room_code = ?', body.roomCode)
+    return Response.json({ ok: true })
+  }
+}
+
+function limitFrom(request: Request): number {
+  const raw = Number(new URL(request.url).searchParams.get('limit'))
+  return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 500) : 200
+}
+
+function rowToRecord(row: Record<string, string | number | null>): MatchRecord {
+  return {
+    roomCode: String(row['room_code']),
+    playedAt: Number(row['played_at']),
+    a: { id: String(row['a_id']), name: String(row['a_name']) },
+    b: { id: String(row['b_id']), name: String(row['b_name']) },
+    winnerId: (row['winner_id'] as string | null) ?? null,
+    scoreA: Number(row['score_a']),
+    scoreB: Number(row['score_b']),
+    detail: JSON.parse(String(row['detail'] ?? 'null')) as unknown,
+  }
+}
+
+const str = (v: unknown): string | undefined =>
+  typeof v === 'string' ? v.trim().slice(0, 40) : undefined
+
+const num = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? v : undefined
+
+/** Accepts a seat letter, a player id, or null — the dashboard speaks seats, storage speaks ids. */
+function normalizeWinner(value: unknown, record: MatchRecord): string | null {
+  if (value === null || value === '' || value === 'DRAW') return null
+  if (value === 'A') return record.a.id
+  if (value === 'B') return record.b.id
+  return typeof value === 'string' ? value : record.winnerId
+}
+
+/** Replaces only the round results, leaving the drafted/played detail beside them untouched. */
+function withRounds(detail: unknown, rounds: unknown): unknown {
+  const base = (detail ?? {}) as Record<string, unknown>
+  if (!Array.isArray(rounds)) return detail
+  return { ...base, rounds: rounds.map((r) => (r === 'A' || r === 'B' || r === 'TIE' ? r : null)) }
 }

@@ -65,6 +65,21 @@ in it and refuses to guess.
 Root directory stays at `/` because `npm run build` builds `apps/web` through the workspace;
 pointing it at `apps/worker` would put the install and the build in the wrong place.
 
+### The admin key (D34)
+
+`/admin` edits recorded results, and the Worker refuses every edit unless a key is configured:
+
+```bash
+npx wrangler secret put ADMIN_KEY --config apps/worker/wrangler.jsonc
+```
+
+Deliberately **not** in `wrangler.jsonc` — a checked-in key is a key everyone with the repo has.
+Until you set one the admin routes answer `503 ADMIN_DISABLED`, which is the safe reading of "not
+configured": a deployment nobody has secured has no admin rather than an admin anyone can be.
+
+`/history` needs none of this. It is public and read-only, showing the same rows the standings are
+already derived from.
+
 **The deploy command must build, not just deploy.** `npm run deploy` is `npm run build &&
 wrangler deploy --config apps/worker/wrangler.jsonc` — one field, defined in
 [package.json](package.json), so the dashboard cannot drift from the repo. Splitting it across

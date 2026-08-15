@@ -45,6 +45,33 @@ export default {
     }
 
     /*
+     * D34 — the admin routes, behind a shared key.
+     *
+     * **Fails closed.** A deployment that never ran `wrangler secret put ADMIN_KEY` has no admin,
+     * rather than an admin anyone can be. The lobby being open to everyone (D31) was a decision
+     * about who may *join a game*; letting the same crowd rewrite every recorded result is a
+     * different power and gets a different answer.
+     *
+     * Checked here rather than in the Durable Object so there is one door: the DO's `edit` and
+     * `delete` are unreachable except through this branch.
+     */
+    if (path.startsWith('/api/admin/')) {
+      if (!env.ADMIN_KEY) {
+        return json({ error: 'ADMIN_DISABLED', detail: 'no ADMIN_KEY is configured' }, 503)
+      }
+      const offered = request.headers.get('x-admin-key') ?? ''
+      if (!constantTimeEquals(offered, env.ADMIN_KEY)) {
+        return json({ error: 'UNAUTHORIZED', detail: 'bad or missing admin key' }, 401)
+      }
+      const registry = env.REGISTRY.get(env.REGISTRY.idFromName('registry'))
+      const action = path.slice('/api/admin/'.length)
+      if (action !== 'edit' && action !== 'delete') {
+        return json({ error: 'NOT_FOUND', detail: `no admin route for ${path}` }, 404)
+      }
+      return registry.fetch(new Request(`${url.origin}/${action}`, request))
+    }
+
+    /*
      * D29 — the registry, one object for the deployment.
      *
      * Routed here rather than through a match DO because none of it belongs to a match: a name is
@@ -56,7 +83,11 @@ export default {
       path === '/api/head-to-head' ||
       // D31 — the open-room list. Same reasoning as the rest: it belongs to the deployment, not
       // to any one match, so it never touches a MatchDO.
-      path === '/api/lobbies'
+      path === '/api/lobbies' ||
+      // D34 — the history page's two reads. Public and read-only: these are the same rows the
+      // standings are already derived from, shown rather than summarised.
+      path === '/api/matches' ||
+      path === '/api/matchups'
     ) {
       const registry = env.REGISTRY.get(env.REGISTRY.idFromName('registry'))
       const action =
@@ -144,6 +175,21 @@ function rewrite(request: Request, url: URL, action: string): Request {
   const target = new URL(`${url.origin}/${action}`)
   target.search = url.search
   return new Request(target, request)
+}
+
+/**
+ * Compares without leaking the answer in how long it took.
+ *
+ * At this scale a timing attack on a shared key is close to theoretical — but the mitigation is
+ * six lines and the alternative is explaining why it was skipped. Lengths are compared first and
+ * that difference *is* observable; a length oracle on a secret nobody is enumerating is a trade
+ * worth making for code this simple.
+ */
+function constantTimeEquals(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
 }
 
 function json(body: unknown, status = 200): Response {

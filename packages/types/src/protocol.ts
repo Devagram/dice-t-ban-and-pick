@@ -1,4 +1,4 @@
-import type { EventPayload } from './event.js'
+import type { EventPayload, RoundOutcome } from './event.js'
 import type { PlayerView } from './view.js'
 import type { RejectionCode } from './state.js'
 import type { Ruleset } from './ruleset.js'
@@ -26,6 +26,7 @@ export type PlayerActionPayload = Extract<
       | 'REPORT_RESULT'
       | 'ROLL_READY'
       | 'UNDO_LAST_RESULT'
+      | 'AMEND_RESULT'
   }
 >
 
@@ -99,6 +100,15 @@ export type ServerMessage =
    * still joins through the ordinary lobby, so §12.3's consent-before-seating is untouched.
    */
   | { type: 'REMATCH'; roomCode: string; by: Seat }
+  /**
+   * D33 — someone corrected an earlier round, and the other seat is told rather than left to
+   * notice the score move.
+   *
+   * The new view carries the correction already; this exists so it does not arrive silently. It
+   * names a round and an outcome, both of which are public the moment a result is reported, so
+   * it carries nothing `project()` would have redacted.
+   */
+  | { type: 'RESULT_AMENDED'; roundIndex: number; outcome: RoundOutcome; by: Seat }
 
 export type ProtocolErrorCode =
   'MALFORMED' | 'RATE_LIMITED' | 'UNKNOWN_MESSAGE' | 'NOT_YOUR_SEAT' | 'UNAUTHENTICATED'

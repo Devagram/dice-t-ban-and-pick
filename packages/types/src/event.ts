@@ -181,6 +181,8 @@ export type EventPayload =
   | { type: 'ROLL_READY'; moduleId: string; roundIndex: RoundIdx; seat: Seat }
   /** D15 — open to either seat until the next round's roll. Covers the fat finger, not the lie. */
   | { type: 'UNDO_LAST_RESULT'; roundIndex: RoundIdx; requestedBy: Seat }
+  /** D33 — a round's result, corrected after the fact. Carries the new outcome, not a delta. */
+  | { type: 'AMEND_RESULT'; roundIndex: RoundIdx; outcome: RoundOutcome; amendedBy: Seat }
   /** Terminal. Emitted by SYSTEM when the match rule says there is nothing left to play. */
   | { type: 'MATCH_COMPLETE'; outcome: MatchOutcome }
 

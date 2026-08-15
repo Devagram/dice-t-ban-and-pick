@@ -76,6 +76,9 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
           <a className="btn btn--quiet" href="/leaderboard">
             Leaderboard
           </a>
+          <a className="btn btn--quiet" href="/history">
+            History
+          </a>
         </div>
       </header>
 

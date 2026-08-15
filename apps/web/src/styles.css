@@ -2264,8 +2264,27 @@ select {
   font-size: var(--step--1);
 }
 
+/*
+ * Says what the number is before the number gets read.
+ *
+ * The round strip is this screen's scoreline; this is a record spanning every match these two
+ * have played. Without the tag the two are indistinguishable at a glance, which is exactly how
+ * a fresh room came to look like it had started 1-0.
+ */
+.h2h__tag {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .h2h__score {
-  font-size: var(--step-1);
+  /* A step smaller than it was: labelled or not, it should not be the biggest thing on a screen
+     whose actual score lives elsewhere. */
+  font-size: var(--step-0);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -2358,4 +2377,341 @@ select {
   color: var(--muted);
   font-size: 0.85rem;
   text-align: center;
+}
+
+/* --- D33: correcting a round --------------------------------------------- */
+
+/* Read by a screen reader, never drawn. The visible "fix" chip is decorative on its own. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * A result that can be corrected still has to read as a result first.
+ *
+ * So it is a button that looks like the text it replaces, and earns its affordance from the
+ * small "fix" beside it rather than from chrome — the strip is a scoreline, and turning three
+ * scorelines into three buttons would say the wrong thing about what this screen is for.
+ */
+.round__result {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.round__fix {
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity var(--t-fast, 120ms) ease;
+}
+
+.round__result:hover .round__fix,
+.round__result:focus-visible .round__fix {
+  opacity: 1;
+}
+
+/* Always visible on touch, where there is no hover to discover it with. */
+@media (hover: none) {
+  .round__fix {
+    opacity: 1;
+  }
+}
+
+.amend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+/* Shared shape on its own class so `.amend__option` and `.amend__cancel` are each declared
+   once — the duplicate-selector guard exists because a repeated selector once silently dropped
+   `padding` and `font-weight` off `.tile__name`. */
+.amend__btn {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.amend__option:hover {
+  border-color: var(--accent);
+}
+
+.amend__cancel {
+  color: var(--muted);
+}
+
+/* A notice, not a failure — the alert styling is right, the alarm is not. */
+.alert--notice {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+/* --- D34: history and admin ---------------------------------------------- */
+
+.matchups,
+.history,
+.adminlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.matchup {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.matchup__record {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.matchup__played {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.hmatch {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hmatch__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.hmatch__score {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hmatch__winner {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* Spelled out rather than grouped with the rule above: the duplicate-selector guard counts each
+   selector in a group, and a repeated one is what once silently dropped properties off
+   `.tile__name`. `margin-left` pushes the timestamp to the far edge so the eye can scan down it. */
+.hmatch__when {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+.hrounds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.hround {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+/* A round nobody played is a real state (stopWhenDecided), not missing data. */
+.hround--unplayed {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.hround__index {
+  color: var(--muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+}
+
+.hrosters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.hroster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.hroster__name {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.hroster__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.hchar {
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  background: var(--bg);
+}
+
+.hchar--played {
+  color: inherit;
+}
+
+/* Drafted and never reached — the other half of what a roster choice meant. */
+.hchar--bench {
+  color: var(--muted);
+  opacity: 0.65;
+}
+
+.hroster__ban {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-style: italic;
+}
+
+.adminrow {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.adminrow__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.adminrow__code {
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.08em;
+}
+
+.adminrow__when {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.adminrow__grid {
+  display: grid;
+  grid-template-columns: 1fr 3.5rem auto 3.5rem 1fr;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.adminrow__score {
+  text-align: center;
+}
+
+.adminrow__vs {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.adminrow__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.adminrow__label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  min-width: 3.5rem;
+}
+
+.adminrow__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.adminrow__hint {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.btn--tiny {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+}
+
+/* The chosen option in a group of otherwise identical buttons. */
+.btn--on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+@media (max-width: 34rem) {
+  .adminrow__grid {
+    grid-template-columns: 1fr 3rem 1fr;
+  }
+
+  .adminrow__vs {
+    display: none;
+  }
+
+  .hrosters {
+    grid-template-columns: 1fr;
+  }
 }

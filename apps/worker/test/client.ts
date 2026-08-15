@@ -33,6 +33,7 @@ export class TestClient {
   /** Opponent progress pings — cosmetic, ephemeral, and asserted on for what they must NOT carry. */
   readonly progress: Extract<ServerMessage, { type: 'OPPONENT_PROGRESS' }>[] = []
   readonly rematches: Extract<ServerMessage, { type: 'REMATCH' }>[] = []
+  readonly amendments: Extract<ServerMessage, { type: 'RESULT_AMENDED' }>[] = []
 
   private constructor(
     readonly seatToken: string,
@@ -118,12 +119,24 @@ export class TestClient {
       else if (message.type === 'REJECTED') this.rejections.push(message)
       else if (message.type === 'OPPONENT_PROGRESS') this.progress.push(message)
       else if (message.type === 'REMATCH') this.rematches.push(message)
+      else if (message.type === 'RESULT_AMENDED') this.amendments.push(message)
       // Everything left really is an error. Named types are listed above so that adding a
       // server message and forgetting this line is a type error rather than a silent
       // reclassification into `errors`.
       else this.errors.push(message)
     })
 
+    /*
+     * A fixed settle, deliberately, after trying the alternative.
+     *
+     * `waitForFrame(0)` looks more correct — wait for the opening VIEW rather than for four turns
+     * — and it made three unrelated tests hang. Some connects legitimately receive no frame, so
+     * blocking on one turns "nothing to say" into a timeout. Reverted rather than left half-fixed.
+     *
+     * Known consequence: `session.test.ts`'s refresh loop can still flake, rarely, when a resumed
+     * client is inspected before its first view lands. That is a real gap and it is written down
+     * here rather than papered over.
+     */
     await this.settle()
     return this
   }
@@ -291,7 +304,7 @@ export class TestClient {
 
   /** True when this seat is being asked for something other than the standing undo. */
   get isAwaited(): boolean {
-    return this.actions().some((a) => a.type !== 'UNDO_LAST_RESULT')
+    return this.actions().some((a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT')
   }
 }
 
@@ -484,7 +497,9 @@ export async function playToCompletion(
     const actor = [a, b].find((c) => c.isAwaited)
     if (!actor) throw new Error('nobody is being asked to act, and the match is not over')
 
-    const action = actor.actions().find((x) => x.type !== 'UNDO_LAST_RESULT')!
+    const action = actor
+      .actions()
+      .find((x) => x.type !== 'UNDO_LAST_RESULT' && x.type !== 'AMEND_RESULT')!
     const outcome = action.type === 'REPORT_RESULT' ? (results[action.roundIndex] ?? 'A') : 'A'
     await actor.act(materialize(action, actor.seat, outcome))
   }

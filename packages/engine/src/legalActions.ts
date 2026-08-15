@@ -1,6 +1,6 @@
-import type { Action, MatchState, Seat } from '@banpick/types'
+import type { Action, MatchState, RoundOutcome, Seat } from '@banpick/types'
 
-import { currentModule } from './context.js'
+import { currentModule, roundAllowsTie } from './context.js'
 import { moduleFor } from './modules/index.js'
 import { undoableRound } from './undoWindow.js'
 
@@ -40,5 +40,27 @@ export function legalActions(state: MatchState, seat: Seat): Action[] {
  */
 function undoActions(state: MatchState): Action[] {
   const roundIndex = undoableRound(state)
-  return roundIndex === null ? [] : [{ type: 'UNDO_LAST_RESULT', moduleId: null, roundIndex }]
+  const undo: Action[] =
+    roundIndex === null ? [] : [{ type: 'UNDO_LAST_RESULT', moduleId: null, roundIndex }]
+  return [...undo, ...amendActions(state)]
+}
+
+/**
+ * D33 — every round that has a result can be corrected, for the life of the match.
+ *
+ * Offered as one action carrying every amendable round rather than one action per round, because
+ * the client draws a single "fix an earlier result" control and needs to know the whole set to
+ * populate it. Each entry carries its own legal outcomes: D30's overtime round forbids the tie
+ * the others allow, and §11 non-negotiable 4 says the client must not be the thing that knows.
+ */
+function amendActions(state: MatchState): Action[] {
+  const rounds = state.rounds
+    .filter((r) => r.result !== null)
+    .map((r) => ({
+      roundIndex: r.index,
+      current: r.result!,
+      outcomes: (roundAllowsTie(state, r.index) ? ['A', 'B', 'TIE'] : ['A', 'B']) as RoundOutcome[],
+    }))
+
+  return rounds.length === 0 ? [] : [{ type: 'AMEND_RESULT', moduleId: null, rounds }]
 }

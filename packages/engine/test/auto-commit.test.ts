@@ -118,11 +118,15 @@ function driveToRound2Select(state: MatchState): MatchState {
     if (current.mode.program[current.cursor]?.id === 'rounds.2.select') return current
 
     const actor = (['A', 'B'] as Seat[]).find((s) =>
-      legalActions(current, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+      legalActions(current, s).some(
+        (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+      ),
     )
     if (!actor) throw new Error('driveToRound2Select: nobody can act')
 
-    const action = legalActions(current, actor).find((a) => a.type !== 'UNDO_LAST_RESULT')!
+    const action = legalActions(current, actor).find(
+      (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+    )!
     switch (action.type) {
       case 'ROLL':
         // The dice are gated on both seats asking for them, so a driver has to ask.

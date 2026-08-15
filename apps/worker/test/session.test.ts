@@ -90,7 +90,9 @@ describe('a disconnect is a non-event', () => {
       const actor = [a, b].find((c) => c.isAwaited)
       expect(actor, 'somebody should be able to act after a refresh').toBeDefined()
 
-      const action = actor!.actions().find((x) => x.type !== 'UNDO_LAST_RESULT')!
+      const action = actor!
+        .actions()
+        .find((x) => x.type !== 'UNDO_LAST_RESULT' && x.type !== 'AMEND_RESULT')!
       const outcome =
         action.type === 'REPORT_RESULT' ? (['A', 'B', 'A'][action.roundIndex] ?? 'A') : 'A'
       await actor!.act(materialize(action, actor!.seat, outcome as 'A' | 'B' | 'TIE'))

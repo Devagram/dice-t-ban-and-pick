@@ -29,7 +29,9 @@ function fuzzMatch(seedIndex: number, mode = baseMode, draftCount: 3 | 4 = 4): M
     visited.push(state)
 
     const actors = SEATS.filter((s) =>
-      legalActions(state, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+      legalActions(state, s).some(
+        (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+      ),
     )
     if (actors.length === 0) {
       const sys = systemStep(state)
@@ -39,7 +41,9 @@ function fuzzMatch(seedIndex: number, mode = baseMode, draftCount: 3 | 4 = 4): M
     }
 
     const seat = actors[(seedIndex + step) % actors.length]!
-    const options = legalActions(state, seat).filter((a) => a.type !== 'UNDO_LAST_RESULT')
+    const options = legalActions(state, seat).filter(
+      (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+    )
     const action = options[(seedIndex * 7 + step * 3) % options.length]!
 
     const result = reduce(state, {
@@ -88,7 +92,9 @@ describe('legality soundness — offered implies accepted', () => {
     let step = 0
     while (state.status === 'IN_PROGRESS' && step++ < 60) {
       const seat = SEATS.find((s) =>
-        legalActions(state, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+        legalActions(state, s).some(
+          (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+        ),
       )
       if (!seat) {
         const sys = systemStep(state)
@@ -96,7 +102,9 @@ describe('legality soundness — offered implies accepted', () => {
         state = settle(expectOk(reduce(state, sys)))
         continue
       }
-      const action = legalActions(state, seat).find((a) => a.type !== 'UNDO_LAST_RESULT')!
+      const action = legalActions(state, seat).find(
+        (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+      )!
       const result = reduce(state, {
         v: 1,
         seq: state.log.length,
@@ -121,13 +129,17 @@ describe('legality soundness — not offered implies rejected', () => {
       for (const state of fuzzMatch(seed)) {
         if (state.status !== 'IN_PROGRESS') continue
         const asked = SEATS.filter((s) =>
-          legalActions(state, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+          legalActions(state, s).some(
+            (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+          ),
         )
         if (asked.length !== 1) continue
 
         const active = asked[0]!
         const idle: Seat = active === 'A' ? 'B' : 'A'
-        const action = legalActions(state, active).find((a) => a.type !== 'UNDO_LAST_RESULT')!
+        const action = legalActions(state, active).find(
+          (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+        )!
 
         // Same action, wrong seat. `materialize` builds it as if the idle seat were acting.
         const forged = materialize(action, idle, 0) as EventPayload

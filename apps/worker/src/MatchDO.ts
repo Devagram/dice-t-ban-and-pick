@@ -34,6 +34,7 @@ import {
   setMeta,
 } from './persistence.js'
 import {
+  announceAmendment,
   announceRematch,
   broadcastView,
   relayProgress,
@@ -765,6 +766,12 @@ export class MatchDO extends DurableObject<Env> {
       sendProtocolError(target.socket, 'NOT_YOUR_SEAT', 'that action names another seat')
       return
     }
+    // D33 — same rule. Neither correction carries a `seat` field, so both need saying explicitly;
+    // an amendment attributed to the other player is what the announcement would then report.
+    if (payload.type === 'AMEND_RESULT' && payload.amendedBy !== target.seat) {
+      sendProtocolError(target.socket, 'NOT_YOUR_SEAT', 'that action names another seat')
+      return
+    }
 
     // Read, judge, append — and if another writer claimed this `seq` first, do all three again
     // against what is actually in the log now. See `tryAppendEvent` for why this exists when
@@ -807,6 +814,17 @@ export class MatchDO extends DurableObject<Env> {
         detail: null,
       })
       const settled = this.settleAndBroadcast(result.state)
+
+      /*
+       * D33 — the other seat is told, rather than watching the score move on its own.
+       *
+       * The new view already carries the corrected result, so this adds no information; what it
+       * adds is attribution. Removing D15's undo window removed the thing that stopped a player
+       * rewriting an old round, and being told is what replaces it.
+       */
+      if (payload.type === 'AMEND_RESULT') {
+        announceAmendment(this.sockets(), payload.roundIndex, payload.outcome, target.seat)
+      }
 
       /*
        * D28 — remember the bans for next time.

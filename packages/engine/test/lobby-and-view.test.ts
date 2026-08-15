@@ -188,10 +188,18 @@ describe('projection at a terminal state', () => {
     expect(view.rounds.every((r) => r.result !== null)).toBe(true)
   })
 
-  it('still offers the undo, and nothing else', () => {
+  it('offers the undo and the amendment, and no way to keep playing', () => {
     const final = playMatch(startMatch({ mode: baseMode, draftCount: 4 }), ['A', 'B', 'A'])
     const actions = legalActions(final, 'A')
-    expect(actions.map((a) => a.type)).toEqual(['UNDO_LAST_RESULT'])
+
+    // Both corrections outlive the match, for different mistakes: D15's undo is the result you
+    // just entered, D33's amendment is the one you notice later. Neither is a move.
+    expect(actions.map((a) => a.type).sort()).toEqual(['AMEND_RESULT', 'UNDO_LAST_RESULT'])
+
+    const amend = actions.find((a) => a.type === 'AMEND_RESULT')!
+    // Every round that was played, not just the last one.
+    expect(amend.rounds.map((r) => r.roundIndex)).toEqual([0, 1, 2])
+    expect(amend.rounds[0]).toMatchObject({ current: 'A', outcomes: ['A', 'B', 'TIE'] })
   })
 
   it('refuses further play once complete', () => {

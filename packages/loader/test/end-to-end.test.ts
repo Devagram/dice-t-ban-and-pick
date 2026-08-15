@@ -96,7 +96,9 @@ function play(state: MatchState, results: RoundOutcome[]): MatchState {
   let current = state
   for (let guard = 0; guard < 200 && current.status === 'IN_PROGRESS'; guard++) {
     const seat = SEATS.find((s) =>
-      legalActions(current, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+      legalActions(current, s).some(
+        (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+      ),
     )
     if (!seat) {
       const sys = systemStep(current)
@@ -110,7 +112,9 @@ function play(state: MatchState, results: RoundOutcome[]): MatchState {
 }
 
 function act(state: MatchState, seat: Seat, results: RoundOutcome[]): EventEnvelope {
-  const action = legalActions(state, seat).find((a) => a.type !== 'UNDO_LAST_RESULT')!
+  const action = legalActions(state, seat).find(
+    (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+  )!
   const seq = state.log.length
   const wrap = (payload: EventEnvelope['payload']): EventEnvelope => ({
     v: 1,

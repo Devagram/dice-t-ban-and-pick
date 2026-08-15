@@ -219,7 +219,9 @@ function playToFirstReport(state: ReturnType<typeof startMatch>, outcome: RoundO
   let current = state
   for (let guard = 0; guard < 100; guard++) {
     const seat = (['A', 'B'] as const).find((s) =>
-      legalActions(current, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+      legalActions(current, s).some(
+        (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+      ),
     )
     if (!seat) throw new Error('playToFirstReport: nobody can act')
 
@@ -233,7 +235,9 @@ function playToFirstReport(state: ReturnType<typeof startMatch>, outcome: RoundO
         outcome,
       })
     }
-    const action = legalActions(current, seat).find((a) => a.type !== 'UNDO_LAST_RESULT')!
+    const action = legalActions(current, seat).find(
+      (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+    )!
     current = applyFirst(current, seat, action)
   }
   throw new Error('playToFirstReport: never reached a report')

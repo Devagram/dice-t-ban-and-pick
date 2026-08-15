@@ -151,3 +151,17 @@ export function envelope(
 ): EventEnvelope {
   return { v: 1, seq, tag, actor, payload }
 }
+
+/**
+ * Whether a round's own REPORT_RESULT accepts a tie.
+ *
+ * D30's overtime forbids the tie the regulation rounds allow, so this is a per-round question
+ * rather than a match-wide one. Written as `some` rather than find-then-test so there is no
+ * branch for "the round has no report module" — a state that cannot exist, since a round only
+ * has a result because that module ran.
+ */
+export function roundAllowsTie(state: MatchState, roundIndex: number): boolean {
+  return state.mode.program.some(
+    (m) => m.type === 'REPORT_RESULT' && m.roundIndex === roundIndex && m.allowTie,
+  )
+}

@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { project } from '@banpick/engine'
-import type { MatchState, RejectionCode, Seat, ServerMessage } from '@banpick/types'
+import type { MatchState, RejectionCode, RoundOutcome, Seat, ServerMessage } from '@banpick/types'
 
 /**
  * **The single outbound choke point.**
@@ -84,6 +84,24 @@ export function relayProgress(
  */
 export function announceRematch(targets: Iterable<SeatSocket>, roomCode: string, by: Seat): void {
   for (const target of targets) deliver(target.socket, { type: 'REMATCH', roomCode, by })
+}
+
+/**
+ * D33 — announces a corrected round to both seats.
+ *
+ * Sent to the amender too, so a player with the match open twice sees it in both places. Round
+ * index and outcome are public from the moment a result is reported, so like the rematch frame
+ * this carries nothing `project()` would have redacted — which is why it can go out unfiltered.
+ */
+export function announceAmendment(
+  targets: Iterable<SeatSocket>,
+  roundIndex: number,
+  outcome: RoundOutcome,
+  by: Seat,
+): void {
+  for (const target of targets) {
+    deliver(target.socket, { type: 'RESULT_AMENDED', roundIndex, outcome, by })
+  }
 }
 
 /** A protocol-level problem. Also carries no state. */

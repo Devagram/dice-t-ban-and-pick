@@ -190,13 +190,17 @@ export function currentAction<T extends Action['type']>(
 
 export function awaiting(state: MatchState): Seat[] {
   return SEATS.filter((seat) =>
-    legalActions(state, seat).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+    legalActions(state, seat).some(
+      (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+    ),
   )
 }
 
 /** A deterministic "player": always takes the first legal option offered. */
 export function playFirstLegal(state: MatchState, seat: Seat): MatchState {
-  const action = legalActions(state, seat).find((a) => a.type !== 'UNDO_LAST_RESULT')
+  const action = legalActions(state, seat).find(
+    (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+  )
   if (!action) throw new Error(`seat ${seat} has no legal action`)
   return apply(state, seat, materialize(action, seat))
 }
@@ -336,6 +340,17 @@ export function materialize(action: Action, seat: Seat, pickOffset = 0): EventPa
 
     case 'UNDO_LAST_RESULT':
       return { type: 'UNDO_LAST_RESULT', roundIndex: action.roundIndex, requestedBy: seat }
+
+    case 'AMEND_RESULT': {
+      // Picks the first round on offer and an outcome that is not the one already recorded —
+      // amending a result to itself is refused, so a driver that did not change anything would
+      // be testing the rejection rather than the amendment.
+      const target = action.rounds[0]
+      if (!target) throw new Error('materialize: AMEND_RESULT with no amendable round')
+      const outcome = target.outcomes.find((o) => o !== target.current)
+      if (!outcome) throw new Error('materialize: no different outcome available')
+      return { type: 'AMEND_RESULT', roundIndex: target.roundIndex, outcome, amendedBy: seat }
+    }
   }
 }
 

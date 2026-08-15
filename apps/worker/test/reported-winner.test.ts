@@ -21,7 +21,9 @@ describe('the reported winner survives the round trip', () => {
           if (a.actions().some((x) => x.type === 'REPORT_RESULT')) break
           const actor = [a, b].find((c) => c.isAwaited)
           if (!actor) throw new Error('stalled before any round could be reported')
-          const action = actor.actions().find((x) => x.type !== 'UNDO_LAST_RESULT')!
+          const action = actor
+            .actions()
+            .find((x) => x.type !== 'UNDO_LAST_RESULT' && x.type !== 'AMEND_RESULT')!
           await actor.act(materialize(action, actor.seat, 'A'))
         }
 

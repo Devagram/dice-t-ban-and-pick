@@ -186,10 +186,14 @@ function playToOvertimeReport(state: ReturnType<typeof startMatch>) {
     if (report && report.roundIndex === 3) return current
 
     const seat = (['A', 'B'] as const).find((s) =>
-      legalActions(current, s).some((a) => a.type !== 'UNDO_LAST_RESULT'),
+      legalActions(current, s).some(
+        (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+      ),
     )
     if (!seat) throw new Error('playToOvertimeReport: nobody can act')
-    const action = legalActions(current, seat).find((a) => a.type !== 'UNDO_LAST_RESULT')!
+    const action = legalActions(current, seat).find(
+      (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+    )!
 
     current =
       action.type === 'REPORT_RESULT'

@@ -33,6 +33,13 @@ export interface TransportState {
    * match, and the rematch room is still there when it closes again).
    */
   rematch: { roomCode: string; by: string } | null
+  /**
+   * D33 — the last correction someone made to an earlier round.
+   *
+   * Cleared by the next VIEW, unlike `rematch`: this is a notice about something that just
+   * happened, and a banner that outlives the moment starts describing the wrong thing.
+   */
+  amendment: { roundIndex: number; outcome: string; by: string } | null
 }
 
 export interface Transport {
@@ -85,7 +92,13 @@ export function connect(
         case 'VIEW':
           // A new view supersedes any progress ping: the count described the state we have
           // just replaced, so keeping it would leave a stale bar on screen.
-          onChange({ view: message.view, rejection: null, error: null, progress: null })
+          onChange({
+            view: message.view,
+            rejection: null,
+            error: null,
+            progress: null,
+            amendment: null,
+          })
           break
         case 'REJECTED':
           onChange({ rejection: { code: message.code, detail: message.detail } })
@@ -98,6 +111,11 @@ export function connect(
           break
         case 'REMATCH':
           onChange({ rematch: { roomCode: message.roomCode, by: message.by } })
+          break
+        case 'RESULT_AMENDED':
+          onChange({
+            amendment: { roundIndex: message.roundIndex, outcome: message.outcome, by: message.by },
+          })
           break
       }
     })

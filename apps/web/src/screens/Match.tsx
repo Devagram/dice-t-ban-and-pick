@@ -37,6 +37,7 @@ export function Match({
     error: null,
     progress: null,
     rematch: null,
+    amendment: null,
   })
   const [transport, setTransport] = useState<Transport | null>(null)
 
@@ -69,6 +70,18 @@ export function Match({
         roomCode={roomCode}
         seatToken={seatToken}
       />
+      {/*
+        D33 — a correction to an earlier round, announced rather than left to be noticed.
+        
+        Above the rejection banner because it is not a failure: something legitimate happened
+        that moved the score, and the person it happened to should not have to work that out.
+      */}
+      {state.amendment ? (
+        <p className="alert alert--notice" role="status">
+          {state.amendment.by === state.view.seat ? 'You' : 'They'} corrected round{' '}
+          {state.amendment.roundIndex + 1}.
+        </p>
+      ) : null}
       {state.rejection ? (
         <p className="alert" role="alert">
           That did not go through: {state.rejection.detail}
@@ -190,7 +203,7 @@ function MatchBody({
       <PlayAgain view={view} roomCode={roomCode} seatToken={seatToken} rematch={rematch} />
       {/* Under the result, so a win lands with what it means for the series. */}
       <HeadToHead view={view} />
-      <RoundStrip view={view} />
+      <RoundStrip view={view} onAct={onAct} />
 
       {/*
         The dice wait for the rosters.

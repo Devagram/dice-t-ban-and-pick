@@ -224,7 +224,9 @@ function advanceToRound2(state: MatchState): MatchState {
     if (atRound2Select) return current
 
     const actor = (['A', 'B'] as const).find((s) =>
-      project(current, s).legalActions.some((a) => a.type !== 'UNDO_LAST_RESULT'),
+      project(current, s).legalActions.some(
+        (a) => a.type !== 'UNDO_LAST_RESULT' && a.type !== 'AMEND_RESULT',
+      ),
     )
     if (!actor) return current
 

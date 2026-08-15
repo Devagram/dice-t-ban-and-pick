@@ -26,6 +26,10 @@ export default defineConfig({
         plugins: [
           cloudflareTest({
             wrangler: { configPath: './apps/worker/wrangler.jsonc' },
+            // D34 — the admin key, supplied to the test runtime only. In production it is a
+            // Worker secret (`wrangler secret put ADMIN_KEY`) and deliberately absent from the
+            // committed config, so a checkout of this repo grants nobody anything.
+            miniflare: { bindings: { ADMIN_KEY: 'test-admin-key' } },
           }),
         ],
         test: {
