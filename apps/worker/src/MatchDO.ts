@@ -344,6 +344,7 @@ export class MatchDO extends DurableObject<Env> {
 
     const taken = new Set(claimedSeats(this.sql))
     const byId = new Map(ROSTER.characters.map((c) => [c.id, c]))
+    const binding = this.tournament()
 
     const preview: LobbyPreview = {
       roomCode: getMeta(this.sql, 'roomCode') ?? '',
@@ -356,6 +357,9 @@ export class MatchDO extends DurableObject<Env> {
       roster: ROSTER.characters,
       seatsAvailable: SEATS.filter((s) => !taken.has(s)),
       status: state.status,
+      // D41 — so the lobby can say "this seat is reserved" before somebody types their name into
+      // a form that was always going to refuse them.
+      ...(binding ? { tournament: binding } : {}),
     }
     return json(preview)
   }

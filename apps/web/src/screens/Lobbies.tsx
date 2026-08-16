@@ -18,6 +18,15 @@ const REFRESH_MS = 5000
 export function Lobbies({ onBack }: { onBack: () => void }) {
   const [rooms, setRooms] = useState<RoomListing[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /*
+   * The room code, which used to live at the bottom of the front page.
+   *
+   * It belongs here rather than on a menu: this is the screen somebody lands on having decided to
+   * join something, and a code in hand and a list of open seats are two answers to that one
+   * question. D20 keeps the join URL carrying the code and nothing else, so typing it and
+   * following a link are the same act.
+   */
+  const [joinCode, setJoinCode] = useState('')
 
   useEffect(() => {
     let live = true
@@ -95,6 +104,38 @@ export function Lobbies({ onBack }: { onBack: () => void }) {
           </ul>
         </section>
       ) : null}
+
+      {/*
+       * Beneath the lists, not above them: somebody who was *sent* a code almost always has it as
+       * a link and never reaches this screen at all, so typing one is the rarer path — it is here
+       * for a code read out across a table. The list stays the answer to "what can I join".
+       */}
+      <section className="panel">
+        <h2 className="panel__title">Have a code?</h2>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (joinCode.trim()) location.assign(`/j/${joinCode.trim().toUpperCase()}`)
+          }}
+        >
+          <label className="field">
+            <span className="field__label">Room code</span>
+            <input
+              className="field__input field__input--code"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+              placeholder="ABC123"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              maxLength={6}
+            />
+          </label>
+          <button type="submit" className="btn" disabled={joinCode.trim().length !== 6}>
+            Join
+          </button>
+        </form>
+      </section>
     </main>
   )
 }

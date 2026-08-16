@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { Home } from './screens/Home.js'
+import { Host } from './screens/Host.js'
 import { Admin } from './screens/Admin.js'
 import { History } from './screens/History.js'
 import { Lobbies } from './screens/Lobbies.js'
@@ -28,6 +29,7 @@ import { recallSeat, rememberSeat } from './transport.js'
 
 type Route =
   | { screen: 'home' }
+  | { screen: 'host' }
   | { screen: 'lobby'; roomCode: string }
   | { screen: 'match'; roomCode: string; seatToken: string; websocketUrl: string }
   | { screen: 'leaderboard' }
@@ -69,6 +71,8 @@ function readRoute(): Route {
       : { screen: 'lobby', roomCode }
   }
 
+  // The host's form, which was the front page until the front page became a menu.
+  if (/^\/host\/?$/.test(path)) return { screen: 'host' }
   if (/^\/leaderboard\/?$/.test(path)) return { screen: 'leaderboard' }
   // D31 — the open-room list, so a game can be found without a link.
   if (/^\/lobbies\/?$/.test(path)) return { screen: 'lobbies' }
@@ -155,12 +159,16 @@ export function App() {
       )
 
     case 'home':
+      return <Home />
+
+    case 'host':
       return (
-        <Home
+        <Host
           onCreated={(roomCode) => {
             history.pushState(null, '', `/j/${roomCode}`)
             setRoute({ screen: 'lobby', roomCode })
           }}
+          onBack={home}
         />
       )
 

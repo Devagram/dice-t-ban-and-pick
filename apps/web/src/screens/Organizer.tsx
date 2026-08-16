@@ -30,6 +30,8 @@ export function Organizer({ code, onBack }: { code: string; onBack: () => void }
   const [view, setView] = useState<TournamentView | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Freshly minted entrant links, by entrant id. Held only for as long as this page is open. */
+  const [links, setLinks] = useState<Record<string, string>>({})
 
   const reload = (): void => {
     fetchTournament(code)
@@ -45,6 +47,33 @@ export function Organizer({ code, onBack }: { code: string; onBack: () => void }
     } catch {
       // Private browsing. The key still works for this session, as `player.ts` has always traded.
     }
+  }
+
+  /**
+   * Mints a fresh link for one entrant and puts it on screen — the only place it will ever be.
+   *
+   * Sends nothing but the entrant id: the server leaves the player id and the display name alone
+   * unless it is given new ones, so this is "same person, new link" rather than a substitution.
+   */
+  async function reissue(entrantId: string): Promise<void> {
+    setError(null)
+    const response = await fetch(`/api/tournament/${code}/relink`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-organizer-key': key },
+      body: JSON.stringify({ entrantId }),
+    })
+    if (!response.ok) {
+      const detail = (await response.json().catch(() => ({}))) as { detail?: string }
+      setNotice(null)
+      setError(detail.detail ?? 'That did not go through. Check the organiser key.')
+      return
+    }
+    const { entrantToken } = (await response.json()) as { entrantToken: string }
+    setLinks((current) => ({
+      ...current,
+      [entrantId]: `${location.origin}/t/${code}#${entrantToken}`,
+    }))
+    setNotice('New link issued. The old one has stopped working.')
   }
 
   async function act(action: string, body: unknown, done: string): Promise<void> {
@@ -123,6 +152,33 @@ export function Organizer({ code, onBack }: { code: string; onBack: () => void }
         </p>
       ) : null}
 
+      {/*
+       * D41 — re-issuing an entrant's link, which is the only recovery there is.
+       *
+       * The tokens are shown once at creation and stored as hashes, so "I have lost my link" has
+       * no answer except this one — and until now the endpoint existed with nothing calling it,
+       * which made a lost link the end of that entrant's tournament. It is also the fix for a
+       * second browser: the link is what seats them, not the machine they are sitting at.
+       */}
+      <section className="panel">
+        <h2 className="panel__title">Entrant links</h2>
+        <p className="field__help">
+          Re-issuing mints a new link and <strong>stops the old one working immediately</strong>,
+          everywhere at once — including a room they are already sitting in.
+        </p>
+        <ul className="adminlist">
+          {view.entrants.map((entrant) => (
+            <RelinkRow
+              key={entrant.entrantId}
+              name={entrant.displayName}
+              link={links[entrant.entrantId]}
+              disabled={key.length === 0}
+              onRelink={() => void reissue(entrant.entrantId)}
+            />
+          ))}
+        </ul>
+      </section>
+
       <section className="panel">
         <h2 className="panel__title">Needs a decision</h2>
         {stuck.length === 0 ? (
@@ -182,6 +238,78 @@ export function Organizer({ code, onBack }: { code: string; onBack: () => void }
         )}
       </section>
     </main>
+  )
+}
+
+/**
+ * One entrant's link, and the button that replaces it.
+ *
+ * Two steps like everything else on this screen, because it is destructive in a way that does not
+ * look it: the entrant's current link stops working the instant this is pressed, and if they are
+ * mid-match when it happens they cannot get back in without the new one.
+ */
+function RelinkRow({
+  name,
+  link,
+  disabled,
+  onRelink,
+}: {
+  name: string
+  link: string | undefined
+  disabled: boolean
+  onRelink: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <li className="adminrow">
+      <div className="adminrow__head">
+        <span className="adminrow__label">{name}</span>
+      </div>
+      {link ? (
+        // Shown once, here, and nowhere else — only the hash of it is stored (D41).
+        <input
+          className="resume__url"
+          readOnly
+          value={link}
+          aria-label={`New link for ${name}`}
+          onFocus={(e) => e.currentTarget.select()}
+        />
+      ) : null}
+      <div className="adminrow__actions">
+        {confirming ? (
+          <>
+            <button
+              type="button"
+              className="btn btn--danger btn--tiny"
+              onClick={() => {
+                onRelink()
+                setConfirming(false)
+              }}
+            >
+              Really replace {name}’s link
+            </button>
+            <button
+              type="button"
+              className="btn btn--quiet btn--tiny"
+              onClick={() => setConfirming(false)}
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn btn--quiet btn--tiny"
+            disabled={disabled}
+            onClick={() => setConfirming(true)}
+          >
+            Re-issue link
+          </button>
+        )}
+        {disabled ? <span className="adminrow__hint">Enter the organiser key.</span> : null}
+      </div>
+    </li>
   )
 }
 

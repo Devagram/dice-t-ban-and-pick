@@ -72,12 +72,25 @@ export function fetchPreview(roomCode: string): Promise<LobbyPreview> {
  * nothing to key on, so the seat would play by quietly different rules. The lobby will not send
  * an empty name, and the server refuses one — `400 NAME_REQUIRED`.
  */
-export function claimSeat(roomCode: string): Promise<ClaimSeatResponse> {
+export function claimSeat(roomCode: string, entrantToken?: string): Promise<ClaimSeatResponse> {
   const player = currentPlayer()
   return fetch(`/api/match/${roomCode}/seat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ playerId: player.id, displayName: player.name }),
+    body: JSON.stringify({
+      playerId: player.id,
+      displayName: player.name,
+      /*
+       * D41 — the entrant token, when this room is a bracket match.
+       *
+       * Its absence was a real bug: the tournament page links an entrant to `/j/CODE#token`, the
+       * lobby dropped the fragment, and the seat claim arrived bare — so every entrant met "this
+       * seat is reserved — open the match from your entrant link" *having done exactly that*. The
+       * worker's own test client had always sent one, which is how the gap survived a suite that
+       * plays whole tournaments: the test client could do something the real client could not.
+       */
+      ...(entrantToken ? { entrantToken } : {}),
+    }),
   }).then(json<ClaimSeatResponse>)
 }
 

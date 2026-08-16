@@ -1859,6 +1859,62 @@ select {
 }
 
 /*
+ * The main menu.
+ *
+ * One column, whatever the screen: five destinations is a list, and putting them in a grid on a
+ * wide display would make the eye hunt for an order that is already meaningful — join before host
+ * before the record pages. Each card is a whole link rather than a title with a button in it, so
+ * the target is the size of the card on a phone.
+ */
+.menu {
+  display: grid;
+  gap: 10px;
+  max-width: 34rem;
+  margin: 16px auto 0;
+}
+
+.menucard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  clip-path: var(--clip-corner);
+  transition:
+    border-color var(--t-quick) var(--ease-out),
+    transform var(--t-quick) var(--ease-out);
+}
+
+.menucard:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+/* The one most visitors came for. A left edge rather than a fill: it should lead the eye, not
+   shout over the other four. */
+.menucard--primary {
+  border-left-color: var(--accent);
+}
+
+.menucard__name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  font-size: var(--step-1);
+}
+
+.menucard__blurb {
+  color: var(--muted);
+  font-size: var(--step--1);
+}
+
+/*
  * Modes as cards.
  *
  * There are two of them and the difference between them *is* the decision — a dropdown hides that
@@ -2290,13 +2346,6 @@ select {
 }
 
 /* --- D31: the lobby list ------------------------------------------------- */
-
-.hero__links {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
 
 .panel__empty {
   margin: 0;

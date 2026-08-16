@@ -57,8 +57,9 @@ describe('the lobby list', () => {
 
     await waitFor(() => expect(screen.getByText('In progress')).toBeTruthy())
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
-    // Joinable first: it is what someone opening this screen came to do.
-    expect(headings).toEqual(['Waiting for a player', 'In progress'])
+    // Joinable first: it is what someone opening this screen came to do. The code field is last
+    // for the same reason — a code you were *sent* is a link, so typing one is the rarer path.
+    expect(headings).toEqual(['Waiting for a player', 'In progress', 'Have a code?'])
   })
 
   it('says a room has no host yet rather than showing a blank', async () => {

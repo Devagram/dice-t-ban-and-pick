@@ -45,6 +45,22 @@ npm run deploy       # build, then one wrangler deploy for both halves
 To play locally: `npm run build && npm run dev`, then open the printed URL in two browsers (one
 of them private — seat tokens live in `localStorage`, so two normal tabs share a seat).
 
+## The screens
+
+`/` is a menu and nothing else — five things somebody arrives to do, in the order they are likely
+to want them. It was the host's setup form for most of this app's life, which meant every visitor
+met a form for a game they might not be starting.
+
+| Path                                 | What it is                                                                                   |
+| ------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `/`                                  | The menu                                                                                     |
+| `/lobbies`                           | Join: open seats, games under way, and the field for a code read out at a table              |
+| `/host`                              | Host a game — mode, parameters, the optional ban list                                        |
+| `/organizer`                         | Host a tournament (D37)                                                                      |
+| `/leaderboard`, `/history`           | The record. Public and read-only                                                             |
+| `/j/:code`, `/r/:code#token`         | A room, and a resume link (D17, D20)                                                         |
+| `/t/:code`, `/t/:code/run`, `/admin` | A bracket, its organizer console, and the admin dashboard — the last two unlinked on purpose |
+
 ## Deploying
 
 ```
@@ -154,7 +170,7 @@ merge itself, not the existence of ids.
 
 ## Tournaments (D37–D43)
 
-**Run a tournament** on the front page (`/organizer`): type the entrants one per line, pick a
+**Host a tournament** from the main menu (`/organizer`): type the entrants one per line, pick a
 format and the modes, and create it. A name that has played here before keeps its record; anyone
 else starts fresh, which the screen says before you commit — there are no accounts to look people
 up by (D35), so this is a match against the public history and a new id when it misses.
@@ -166,8 +182,8 @@ What comes back exists **once** and is never recoverable:
   deliberately _not_ `ADMIN_KEY` itself: that key gates rewriting every recorded result in the
   deployment, and running Thursday's event should not require handing it out.
 - **One link per entrant**, with their token in the URL fragment so it never reaches a server log.
-  It authorises the seat; it is not an account, and D41's answer to a lost one is that the
-  organizer re-mints it.
+  It authorises the seat; it is not an account. Lost one? The organizer console re-issues it —
+  which is the only recovery, since only the hash is stored, and it kills the old link at once.
 
 Only those two people can sit in a bracket match, in the seats the bracket gave them — not
 first-come like the open lobby. Any mode can be the tournament's default, and any bracket position

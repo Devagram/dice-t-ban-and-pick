@@ -167,6 +167,18 @@ export interface LobbyPreview {
   roster: Character[]
   seatsAvailable: Seat[]
   status: 'LOBBY' | 'IN_PROGRESS' | 'COMPLETE'
+  /**
+   * D37/D41 — the bracket this room belongs to, if any. Absent for an ordinary game.
+   *
+   * Here because §12.3 makes the preview the place a joiner learns what they are consenting to,
+   * and "you cannot sit here" is the most basic thing to learn before pressing the button. Without
+   * it the lobby offers a seat, takes a name, and only then discovers the seat was reserved — the
+   * refusal is correct and arrives at the worst possible moment.
+   *
+   * The code alone, not the entrant list: who is *scheduled* to play is on the public bracket
+   * page, and this room does not need a second copy of it.
+   */
+  tournament?: { code: string; slotId: string }
 }
 
 export interface ClaimSeatResponse {

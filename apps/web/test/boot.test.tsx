@@ -103,13 +103,22 @@ function goTo(path: string, hash = ''): void {
 }
 
 describe('the app boots', () => {
-  it('renders the home screen with the host controls', async () => {
+  it('renders the front page as a menu, and nothing that needs the network', () => {
     goTo('/')
     render(<App />)
 
     expect(screen.getByText('Ban & Pick')).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Main menu' })).toBeTruthy()
+    // The host's form lives at `/host` now. Nothing on this page waits for a fetch, which is why
+    // there is no `waitFor` here: the first paint is the whole page.
+    expect(screen.queryByText('Start a match')).toBeNull()
+  })
+
+  it('renders the host screen with the host controls', async () => {
+    goTo('/host')
+    render(<App />)
+
     expect(screen.getByText('Start a match')).toBeTruthy()
-    expect(screen.getByText('Join a match')).toBeTruthy()
 
     // The parameter space comes from the server, so the buttons only exist once it answers.
     await waitFor(() => expect(screen.getByRole('button', { name: '3' })).toBeTruthy())
@@ -181,7 +190,7 @@ describe('the app boots', () => {
  */
 describe('the front door', () => {
   it('presents modes as cards, each carrying its own blurb', async () => {
-    goTo('/')
+    goTo('/host')
     render(<App />)
 
     // A dropdown shows one option at a time and gives the blurb nowhere to live.
@@ -198,7 +207,7 @@ describe('the front door', () => {
   })
 
   it('offers the global ban list as portraits, and marks a ban on the face', async () => {
-    goTo('/')
+    goTo('/host')
     render(<App />)
 
     await waitFor(() => expect(screen.getByRole('button', { name: /The Anvil/ })).toBeTruthy())
@@ -265,17 +274,18 @@ describe('the rule you are consenting to is on the card', () => {
 })
 
 /**
- * Both players get to say who they are.
+ * Both players get to say who they are, in the same place and at the same moment.
  *
- * The host is asked on the home screen. A joiner never sees that screen — they arrive at
- * `/j/CODE` and go straight to the seat button — so without a field here, seat B could generate
- * an id and never a name, and the host would face a blank label all match.
+ * That place is the lobby, not the screen the host used to open the room: a joiner arrives at
+ * `/j/CODE` and never sees any of the host's pages, so without a field there, seat B could
+ * generate an id and never a name and the host would face a blank label all match. Asking the
+ * host earlier would also make naming yourself a step before choosing a mode.
  */
 describe('both players are named at the moment they sit', () => {
-  it('does not ask on the home screen, before there is anything to sit at', async () => {
+  it('does not ask while hosting, before there is anything to sit at', async () => {
     // The host lands on the lobby after creating, so they are asked in the same place and at the
     // same moment as the joiner. Asking up front made naming a step before choosing a mode.
-    goTo('/')
+    goTo('/host')
     render(<App />)
     await waitFor(() => expect(screen.getByText('Start a match')).toBeTruthy())
     expect(screen.queryByLabelText('Your name')).toBeNull()

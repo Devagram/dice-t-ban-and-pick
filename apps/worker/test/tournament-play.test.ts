@@ -134,6 +134,36 @@ describe('provisioning', () => {
     }
   })
 
+  it('says on the preview that a room belongs to a bracket', async () => {
+    /*
+     * The lobby needs this *before* it offers a seat. Without it the only way to discover a
+     * reserved seat is to press the button and be refused — which is what happened: an entrant
+     * following their own link met "this seat is reserved" because the client dropped the token,
+     * and a spectator following a room code met the same thing with no way to know why.
+     */
+    const created = await createTournament({ entrants: people(4) })
+    const v = await view(created.code)
+    const preview = async (code: string) =>
+      (await (await SELF.fetch(`https://example.com/api/match/${code}/preview`)).json()) as {
+        tournament?: { code: string; slotId: string }
+      }
+
+    expect((await preview(slotIn(v, 'W1M1').roomCode!)).tournament).toEqual({
+      code: created.code,
+      slotId: 'W1M1',
+    })
+
+    // And an ordinary room says nothing, because there is nothing to say.
+    const casual = (await (
+      await SELF.fetch('https://example.com/api/match', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ modeId: 'base', parameters: { draftCount: 4 } }),
+      })
+    ).json()) as { roomCode: string }
+    expect((await preview(casual.roomCode)).tournament).toBeUndefined()
+  })
+
   it('refuses a tournament binding asked for from outside', async () => {
     // The field turns off open seating and hides the room. A client that could set one could mint
     // itself a private room claiming to belong to somebody's event.

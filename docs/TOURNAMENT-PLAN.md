@@ -441,10 +441,29 @@ An entrant needs a player id and a player id belongs to a **browser** (D35) — 
 - A stranger's do not, and the screen **says so on the chip before the tournament is created** rather than leaving it to be discovered on the leaderboard afterwards. D41's relink and D35's merge are both still there to fix it.
 - The directory comes from `/api/matchups`, which is public. Reading `/api/admin/players` instead would have put this whole screen behind the admin key to answer a question the history already answers in the open.
 
+### Found while building — the layer was unplayable from a browser
+
+Reported from real use: _"even when trying to join rooms even from the direct link, I get 'this seat is reserved — open the match from your entrant link'."_
+
+**The client never sent the entrant token.** The tournament page links an entrant to `/j/CODE#token` — fragment, so it never reaches a request log — and `claimSeat` posted the player id and display name and nothing else. So every entrant was refused for not having done the one thing they had just done, and D41's seating worked only for `curl`.
+
+The reason nine phases of tests missed it is worth keeping: **the worker's test client sends the token itself.** `TestClient.claimSeatWithToken` existed from Phase 3, so the suite played whole tournaments over real sockets through a path the real client did not have. The repo's own rule is that the test client must be able to do only what the real one can (§11.4, D18) — this was that rule failing in the other direction, and it is the second time a test client has been more capable than the app.
+
+Three fixes, and each closes a different part of it:
+
+- [x] `claimSeat` carries the entrant token when the fragment has one, and the lobby strips it from the address bar once seated — the same treatment D17 gives a resume token, and for the same reason: it opens that seat for the length of the event.
+- [x] **`LobbyPreview` gained `tournament`**, so the lobby can say a seat is reserved _before_ offering it. Without it the only way to find out was to type a name, press the button and be refused — correct, and arriving at the worst possible moment. A spectator who followed a room code now gets an explanation and a link to the bracket.
+- [x] An entrant arriving with their link is **not asked for a name**. The tournament seats them under their registered identity, so the field was collecting something the server discards, and requiring it blocked the seat on it.
+
+### And the recovery that did not exist
+
+- [x] **The organizer console can re-issue an entrant link.** `relink` was built and gated in Phase 7 and nothing ever called it, which made a lost link the end of that entrant's tournament — there is no lookup, because only the hash is stored. Two-step like every other action there, and it says plainly that the old link stops working immediately, everywhere, including a match they are already sitting in.
+
 **Exit criteria**
 
 - [x] A tournament can be created, handed out, played and finished without ever leaving the browser
 - [x] The config the screen sends is asserted against the server in a worker test, so a form that grows a field the server has never seen fails in CI rather than on the night
+- [x] An entrant seats from the **real client**, asserted in `apps/web/test/entrant-seating.test.tsx` — the gap above was invisible to a worker suite that plays whole tournaments
 
 | Risk                                                             | Phase | Looks like                                                                  | Mitigation                                                                                                      |
 | ---------------------------------------------------------------- | ----- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
