@@ -58,7 +58,10 @@ async function watch(code: string) {
   const socket = response.webSocket!
   const raw: string[] = []
   socket.accept()
-  socket.addEventListener('message', (event) => raw.push(String(event.data)))
+  // Braced: `push` returns a length, and workerd warns about an event handler that returns one.
+  socket.addEventListener('message', (event) => {
+    raw.push(String(event.data))
+  })
 
   return {
     socket,

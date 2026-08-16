@@ -35,9 +35,10 @@ describe('progress reaches the opponent', () => {
     const { a, b } = await seatedMatch({ modeId: 'bring-ban1', draftCount: 4 })
 
     a.send({ type: 'PROGRESS', filled: 2, of: 5 })
-    await b.settle(10)
-
-    expect(b.progress.at(-1)).toEqual({
+    // Waited for, not slept past. `settle(10)` here was this file's longest-running flake and the
+    // one its own comment on `settle` describes: asserting a frame arrived after a fixed wait
+    // passes on a quiet machine and fails on a loaded one.
+    expect(await b.waitForProgress()).toEqual({
       type: 'OPPONENT_PROGRESS',
       seat: 'A',
       filled: 2,
@@ -95,7 +96,7 @@ describe('progress leaks nothing and changes nothing', () => {
     // A is mid-draft with real characters in mind. Its progress pings must describe *how many*,
     // never *which* — that is the whole content of the seal (§7).
     a.send({ type: 'PROGRESS', filled: 3, of: 5 })
-    await b.settle(10)
+    await b.waitForProgress()
 
     const frames = b.frames.filter((f) => f.includes('OPPONENT_PROGRESS'))
     expect(frames.length).toBeGreaterThan(0)

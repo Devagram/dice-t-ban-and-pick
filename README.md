@@ -6,7 +6,7 @@ The design is the primary document — read it before the code:
 
 - [`banpick-design-spec.md`](banpick-design-spec.md) — the spec. Decisions D1–D43.
 - [`docs/DELIVERY-PLAN.md`](docs/DELIVERY-PLAN.md) — phased plan and exit criteria.
-- [`docs/TOURNAMENT-PLAN.md`](docs/TOURNAMENT-PLAN.md) — the tournament layer, phases 0–8. Reverses D19.
+- [`docs/TOURNAMENT-PLAN.md`](docs/TOURNAMENT-PLAN.md) — the tournament layer, phases 0–9. Reverses D19.
 - [`docs/SPEC-GAPS.md`](docs/SPEC-GAPS.md) — the gap register, all items resolved.
 - [`roster/README.md`](roster/README.md) — the three rules that keep replacing characters safe.
 
@@ -225,6 +225,14 @@ machine" bug reaches production:
 The worker's test client has **no access to the engine**. It renders `legalActions` off the
 frames it receives, exactly as the real client must (§11.4, D18) — so anything it can do the
 real client can do, and anything it cannot is a gap in the protocol rather than in the test.
+
+**Wait for the frame, never for a number of turns.** `settle(n)` proves something did _not_
+arrive; asserting that something _did_ after a fixed wait is a race that passes on a quiet
+machine and fails on a loaded CI runner. That is not hypothetical — it took two long matches
+down in Actions while the same commit was green locally and green on the deploy. Every positive
+wait (`waitForFrame`, `waitForError`, `waitForProgress`, `waitForRejection`, `eventually`) polls
+its own condition against a **wall-clock** deadline, and the worker project's `testTimeout` sits
+above that deadline so the failure message names the client and what it was waiting for.
 
 ## The client has no rules
 

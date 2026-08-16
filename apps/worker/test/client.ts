@@ -23,6 +23,41 @@ import type {
  * else, which is exactly the constraint §11.4 and D18 place on the real one. If a test can only
  * pass by peeking at server state, that is a finding about the protocol.
  */
+/**
+ * How long a "wait for a frame" gives up after, in **wall-clock milliseconds**.
+ *
+ * These waits used to count turns of `scheduler.wait(1)`, and that is what put two long matches
+ * in `players-merge` and `authority` on the floor in GitHub Actions while the same suite was
+ * green here and green on the deploy. `scheduler.wait(1)` yields for *at least* a millisecond;
+ * on a runner with two cores and a dozen workerd isolates competing for them it is regularly far
+ * more. So "200 turns" was 200ms on a laptop and an unknowable stretch on CI — the test was
+ * reporting the scheduler rather than the server, which is precisely what this file's own comment
+ * on `settle` warns against and then did.
+ *
+ * Generous on purpose. Nothing waits the full time unless the frame genuinely never comes: every
+ * one of these returns on the first turn its condition holds, so the only case that pays for a
+ * large backstop is a real failure, and a real failure is worth waiting ten seconds to report
+ * honestly. The worker project's `testTimeout` is set above this in `vitest.config.ts` so it is
+ * *this* message that fires — "no frame in 10s, last rejection …" rather than vitest's generic
+ * one, which names nothing.
+ */
+const FRAME_TIMEOUT_MS = 10_000
+
+/**
+ * Polls until a condition holds or the deadline passes.
+ *
+ * Yields with `scheduler.wait(1)` between checks rather than spinning: the frame arrives on the
+ * socket's own task, so a loop that never yields would starve the very thing it is waiting for.
+ */
+async function until(condition: () => boolean, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    if (condition()) return true
+    if (Date.now() >= deadline) return false
+    await scheduler.wait(1)
+  }
+}
+
 export class TestClient {
   private socket!: WebSocket
   /** Every frame received, in order. The redaction assertions run against these strings. */
@@ -225,13 +260,10 @@ export class TestClient {
    * replies is a real failure and has to look like one, not like a flaky test. If a REJECTED or
    * ERROR frame arrived instead of a view, that is still a reply and the caller inspects it.
    */
-  async waitForFrame(since: number, timeoutTurns = 200): Promise<void> {
-    for (let i = 0; i < timeoutTurns; i++) {
-      if (this.frames.length > since) return
-      await scheduler.wait(1)
-    }
+  async waitForFrame(since: number, timeoutMs = FRAME_TIMEOUT_MS): Promise<void> {
+    if (await until(() => this.frames.length > since, timeoutMs)) return
     throw new Error(
-      `client ${this.seatToken.slice(0, 8)} received no frame within ${timeoutTurns} turns. ` +
+      `client ${this.seatToken.slice(0, 8)} received no frame within ${timeoutMs}ms. ` +
         `Last error: ${JSON.stringify(this.lastError)}. ` +
         `Last rejection: ${JSON.stringify(this.lastRejection)}.`,
     )
@@ -256,14 +288,15 @@ export class TestClient {
    * like one. The timeout is generous because it is a backstop, not a delay — a passing case
    * returns on the first turn the frame exists.
    */
-  async waitForError(timeoutTurns = 200): Promise<Extract<ServerMessage, { type: 'ERROR' }>> {
-    for (let i = 0; i < timeoutTurns; i++) {
-      const error = this.errors.at(-1)
-      if (error) return error
-      await scheduler.wait(1)
-    }
+  async waitForError(
+    timeoutMs = FRAME_TIMEOUT_MS,
+  ): Promise<Extract<ServerMessage, { type: 'ERROR' }>> {
+    const error = (await until(() => this.errors.length > 0, timeoutMs))
+      ? this.errors.at(-1)
+      : undefined
+    if (error) return error
     throw new Error(
-      `client ${this.seatToken.slice(0, 8)} received no ERROR within ${timeoutTurns} turns. ` +
+      `client ${this.seatToken.slice(0, 8)} received no ERROR within ${timeoutMs}ms. ` +
         `Last rejection: ${JSON.stringify(this.lastRejection)}.`,
     )
   }
@@ -276,30 +309,28 @@ export class TestClient {
    * instead of the server. Same reasoning as `waitForError`.
    */
   async waitForProgress(
-    timeoutTurns = 200,
+    timeoutMs = FRAME_TIMEOUT_MS,
   ): Promise<Extract<ServerMessage, { type: 'OPPONENT_PROGRESS' }>> {
     const before = this.progress.length
-    for (let i = 0; i < timeoutTurns; i++) {
-      const frame = this.progress.at(-1)
-      if (this.progress.length > before && frame) return frame
-      await scheduler.wait(1)
-    }
+    const frame = (await until(() => this.progress.length > before, timeoutMs))
+      ? this.progress.at(-1)
+      : undefined
+    if (frame) return frame
     throw new Error(
-      `client ${this.seatToken.slice(0, 8)} received no PROGRESS within ${timeoutTurns} turns.`,
+      `client ${this.seatToken.slice(0, 8)} received no PROGRESS within ${timeoutMs}ms.`,
     )
   }
 
   /** As `waitForError`, for an action the engine refused rather than a protocol fault. */
   async waitForRejection(
-    timeoutTurns = 200,
+    timeoutMs = FRAME_TIMEOUT_MS,
   ): Promise<Extract<ServerMessage, { type: 'REJECTED' }>> {
-    for (let i = 0; i < timeoutTurns; i++) {
-      const rejection = this.rejections.at(-1)
-      if (rejection) return rejection
-      await scheduler.wait(1)
-    }
+    const rejection = (await until(() => this.rejections.length > 0, timeoutMs))
+      ? this.rejections.at(-1)
+      : undefined
+    if (rejection) return rejection
     throw new Error(
-      `client ${this.seatToken.slice(0, 8)} received no REJECTED within ${timeoutTurns} turns. ` +
+      `client ${this.seatToken.slice(0, 8)} received no REJECTED within ${timeoutMs}ms. ` +
         `Last error: ${JSON.stringify(this.lastError)}.`,
     )
   }
@@ -515,6 +546,34 @@ export async function commitAll(a: TestClient, b: TestClient): Promise<void> {
     await commitPhase(a, b)
   }
   throw new Error('commitAll: still committing after 8 phases')
+}
+
+/**
+ * Reads until the answer is the one being asserted on, then returns it.
+ *
+ * The registry is written on a `waitUntil` — D29's reasoning is that no player should wait for the
+ * leaderboard — so "play a match, then read the table" is a race by construction. The original
+ * answer to that was `settle(40)` and then look, which is the wrong shape for a positive
+ * assertion: it passes on a quiet machine and fails on a loaded runner, which is the same defect
+ * that took two long matches down in CI. This waits for the *condition* and reports what it last
+ * saw when it gives up, so a genuine failure still reads as one.
+ */
+export async function eventually<T>(
+  read: () => Promise<T>,
+  ready: (value: T) => boolean,
+  what = 'the expected state',
+  timeoutMs = FRAME_TIMEOUT_MS,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  let last: T = await read()
+  for (;;) {
+    if (ready(last)) return last
+    if (Date.now() >= deadline) {
+      throw new Error(`never reached ${what} within ${timeoutMs}ms. Last: ${JSON.stringify(last)}`)
+    }
+    await scheduler.wait(1)
+    last = await read()
+  }
 }
 
 export async function playToCompletion(

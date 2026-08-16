@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { SELF } from 'cloudflare:test'
 
-import { createMatch, playToCompletion, seatedMatch } from './client.js'
+import { createMatch, eventually, playToCompletion, seatedMatch } from './client.js'
 import type { HeadToHead, Standing } from '../src/RegistryDO.js'
 
 /**
@@ -41,9 +41,14 @@ describe('a finished match reaches the leaderboard', () => {
 
     const { a, b } = await seatedMatch({ modeId: 'base', draftCount: 4, players })
     await playToCompletion(a, b, ['A', 'A', 'A'])
-    await a.settle(40)
 
-    const record = await h2h(players[0], players[1])
+    // Waited for rather than slept past: the registry write rides a `waitUntil` so no player has
+    // to wait for the leaderboard, which makes every read here a "once it lands".
+    const record = await eventually(
+      () => h2h(players[0], players[1]),
+      (r) => r.matches.length === 1,
+      'the match reaching the registry',
+    )
     expect(record.matches).toHaveLength(1)
     expect(record.wins).toBe(1)
     expect(record.losses).toBe(0)
@@ -61,10 +66,13 @@ describe('a finished match reaches the leaderboard', () => {
     const { a, b } = await seatedMatch({ modeId: 'base', draftCount: 4, players })
     // Seat A wins every round, and `seatedMatch` hands the first id to whoever got seat A.
     await playToCompletion(a, b, ['A', 'A', 'A'])
-    await a.settle(40)
     expect(a.view.outcome).toBe('A')
 
-    const table = (await standings()).filter((s) => players.includes(s.playerId))
+    const table = await eventually(
+      async () => (await standings()).filter((s) => players.includes(s.playerId)),
+      (rows) => rows.length === 2,
+      'both players in the table',
+    )
     expect(table.map((s) => s.playerId)).toEqual(['lb-x', 'lb-y'])
     expect(table[0]).toMatchObject({ playerId: 'lb-x', wins: 1, losses: 0, draws: 0 })
     expect(table[1]).toMatchObject({ playerId: 'lb-y', wins: 0, losses: 1, draws: 0 })
@@ -76,10 +84,13 @@ describe('a finished match reaches the leaderboard', () => {
     const players: [string, string] = ['lb-d1', 'lb-d2']
     const { a, b } = await seatedMatch({ modeId: 'base', draftCount: 3, players })
     await playToCompletion(a, b, ['TIE', 'TIE', 'TIE'])
-    await a.settle(40)
     expect(a.view.outcome).toBe('DRAW')
 
-    const record = await h2h(players[0], players[1])
+    const record = await eventually(
+      () => h2h(players[0], players[1]),
+      (r) => r.matches.length === 1,
+      'the drawn match reaching the registry',
+    )
     expect(record).toMatchObject({ wins: 0, losses: 0, draws: 1 })
   })
 

@@ -35,6 +35,22 @@ export default defineConfig({
         test: {
           name: 'worker',
           include: ['apps/worker/test/**/*.test.ts'],
+          /*
+           * Six times the default, and the reason is CI rather than slowness here.
+           *
+           * Every test in this project plays over real sockets in workerd, so its duration is
+           * mostly scheduling: a GitHub Actions runner has two cores and this suite asks it for a
+           * dozen isolates at once, which stretches a match that takes under a second locally into
+           * several. Two long matches (`players-merge`, `authority`) failed there while the same
+           * commit was green here and green on the deploy — the suite was measuring the runner.
+           *
+           * The number is not a latency budget and nothing waits for it in the passing case. It
+           * sits deliberately **above** `client.ts`'s `FRAME_TIMEOUT_MS` so that a genuinely stuck
+           * test fails with that file's message — "no frame in 10s, last rejection …" — instead of
+           * vitest's generic timeout, which names neither the client nor what it was waiting for.
+           */
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
         },
       },
       {
