@@ -3,7 +3,7 @@
 **Source spec:** `banpick-design-spec.md` (Accepted, 2026-07-28)
 **Companion:** `SPEC-GAPS.md` — every item G1–G14 closed (D10–D26).
 **Progress:** Phases 0–4 closed. Phase 5 (event log export and instrumentation) is open — and per its own note, it is the most valuable deliverable in the plan.
-**Scope, settled (D19):** two-player casual match tool. **There is no tournament layer and there will not be one** — Phase 7 is deleted, not deferred. The global ban tier survives because a host saying "not tonight" is useful casually.
+**Scope, ~~settled (D19)~~ reopened (D37, 2026-08-15):** two-player casual match tool, **plus a tournament layer**. ~~There is no tournament layer and there will not be one — Phase 7 is deleted, not deferred.~~ Phase 7 is **undeleted** and lives in its own document, [`TOURNAMENT-PLAN.md`](TOURNAMENT-PLAN.md), because it is large enough to need one and because reinstating it into a plan that spent four phases explaining why it would never exist would be harder to read than either document alone. The global ban tier survives unchanged — a host saying "not tonight" is useful casually, and an organizer saying it is useful in a tournament.
 
 ---
 
@@ -36,20 +36,20 @@ The spec was marked "Accepted, ready to build." It was close, but four items (G1
 
 ### Round two — D14 through D19
 
-| #                  | Landed                                                                                                                                                                            |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **G11 → D14**      | `roster/roster.json` shipped with 10 placeholders; `roster/README.md` documents replacement. `status: RETIRED` instead of deletion, so replay never breaks                        |
-| **G12 → D15**      | Either seat reports, no confirm, `UNDO_LAST_RESULT` until the next roll. Two-sided capability **withdrawn** — it only existed to survive a tournament retrofit                    |
-| **G13 → D16**      | `engineVersion` in the creation event, replay refuses on major mismatch, `EventEnvelope` written out in §5                                                                        |
-| **G6 → D17**       | Seat token in `localStorage` + resume link. Full `project()` resync on reconnect. No clocks, 7-day idle expiry, no withdrawal of sealed commits, no forfeit                       |
-| **G5 → D18**       | `@banpick/types` (client) / `@banpick/engine` (DO only), enforced in CI                                                                                                           |
-| **G8 → D19**       | **No tournament layer, permanently.** Phase 7 deleted. `tournamentBanned` → `globalBanned` throughout                                                                             |
-| **G14**            | Sixth load-time validator: `(scoring, resolution, overtime)` must provably terminate                                                                                              |
-| **G7 → D20**       | URL hash cut — it guarded a scenario the snapshot already covers. `modeContentHash` in the creation event instead                                                                 |
-| **G10 → D21**      | `HALF_POINT` only. `COMPENSATION`, `ROLL_OFF`, `VOID_AND_REPLAY` cut. Takes the whole `advantageHolder` apparatus with it                                                         |
-| **G9 → D22 / D25** | **4 drafted slots by default**, and `draftCount` is a declared mode parameter (values `[3, 4]`) the host picks in the lobby. One mode file. Roster floor becomes `draftCount + 1` |
-| **D26**            | `SELECT` auto-commits when exactly one legal option exists. Supersedes D13's round-2 special case and removes every conditional from mode config                                  |
-| **D23, D24**       | `TURN_ORDER` = the right to _decide_ play order, exercised after both picks are revealed                                                                                          |
+| #                  | Landed                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **G11 → D14**      | `roster/roster.json` shipped with 10 placeholders; `roster/README.md` documents replacement. `status: RETIRED` instead of deletion, so replay never breaks                                                                    |
+| **G12 → D15**      | Either seat reports, no confirm, `UNDO_LAST_RESULT` until the next roll. ~~Two-sided capability **withdrawn**~~ — **reinstated for tournament matches by D38**; D15 stands unchanged for casual play                          |
+| **G13 → D16**      | `engineVersion` in the creation event, replay refuses on major mismatch, `EventEnvelope` written out in §5                                                                                                                    |
+| **G6 → D17**       | Seat token in `localStorage` + resume link. Full `project()` resync on reconnect. No clocks, 7-day idle expiry, no withdrawal of sealed commits, no forfeit                                                                   |
+| **G5 → D18**       | `@banpick/types` (client) / `@banpick/engine` (DO only), enforced in CI                                                                                                                                                       |
+| **G8 → D19**       | ~~**No tournament layer, permanently.** Phase 7 deleted.~~ **Reversed by D37 (2026-08-15)** — see [`TOURNAMENT-PLAN.md`](TOURNAMENT-PLAN.md). `tournamentBanned` → `globalBanned` stands: both a host and an organizer set it |
+| **G14**            | Sixth load-time validator: `(scoring, resolution, overtime)` must provably terminate                                                                                                                                          |
+| **G7 → D20**       | URL hash cut — it guarded a scenario the snapshot already covers. `modeContentHash` in the creation event instead                                                                                                             |
+| **G10 → D21**      | `HALF_POINT` only. `COMPENSATION`, `ROLL_OFF`, `VOID_AND_REPLAY` cut. Takes the whole `advantageHolder` apparatus with it                                                                                                     |
+| **G9 → D22 / D25** | **4 drafted slots by default**, and `draftCount` is a declared mode parameter (values `[3, 4]`) the host picks in the lobby. One mode file. Roster floor becomes `draftCount + 1`                                             |
+| **D26**            | `SELECT` auto-commits when exactly one legal option exists. Supersedes D13's round-2 special case and removes every conditional from mode config                                                                              |
+| **D23, D24**       | `TURN_ORDER` = the right to _decide_ play order, exercised after both picks are revealed                                                                                                                                      |
 
 ### Phase 0 is CLOSED — Phase 1 is open
 
@@ -332,13 +332,33 @@ More modes than the data justifies. Two shipped modes with 100 logged matches be
 
 ---
 
-## ~~Phase 7 — Tournament layer~~ — **DELETED (D19)**
+## Phase 7 — Tournament layer — **UNDELETED (D37, 2026-08-15)**
 
-Cut, not deferred. Casual friendly play only.
+**Moved to its own document:** [`TOURNAMENT-PLAN.md`](TOURNAMENT-PLAN.md). Nine phases, and its
+Phase 0 (the decisions D38–D42) is settled.
 
-The two affordances previously recommended for Phase 1 — a nullable `eventId` and an organizer-resolvable `Ruleset` — are **withdrawn**. They were insurance priced against an unknown; the unknown is now known, and carrying two unused fields plus a generalized resolution path forever, to serve a ruled-out use case, is the speculative generality this design otherwise avoids.
+It lives there rather than here for a practical reason: this document spent four phases explaining
+why the tournament layer would never exist, and threading a nine-phase plan back through that
+would make both harder to read than either is alone. This section is the pointer, and the record
+of what the deletion cost.
 
-Room code plus seat token is the permanent identity model, not a provisional one.
+### What D19 deleted, and where each item now lands
+
+~~The two affordances previously recommended for Phase 1 — a nullable `eventId` and an
+organizer-resolvable `Ruleset` — are **withdrawn**. They were insurance priced against an unknown;
+the unknown is now known~~ — it was assumed, not known, and both affordances are now being built
+under deadline pressure rather than at leisure:
+
+| Deleted by D19                      | Reinstated as                                                                                       |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Nullable `eventId` on a match       | A `tournament: { tournamentId, slotId }` binding, snapshotted into the creation event. Plan Phase 3 |
+| Organizer-resolvable `Ruleset`      | Tournament-owned rulesets; the room opener cannot override them. Plan Phases 2–3                    |
+| Two-sided `REPORT_RESULT` (via D15) | **D38**, for tournament matches only. Plan Phase 4                                                  |
+
+~~Room code plus seat token is the permanent identity model, not a provisional one.~~ **D41** adds
+a per-tournament entrant token beside the seat token. Still not accounts, still nothing that
+crosses devices except a link — D19's identity model survives its own reversal, which is the part
+of it that was actually right.
 
 ---
 
@@ -359,13 +379,13 @@ Tests written and passing in CI; the exit criteria checked by someone other than
 
 ### Risk register
 
-| Risk                                                       | Phase | Signal it is materializing                                              | Response                                                                                                   |
-| ---------------------------------------------------------- | ----- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Module boundary is wrong — a new mode needs engine changes | 6     | O2 cannot be expressed in YAML                                          | Do not patch. Write up which slice the module system cannot express; that is the real spec bug             |
-| Redaction leak via serialization                           | 1, 3  | Redaction test passes on objects but a wire capture shows character IDs | Assert on serialized strings at both layers; never trust a `toJSON`                                        |
-| Cloudflare free-plan limits shift                          | 3     | Any §11 table row no longer matches current published limits            | Recheck at Phase 3 start; the headroom is ~200× so a change is unlikely to be fatal                        |
-| O1 balance flaw is real and large                          | 5     | Round-1 privilege holder wins well above the 65% prior                  | The draft-4 fix in O1 is a config change, not an engine change — verify that claim in Phase 2, not Phase 5 |
-| Scope creeps toward tournaments                            | any   | "While we're in here, let's just add brackets"                          | D19 settled this. The answer is no, not later — and the design is now cheaper _because_ the answer is no   |
+| Risk                                                       | Phase | Signal it is materializing                                              | Response                                                                                                                                                                              |
+| ---------------------------------------------------------- | ----- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Module boundary is wrong — a new mode needs engine changes | 6     | O2 cannot be expressed in YAML                                          | Do not patch. Write up which slice the module system cannot express; that is the real spec bug                                                                                        |
+| Redaction leak via serialization                           | 1, 3  | Redaction test passes on objects but a wire capture shows character IDs | Assert on serialized strings at both layers; never trust a `toJSON`                                                                                                                   |
+| Cloudflare free-plan limits shift                          | 3     | Any §11 table row no longer matches current published limits            | Recheck at Phase 3 start; the headroom is ~200× so a change is unlikely to be fatal                                                                                                   |
+| O1 balance flaw is real and large                          | 5     | Round-1 privilege holder wins well above the 65% prior                  | The draft-4 fix in O1 is a config change, not an engine change — verify that claim in Phase 2, not Phase 5                                                                            |
+| ~~Scope creeps toward tournaments~~                        | —     | ~~"While we're in here, let's just add brackets"~~                      | **Retired by D37.** Brackets are in scope and planned; the guard against creep now lives in `TOURNAMENT-PLAN.md`'s _Not building_ section, scoped to formats rather than to the layer |
 
 ### Sequencing note
 

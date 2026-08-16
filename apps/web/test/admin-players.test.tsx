@@ -395,6 +395,17 @@ describe('reassigning one match', () => {
     expect(body).toMatchObject({ roomCode: 'ABC123', aId: 'p_new-phone', bId: 'p_alex' })
   })
 
+  it('explains why the seat is not a dropdown yet instead of looking unchangeable', async () => {
+    // Without an accepted key the directory is empty, so there is nothing to choose from — and a
+    // bare id with no explanation beside it reads as "this cannot be changed", which is wrong.
+    serve()
+    render(<Admin onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByText('ABC123')).toBeTruthy())
+
+    expect(screen.queryByLabelText('Player in seat A of ABC123')).toBeNull()
+    expect(screen.getAllByText(/reassigning needs an accepted admin key/).length).toBe(2)
+  })
+
   it('offers ids rather than a text field, and keeps one the directory has forgotten', async () => {
     serve({ '/api/admin/players': { body: { players: [PLAYERS[1], PLAYERS[2]] } } })
     render(<Admin onBack={() => {}} />)

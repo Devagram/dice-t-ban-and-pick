@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import type { PlayerActionPayload, PlayerView, RoundOutcome } from '@banpick/types'
+import type { Action, PlayerActionPayload, PlayerView, RoundOutcome } from '@banpick/types'
 
-import { DRAW_HEADLINE, DRAW_NOTE } from '../copy.js'
+import { DRAW_HEADLINE, DRAW_NOTE, FROZEN_NOTE } from '../copy.js'
 import { play } from '../sound.js'
 
 /**
@@ -20,7 +20,7 @@ export function RoundStrip({
   /** Omitted where the strip is read-only. Given, each played round becomes correctable (D33). */
   onAct?: (payload: PlayerActionPayload) => void
 }) {
-  const current = view.phase?.roundIndex ?? null
+  const started = view.phase?.roundIndex ?? null
   const [amending, setAmending] = useState<number | null>(null)
   const amend = view.legalActions.find((a) => a.type === 'AMEND_RESULT')
 
@@ -35,7 +35,48 @@ export function RoundStrip({
    * A completed match keeps its strip: by then it is the scoreline, which is the one thing worth
    * reading on that screen.
    */
-  if (current === null && view.status !== 'COMPLETE') return null
+  if (started === null && view.status !== 'COMPLETE') return null
+
+  return (
+    <>
+      {/*
+       * D39 — why the correction controls are gone.
+       *
+       * Rendered from `view.frozen`, which carries the server's reason rather than a bare flag: a
+       * control that silently stops appearing is worse than one that explains itself, and the
+       * client must not be the thing inventing the explanation. Sits above the strip because the
+       * strip is exactly where somebody looks for the "fix that" button it is accounting for.
+       */}
+      {view.frozen ? (
+        <p className="rounds__frozen" role="status">
+          {FROZEN_NOTE}
+        </p>
+      ) : null}
+      <RoundPips
+        view={view}
+        amending={amending}
+        setAmending={setAmending}
+        amend={amend}
+        onAct={onAct}
+      />
+    </>
+  )
+}
+
+function RoundPips({
+  view,
+  amending,
+  setAmending,
+  amend,
+  onAct,
+}: {
+  view: PlayerView
+  amending: number | null
+  setAmending: (index: number | null) => void
+  amend: Extract<Action, { type: 'AMEND_RESULT' }> | undefined
+  onAct: ((payload: PlayerActionPayload) => void) | undefined
+}) {
+  const current = view.phase?.roundIndex ?? null
 
   return (
     <ol className="rounds" aria-label="Rounds">
@@ -163,8 +204,6 @@ function PrivilegeLabel({
   view: PlayerView
   round: PlayerView['rounds'][number]
 }) {
-  if (round.privilegeHolder === null && round.turnOrderHolder === null) return <span>—</span>
-
   const parts: string[] = []
   if (round.privilegeHolder) {
     parts.push(round.privilegeHolder === view.seat ? 'you ban' : 'they ban')
@@ -172,6 +211,21 @@ function PrivilegeLabel({
   if (round.turnOrderHolder) {
     parts.push(round.turnOrderHolder === view.seat ? 'you set order' : 'they set order')
   }
+  /*
+   * D36 — who actually plays first, where nobody was given the right to decide it.
+   *
+   * `playOrder` has been on the view since D24 and the client never rendered it: in the Bo3 modes
+   * the *decision* is the interesting part and it arrives as an action, so the outcome was
+   * implicit in having just made it. A mode where the dice settle it has no such moment, and
+   * without this the strip could only say "—" about the one fact the round had established.
+   *
+   * Shown only when nothing above it was, so the Bo3 strip reads exactly as it did.
+   */
+  if (parts.length === 0 && round.playOrder) {
+    parts.push(round.playOrder.first === view.seat ? 'you play first' : 'they play first')
+  }
+
+  if (parts.length === 0) return <span>—</span>
   return <span>{parts.join(' · ')}</span>
 }
 

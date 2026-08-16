@@ -130,6 +130,18 @@ export const roll: PhaseModule<RollModule> = {
       round.turnOrderHolder = p.winner
     }
 
+    /*
+     * D36 — and in a Bo1 the higher roll simply plays first.
+     *
+     * The distinction from `TURN_ORDER` is the whole point rather than a shortcut: that one hands
+     * over the *right to decide*, which D23/D24 made a real decision by deferring it until both
+     * picks are open. Here nothing is deferred and nothing is decided, so the round records the
+     * outcome directly and `declaredBy` is null — there was no declarer.
+     */
+    if (p.assigns === 'PLAY_ORDER') {
+      round.playOrder = { declaredBy: null, first: p.winner }
+    }
+
     next.log.push(event)
     return { ok: true, state: next }
   },

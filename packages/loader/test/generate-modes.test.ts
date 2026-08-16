@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { canonicalJson } from '@banpick/types'
 
-import { loadShipped, GAME_ROSTER } from './helpers.js'
+import { loadShipped, shippedModeIds, GAME_ROSTER } from './helpers.js'
 
 /**
  * Generates the worker's bundled modes, and fails if they have drifted.
@@ -20,7 +20,21 @@ import { loadShipped, GAME_ROSTER } from './helpers.js'
  * drift this catches.
  */
 
-const MODE_IDS = ['base', 'bring-ban1'] as const
+/*
+ * Read off the directory rather than listed here. A hardcoded array made adding a mode a
+ * two-place change, and the second place was invisible: the new file loaded and validated
+ * perfectly and simply never reached the worker.
+ */
+const MODE_IDS = shippedModeIds()
+
+/** What each mode's parameter space should enumerate — D25's claim, mode by mode. */
+const EXPECTED_VARIANTS: Record<string, Record<string, string | number>[]> = {
+  base: [{ draftCount: 3 }, { draftCount: 4 }],
+  'bring-ban1': [{ draftCount: 3 }, { draftCount: 4 }],
+  // D36 — no parameters, so exactly one variant. Three brought is the format here rather than a
+  // setting; at two there is nothing to ban and at four the ban stops mattering.
+  'bo1-bring3-ban1': [{}],
+}
 
 describe('generated worker modes', () => {
   it('are current with modes/*.yaml', async () => {
@@ -47,10 +61,11 @@ describe('generated worker modes', () => {
     // The worker offers a lobby choice per variant, so a missing one is a combination a host
     // could pick that was never validated.
     for (const id of MODE_IDS) {
-      expect(loadShipped(id).variants.map((v) => v.parameters)).toEqual([
-        { draftCount: 3 },
-        { draftCount: 4 },
-      ])
+      const expected = EXPECTED_VARIANTS[id]
+      // A new mode with no entry above is a mode nobody stated the parameter space of, which is
+      // the thing this test exists to check. Failing is the point.
+      expect(expected, `no expected variants declared for '${id}'`).toBeDefined()
+      expect(loadShipped(id).variants.map((v) => v.parameters)).toEqual(expected)
     }
   })
 

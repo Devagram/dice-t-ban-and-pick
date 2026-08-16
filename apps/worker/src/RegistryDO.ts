@@ -44,6 +44,14 @@ export interface MatchRecord {
   scoreB: number
   /** What each seat drafted, played, and banned — enough to answer "what do they always play?" */
   detail: unknown
+  /**
+   * D37 — the tournament this match belonged to, if any.
+   *
+   * Absent for an ordinary game. Two jobs: history can distinguish a bracket match from a casual
+   * one, and D39's refusal in `edit` needs something to refuse on — a tournament result must be
+   * corrected from the tournament, so the bracket is re-derived with it.
+   */
+  tournamentId?: string
 }
 
 export interface Standing {
@@ -77,6 +85,11 @@ export interface RoomListing {
  * full of dead rooms is worse than an empty one — every entry is a click that goes nowhere.
  * Two hours is long enough to make a coffee and short enough that the list means something.
  * Measured from the last update, so a match in progress does not vanish underneath its players.
+ *
+ * **Deliberately not the same as `TOURNAMENT_TTL_MS`, which is seven days (D42).** They are two
+ * different questions wearing one word: a listed room is an *invitation*, and a stale invitation
+ * is worse than none. A tournament is a commitment that spans evenings. If these two numbers ever
+ * look like an inconsistency worth tidying, read D42 before tidying it.
  */
 const ROOM_TTL_MS = 2 * 60 * 60 * 1000
 
@@ -89,6 +102,18 @@ export interface Matchup {
   bWins: number
   draws: number
   played: number
+}
+
+/** D37 Phase 8 — a tournament as the index lists it, and as it survives its own object. */
+export interface TournamentSummary {
+  code: string
+  format: string
+  /** Display names, so the list reads without a second lookup. Ids live on the matches. */
+  entrants: string[]
+  champion: string | null
+  createdAt: number
+  updatedAt: number
+  complete: boolean
 }
 
 export interface HeadToHead {
@@ -164,6 +189,54 @@ export class RegistryDO extends DurableObject<Env> {
            detail TEXT NOT NULL
          )`,
       )
+      /*
+       * **D37 Phase 8 — where a tournament goes when its own object is gone.**
+       *
+       * `TournamentDO` is swept seven days after its last activity (D42), and that is right: a
+       * bracket nobody has touched in a week is over. But "over" is exactly when the result starts
+       * mattering, and a permanent page cannot be served by an object that has deleted itself.
+       *
+       * So a tournament files a summary here, beside the matches, and outlives the thing that
+       * produced it.
+       *
+       * `view` holds the **final bracket**, and only once the tournament is finished. The first
+       * draft of this table stored the summary alone, on the reasoning that the slot-by-slot
+       * structure was derivable from the match rows — which is not true, and was worth writing
+       * down rather than quietly fixing. Matches carry no slot ids and no edges, and a slot the
+       * organizer resolved (a no-show, a void) produced no match at all. So the bracket is the one
+       * thing here that genuinely cannot be reconstructed, and a page that has lost it is a list of
+       * games rather than a tournament. Written only when complete, and cleared when a D39
+       * correction makes a finished tournament unfinished again, so this can never serve a bracket
+       * that has since moved.
+       */
+      this.sql.exec(
+        `CREATE TABLE IF NOT EXISTS tournaments (
+           code        TEXT PRIMARY KEY,
+           format      TEXT NOT NULL,
+           entrants    TEXT NOT NULL,
+           champion    TEXT,
+           created_at  INTEGER NOT NULL,
+           updated_at  INTEGER NOT NULL,
+           complete    INTEGER NOT NULL,
+           view        TEXT
+         )`,
+      )
+      /*
+       * D37 — which tournament a match belonged to, if any.
+       *
+       * Added with `ALTER TABLE` rather than by editing the `CREATE` above: this object is already
+       * deployed and holding rows, and a `CREATE TABLE IF NOT EXISTS` with a new column is a
+       * no-op against an existing table — the column would simply never appear. Wrapped because
+       * re-running it on a table that has it is an error, not a no-op.
+       *
+       * It earns its place twice: history can tell a tournament game from a casual one, and D39
+       * needs it to refuse an `/admin` edit that would move a bracket's result behind its back.
+       */
+      try {
+        this.sql.exec('ALTER TABLE matches ADD COLUMN tournament_id TEXT')
+      } catch {
+        // Already present.
+      }
     })
   }
 
@@ -189,6 +262,12 @@ export class RegistryDO extends DurableObject<Env> {
         return this.edit(request)
       case 'delete':
         return this.remove(request)
+      case 'tournaments':
+        return Response.json({ tournaments: this.tournaments() })
+      case 'tournament':
+        return this.recordTournament(request)
+      case 'archive':
+        return this.archive(request)
       case 'players':
         return Response.json({ players: this.players() })
       case 'merge':
@@ -261,8 +340,9 @@ export class RegistryDO extends DurableObject<Env> {
 
     this.sql.exec(
       `INSERT INTO matches
-         (room_code, played_at, a_id, a_name, b_id, b_name, winner_id, score_a, score_b, detail)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (room_code, played_at, a_id, a_name, b_id, b_name, winner_id, score_a, score_b, detail,
+          tournament_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(room_code) DO UPDATE SET
          played_at = excluded.played_at,
          winner_id = excluded.winner_id,
@@ -279,6 +359,8 @@ export class RegistryDO extends DurableObject<Env> {
       match.scoreA ?? 0,
       match.scoreB ?? 0,
       JSON.stringify(match.detail ?? null),
+      // D37 — null for an ordinary game, which is almost all of them.
+      match.tournamentId ?? null,
     )
     return Response.json({ ok: true })
   }
@@ -769,6 +851,26 @@ export class RegistryDO extends DurableObject<Env> {
       .toArray()[0]
     if (!existing) return Response.json({ error: 'NOT_FOUND' }, { status: 404 })
 
+    /*
+     * **D39 — a tournament match is not editable from here.**
+     *
+     * Changing the winner in this table would move the leaderboard and leave the bracket saying
+     * something else — two truths, and the stale one is always the one nobody is looking at. The
+     * organizer console re-derives the bracket from a corrected result log, which is the only
+     * path that keeps both in step, so this one points at it rather than half-doing the job.
+     */
+    if (existing['tournament_id']) {
+      return Response.json(
+        {
+          error: 'TOURNAMENT_MATCH',
+          detail:
+            `'${roomCode}' belongs to tournament ${String(existing['tournament_id'])}. ` +
+            'Correct it from the tournament, so the bracket is re-derived with it.',
+        },
+        { status: 409 },
+      )
+    }
+
     const record = rowToRecord(existing)
     const seats = {
       a: { id: playerRef(body['aId']) ?? record.a.id, name: str(body['aName']) ?? record.a.name },
@@ -813,6 +915,89 @@ export class RegistryDO extends DurableObject<Env> {
     return Response.json({ ok: true, match: next })
   }
 
+  /**
+   * D37 Phase 8 — a tournament files itself here, and stays after its own object is swept.
+   *
+   * Upserted by code and safe to call repeatedly, for the same reason `record` is: a tournament
+   * announces itself when it starts and again whenever it finishes, and D39's correction can make
+   * a finished one unfinished. The last write wins and describes the bracket as it now stands.
+   */
+  private async recordTournament(request: Request): Promise<Response> {
+    let body: {
+      code?: unknown
+      format?: unknown
+      entrants?: unknown
+      champion?: unknown
+      createdAt?: unknown
+      complete?: unknown
+      view?: unknown
+    }
+    try {
+      body = (await request.json()) as typeof body
+    } catch {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+    if (typeof body.code !== 'string' || !body.code) {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+
+    const now = Date.now()
+    this.sql.exec(
+      `INSERT INTO tournaments
+         (code, format, entrants, champion, created_at, updated_at, complete, view)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(code) DO UPDATE SET
+         format = excluded.format,
+         entrants = excluded.entrants,
+         champion = excluded.champion,
+         updated_at = excluded.updated_at,
+         complete = excluded.complete,
+         view = excluded.view`,
+      body.code,
+      typeof body.format === 'string' ? body.format : 'SINGLE_ELIMINATION',
+      JSON.stringify(Array.isArray(body.entrants) ? body.entrants : []),
+      typeof body.champion === 'string' ? body.champion : null,
+      typeof body.createdAt === 'number' ? body.createdAt : now,
+      now,
+      body.complete === true ? 1 : 0,
+      // Overwritten every time, `null` included: an unfinished tournament must not leave an older
+      // finished bracket lying here for the archive to serve.
+      body.view && typeof body.view === 'object' ? JSON.stringify(body.view) : null,
+    )
+    return Response.json({ ok: true })
+  }
+
+  /**
+   * The final bracket of a finished tournament, once its own object is gone.
+   *
+   * Answers 404 for a code nobody has heard of *and* for one whose tournament is still running —
+   * in the second case the live object is the answer, and serving a copy from here would be the
+   * one bracket on the page that cannot update.
+   */
+  private archive(request: Request): Response {
+    const code = new URL(request.url).searchParams.get('code') ?? ''
+    const row = this.sql.exec<Row>('SELECT view FROM tournaments WHERE code = ?', code).toArray()[0]
+    const view = row?.['view']
+    if (typeof view !== 'string') return Response.json({ error: 'NOT_FOUND' }, { status: 404 })
+    return Response.json({ view: JSON.parse(view) as unknown })
+  }
+
+  /** Every tournament this deployment has seen, newest first. Public, like the history. */
+  private tournaments(): TournamentSummary[] {
+    return this.sql
+      .exec<Row>('SELECT * FROM tournaments ORDER BY created_at DESC LIMIT 200')
+      .toArray()
+      .map((row) => ({
+        code: String(row['code']),
+        format: String(row['format']),
+        entrants: JSON.parse(String(row['entrants'] ?? '[]')) as string[],
+        champion: (row['champion'] as string | null) ?? null,
+        createdAt: Number(row['created_at']),
+        updatedAt: Number(row['updated_at']),
+        complete: Number(row['complete']) === 1,
+      }))
+  }
+
   /** Removing a junk record, which is otherwise permanent — see the note on `edit`. */
   private async remove(request: Request): Promise<Response> {
     let body: { roomCode?: unknown }
@@ -829,6 +1014,9 @@ export class RegistryDO extends DurableObject<Env> {
   }
 }
 
+/** The shape `sql.exec` hands back. Declared once rather than inline at every call site. */
+type Row = Record<string, string | number | null>
+
 function limitFrom(request: Request): number {
   const raw = Number(new URL(request.url).searchParams.get('limit'))
   return Number.isFinite(raw) && raw > 0 ? Math.min(raw, 500) : 200
@@ -844,6 +1032,15 @@ function rowToRecord(row: Record<string, string | number | null>): MatchRecord {
     scoreA: Number(row['score_a']),
     scoreB: Number(row['score_b']),
     detail: JSON.parse(String(row['detail'] ?? 'null')) as unknown,
+    /*
+     * D37 — written since Phase 4 and read back since Phase 8.
+     *
+     * It was stored and never returned, which meant the column did its job for D39's admin refusal
+     * and none of the job it was also added for: history could not tell a bracket match from a
+     * casual one. A field that is written and never read is indistinguishable from one nobody
+     * needed.
+     */
+    ...(row['tournament_id'] ? { tournamentId: String(row['tournament_id']) } : {}),
   }
 }
 

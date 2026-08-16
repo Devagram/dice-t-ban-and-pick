@@ -4,7 +4,8 @@
     "paths": {
       "@banpick/types": ["./packages/types/src/index.ts"],
       "@banpick/engine": ["./packages/engine/src/index.ts"],
-      "@banpick/loader": ["./packages/loader/src/index.ts"]
+      "@banpick/loader": ["./packages/loader/src/index.ts"],
+      "@banpick/bracket": ["./packages/bracket/src/index.ts"]
     },
 
     // Nothing is pulled in automatically. @types/node exists for the loader's test helpers and

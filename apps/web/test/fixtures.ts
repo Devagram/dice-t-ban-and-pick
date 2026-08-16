@@ -31,6 +31,7 @@ export const RULESET: Ruleset = {
   onTie: { scoring: 'HALF_POINT', consumesCharacters: true },
   match: { resolution: 'ALWAYS_3_ROUNDS', stopWhenDecided: true },
   overtime: { enabled: false },
+  resultReporting: 'ONE_SIDED',
   modeContentHash: 'abc123def456',
 }
 
@@ -66,7 +67,8 @@ export function view(over: Partial<PlayerView> = {}): PlayerView {
       privilegeHolder: null,
       turnOrderHolder: null,
       roll: null,
-      ban: null,
+      ban: {},
+      banCommitted: { A: false, B: false },
       selection: {},
       selectionCommitted: { A: false, B: false },
       playOrder: null,
@@ -75,6 +77,7 @@ export function view(over: Partial<PlayerView> = {}): PlayerView {
     })),
     phase: { moduleId: 'rounds.0.ban', type: 'BAN', roundIndex: 0, awaiting: [seat] },
     legalActions: [],
+    frozen: null,
     outcome: null,
     seq: 12,
     ...over,
@@ -123,6 +126,15 @@ export const REPORT_ACTION: Extract<Action, { type: 'REPORT_RESULT' }> = {
   moduleId: 'rounds.0.report',
   roundIndex: 0,
   outcomes: ['A', 'B', 'TIE'],
+  // D38 — nobody has claimed anything yet, so every option is an ordinary report rather than an
+  // agreement. `CONFIRM_ACTION` is the other half of the pair.
+  confirming: null,
+}
+
+/** D38 — the opponent has already claimed a win for seat A, and this seat is answering it. */
+export const CONFIRM_ACTION: Extract<Action, { type: 'REPORT_RESULT' }> = {
+  ...REPORT_ACTION,
+  confirming: 'A',
 }
 
 export const COMMIT_ACTION: Extract<Action, { type: 'COMMIT' }> = {

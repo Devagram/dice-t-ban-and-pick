@@ -1,7 +1,8 @@
 import { moduleFor } from '@banpick/engine'
 import {
   activeRoster,
-  ROUND_COUNT,
+  overtimeRoundIndex,
+  regulationRounds,
   type CharId,
   type MatchRule,
   type ModeDefinition,
@@ -9,6 +10,7 @@ import {
   type OvertimeRule,
   type ResolvedModule,
   type Roster,
+  type RoundIdx,
   type RoundLoopSpec,
   type SliceName,
   type TieRule,
@@ -125,6 +127,8 @@ export function validateRevealReachability(program: ResolvedModule[], path: stri
     // itself once both seats have picked.
     if (mod.type === 'SIMULTANEOUS_COMMIT' || mod.type === 'REVEAL') emitted.add(`${mod.id}:reveal`)
     if (mod.type === 'SELECT' && mod.mode === 'SIMULTANEOUS_HIDDEN') emitted.add(`${mod.id}:reveal`)
+    // D36 — and a hidden ban opens itself the same way, once both seats have placed one.
+    if (mod.type === 'BAN' && mod.mode === 'SIMULTANEOUS_HIDDEN') emitted.add(`${mod.id}:reveal`)
   }
 
   for (const mod of program) {
@@ -258,6 +262,17 @@ const TERMINATING: readonly string[] = [
   // D30. Terminating for a reason the key cannot express, which is why `validateTermination`
   // also checks the overtime round itself: overtime is only a decider if it forbids ties.
   'HALF_POINT|ALWAYS_3_ROUNDS|true',
+  /*
+   * D36 — one round, no overtime. Trivially terminating: the single round produces 1–0 or
+   * 0.5–0.5 and there is no second round for a lead to fail to settle in.
+   *
+   * `HALF_POINT|ALWAYS_1_ROUND|true` is deliberately absent. Overtime is entered when regulation
+   * ends level and both seats can play on, and after a drawn single round that is exactly the
+   * live case — so it would fire on essentially every tie, which makes it round two of a Bo3 by
+   * another name rather than a tiebreaker. A mode that wants a decider should say it wants three
+   * rounds.
+   */
+  'HALF_POINT|ALWAYS_1_ROUND|false',
 ]
 
 export function validateTermination(
@@ -293,18 +308,82 @@ export function validateTermination(
    * is an error nobody can act on.
    */
   const issues: LoadIssue[] = []
+  const overtimeIndex = overtimeRoundIndex(match)
   for (const mod of modules) {
     if (mod.type !== 'ROUND_LOOP') continue
-    const overtimeRound = mod.overrides[ROUND_COUNT]
+    const overtimeRound = mod.overrides[overtimeIndex as RoundIdx]
     if (overtimeRound?.report?.allowTie === false) continue
     issues.push(
       issue(
         'NON_TERMINATING',
         `${path}/${mod.id}`,
-        `overtime is enabled, so round ${ROUND_COUNT} must set 'report: { allowTie: false }'. ` +
+        `overtime is enabled, so round ${overtimeIndex} must set 'report: { allowTie: false }'. ` +
           `An overtime round that can tie leaves 2.0-2.0 with no characters left to play.`,
       ),
     )
+  }
+  return issues
+}
+
+// --- 7. Round count agreement (D36) ------------------------------------------------------------
+
+/**
+ * The loop's `count` and the match's `resolution` must be the same number.
+ *
+ * They are two statements of one fact, and before D36 there was only one of them because the
+ * other was a constant. Now that both are writable they can disagree, and the failure is
+ * particularly nasty: `createMatch` allocates round states from `resolution` while the program is
+ * expanded from `count`, so a mode claiming three rounds with a one-round loop plays one round and
+ * then reports two unplayed ones into the permanent record. Neither half is obviously wrong on its
+ * own, which is exactly when a validator earns its place.
+ */
+export function validateRoundCount(
+  match: MatchRule,
+  modules: ModuleSpec[],
+  path: string,
+): LoadIssue[] {
+  const expected = regulationRounds(match)
+  const issues: LoadIssue[] = []
+
+  for (const mod of modules) {
+    if (mod.type !== 'ROUND_LOOP') continue
+    if (mod.count === expected) continue
+    issues.push(
+      issue(
+        'ROUND_COUNT_MISMATCH',
+        `${path}/${mod.id}`,
+        `the loop runs ${mod.count} round(s) but match.resolution is ${match.resolution}, ` +
+          `which is ${expected}. Every round the match allocates and never plays is a blank ` +
+          'row in the stored result.',
+      ),
+    )
+  }
+
+  return issues
+}
+
+/**
+ * D36 — a hidden ban is only hidden from someone if both seats place one.
+ *
+ * `SIMULTANEOUS_HIDDEN` with a single actor seals the ban to the one seat that already knows it
+ * and reveals it when that seat is done, which is a sequential ban with extra steps and one more
+ * event in the log. Refused rather than silently normalised: the author meant something by it, and
+ * guessing which thing is how a mode file starts meaning two things.
+ */
+export function validateBanShape(program: ResolvedModule[], path: string): LoadIssue[] {
+  const issues: LoadIssue[] = []
+  for (const mod of program) {
+    if (mod.type !== 'BAN') continue
+    if (mod.mode === 'SIMULTANEOUS_HIDDEN' && mod.actor !== 'BOTH') {
+      issues.push(
+        issue(
+          'BAN_SHAPE',
+          `${path}/${mod.id}`,
+          `is SIMULTANEOUS_HIDDEN but its actor is '${mod.actor}'. Hiding a ban from the only ` +
+            'seat placing it hides nothing; use actor: BOTH, or SEQUENTIAL.',
+        ),
+      )
+    }
   }
   return issues
 }

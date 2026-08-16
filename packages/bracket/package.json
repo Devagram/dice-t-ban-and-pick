@@ -1,0 +1,11 @@
+{
+  "name": "@banpick/bracket",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure tournament bracket: seeding, advancement, format rules. No IO, no clock. Imported by the Durable Object only (D18/D37).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}

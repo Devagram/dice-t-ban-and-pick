@@ -1,6 +1,6 @@
 import {
   otherSeat,
-  ROUND_COUNT,
+  regulationRounds,
   SEATS,
   type MatchState,
   type PlayerView,
@@ -14,6 +14,7 @@ import {
 
 import { currentModule } from './context.js'
 import { legalActions } from './legalActions.js'
+import { resultsFrozen } from './undoWindow.js'
 import { moduleFor } from './modules/index.js'
 
 /**
@@ -58,7 +59,9 @@ export function project(state: MatchState, seat: Seat): PlayerView {
     }
     // Assigned conditionally rather than set to undefined: `exactOptionalPropertyTypes` makes
     // the difference real, and the difference is the whole guarantee.
-    if (visible(src.slots)) view.slots = src.slots.value.map((slot) => maskConsumed(slot, s))
+    if (visible(src.slots)) {
+      view.slots = src.slots.value.map((slot) => maskBanned(maskConsumed(slot, s), s))
+    }
     if (visible(src.metaBanPlaced)) view.metaBanPlaced = src.metaBanPlaced.value
     const player = players[s]
     if (player) view.player = player
@@ -90,18 +93,48 @@ export function project(state: MatchState, seat: Seat): PlayerView {
     return consumedVisibly ? slot : { ...slot, consumed: false }
   }
 
+  /**
+   * D36 — the same leak as `maskConsumed`, in the other direction.
+   *
+   * A round ban writes `bannedInRound` onto a slot on the *opponent's* board, and `slots` is
+   * public once the draft reveals. For a sequential ban that is correct: the ban is placed in the
+   * open and everyone may see it. For a simultaneous hidden one it hands the victim the answer
+   * before the reveal — they would watch a character grey out and know what to plan around while
+   * still choosing their own ban.
+   *
+   * So the flag inherits the visibility of the ban that set it. Note the asymmetry with
+   * `maskConsumed`: there the slot's owner may always see their own board, because the fact being
+   * hidden is *theirs*. Here the fact belongs to the **other** seat — the banner — so the owner of
+   * the slot is precisely the person it must be hidden from, and `ban[otherSeat(owner)]` is the
+   * slice whose visibility governs.
+   */
+  const maskBanned = (slot: Slot, owner: Seat): Slot => {
+    if (slot.bannedInRound === null) return slot
+    const round = state.rounds.find((r) => r.index === slot.bannedInRound)
+    const placedBy = round?.ban[otherSeat(owner)]
+    return placedBy && visible(placedBy) ? slot : { ...slot, bannedInRound: null }
+  }
+
   const roundView = (index: number): RoundView => {
     const src = state.rounds[index]!
     const selection: Partial<Record<Seat, SlotIdx | null>> = {}
+    const ban: Partial<Record<Seat, SlotIdx | null>> = {}
     for (const s of ['A', 'B'] as const) {
       if (visible(src.selection[s])) selection[s] = src.selection[s].value
+      if (visible(src.ban[s])) ban[s] = src.ban[s].value
     }
     return {
       index: src.index,
       privilegeHolder: src.privilegeHolder,
       turnOrderHolder: src.turnOrderHolder,
       roll: src.roll,
-      ban: src.ban,
+      ban,
+      // Like `selectionCommitted`: *that* a seat has banned is public even while *what* they
+      // banned is sealed, because otherwise the wait for the other seat is unexplainable.
+      banCommitted: {
+        A: src.ban.A.value !== null,
+        B: src.ban.B.value !== null,
+      },
       selection,
       selectionCommitted: {
         A: src.selection.A.value !== null,
@@ -109,7 +142,7 @@ export function project(state: MatchState, seat: Seat): PlayerView {
       },
       playOrder: src.playOrder,
       result: src.result,
-      overtime: src.index >= ROUND_COUNT,
+      overtime: src.index >= regulationRounds(state.mode.match),
     }
   }
 
@@ -149,6 +182,8 @@ export function project(state: MatchState, seat: Seat): PlayerView {
           }
         : null,
     legalActions: legalActions(state, seat),
+    // D39 — public, and the same for both seats: it is a fact about the match, not about a player.
+    frozen: frozenNote(state),
     outcome: state.outcome,
     seq: state.log.length,
   }
@@ -170,6 +205,15 @@ export function project(state: MatchState, seat: Seat): PlayerView {
  * proof the mode enabled it — and the caller only asks about those. A second check here would be
  * a branch no state can reach, which is worse than no check: it reads as a case someone handled.
  */
+/** D39 — the reason, or nothing at all. Shaped so the client renders it without a second lookup. */
+function frozenNote(state: MatchState): { reason: string } | null {
+  const frozen = resultsFrozen(state)
+  return frozen.frozen ? { reason: frozen.reason } : null
+}
+
 function overtimeStillPossible(state: MatchState): boolean {
-  return SEATS.every((seat) => state.seats[seat].slots.value.length > ROUND_COUNT)
+  // D36 — "drafted more than regulation will spend", which is the actual question. Against a
+  // literal 3 it was the same sum only because every mode was a Bo3.
+  const regulation = regulationRounds(state.mode.match)
+  return SEATS.every((seat) => state.seats[seat].slots.value.length > regulation)
 }

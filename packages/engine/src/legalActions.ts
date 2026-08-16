@@ -2,7 +2,7 @@ import type { Action, MatchState, RoundOutcome, Seat } from '@banpick/types'
 
 import { currentModule, roundAllowsTie } from './context.js'
 import { moduleFor } from './modules/index.js'
-import { undoableRound } from './undoWindow.js'
+import { resultsFrozen, undoableRound } from './undoWindow.js'
 
 /**
  * Spec §11 non-negotiable 4 — "The client renders `legalActions()` and nothing else. It never
@@ -54,6 +54,10 @@ function undoActions(state: MatchState): Action[] {
  * the others allow, and §11 non-negotiable 4 says the client must not be the thing that knows.
  */
 function amendActions(state: MatchState): Action[] {
+  // D39 — frozen closes D33's amendment as well as D15's undo. A bracket that advanced on this
+  // result cannot have the ground shift under it, and "correct an earlier round" is exactly that.
+  if (resultsFrozen(state).frozen) return []
+
   const rounds = state.rounds
     .filter((r) => r.result !== null)
     .map((r) => ({

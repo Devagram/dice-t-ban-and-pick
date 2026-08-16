@@ -6,8 +6,10 @@ import { modeContentHash } from './hash.js'
 import { parseMode, SCHEMA_VERSION } from './parse.js'
 import {
   parameterCombinations,
+  validateBanShape,
   validateRevealReachability,
   validateRosterViability,
+  validateRoundCount,
   validateSliceDependency,
   validateTermination,
   validateTransitionPreservation,
@@ -81,6 +83,9 @@ export function loadModeFromSource(source: string, ref: string, opts: LoadOption
   const loops = def.modules.filter((m): m is RoundLoopSpec => m.type === 'ROUND_LOOP')
   for (const loop of loops) issues.push(...validateTransitionPreservation(loop, ref))
   issues.push(...validateTermination(def.onTie, def.match, def.overtime, ref, def.modules))
+  // D36 — before any parameter is applied: neither of these can vary with a parameter, and
+  // reporting the same disagreement once per combination would bury it.
+  issues.push(...validateRoundCount(def.match, def.modules, ref))
 
   const { combinations, issues: paramIssues } = parameterCombinations(def, ref)
   issues.push(...paramIssues)
@@ -107,6 +112,7 @@ export function loadModeFromSource(source: string, ref: string, opts: LoadOption
     issues.push(...validateUniqueIds(resolved.program, `${ref}${label}`))
     issues.push(...validateSliceDependency(resolved.program, `${ref}${label}`))
     issues.push(...validateRevealReachability(resolved.program, `${ref}${label}`))
+    issues.push(...validateBanShape(resolved.program, `${ref}${label}`))
 
     const draftCount = draftCountOf(resolved)
     if (draftCount !== null) {

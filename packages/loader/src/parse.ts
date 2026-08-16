@@ -205,6 +205,9 @@ function translateRoundModule(m: SchemaShape): RoundModuleSpec {
         type: 'BAN',
         id: m['id'],
         tier: m['tier'],
+        // D36 — defaulted like SELECT's, so every mode written before simultaneous bans existed
+        // keeps meaning exactly what it meant and hashes to the same content.
+        mode: m['mode'] ?? 'SEQUENTIAL',
         actor: m['actor'],
         pool: m['pool'],
       } satisfies BanSpec

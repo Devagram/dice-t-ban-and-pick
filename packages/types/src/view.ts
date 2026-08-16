@@ -69,11 +69,21 @@ export interface RoundView {
     attempts: number
     throws: Record<Seat, number>[]
   } | null
-  ban: { by: Seat; target: { seat: Seat; slotIndex: SlotIdx } } | null
+  /**
+   * D36 — keyed by the seat that placed it, naming a slot on the *other* seat's board.
+   *
+   * Keys are absent while a ban is sealed, exactly like `selection`: a simultaneous hidden ban
+   * must not reach the seat it was placed against until both are in. A mode where one seat bans
+   * in the open puts one key here and never the other.
+   */
+  ban: Partial<Record<Seat, SlotIdx | null>>
+  /** That a ban was placed, while what it hit may still be sealed. */
+  banCommitted: Record<Seat, boolean>
   /** Keys absent while a selection is sealed (round 2's simultaneous hidden pick). */
   selection: Partial<Record<Seat, SlotIdx | null>>
   selectionCommitted: Record<Seat, boolean>
-  playOrder: { declaredBy: Seat; first: Seat } | null
+  /** D36 — `declaredBy` is null where the dice decided rather than a player (see `RoundState`). */
+  playOrder: { declaredBy: Seat | null; first: Seat } | null
   result: RoundOutcome | null
   /**
    * D30 — this is the tiebreaker, not a fourth regulation round.
@@ -111,6 +121,15 @@ export interface PlayerView {
   rounds: RoundView[]
   phase: PhaseView | null
   legalActions: Action[]
+  /**
+   * D39 — why the undo and the amendment are gone.
+   *
+   * `null` for every ordinary match. Non-null when an outside authority has consumed this result
+   * — today only a tournament bracket advancing on it. The *reason* travels rather than a bare
+   * flag, because a control that silently stops appearing is worse than one that says why, and
+   * the client must not have to invent the explanation itself.
+   */
+  frozen: { reason: string } | null
   outcome: MatchOutcome | null
   /** Log length at projection time. Lets a reconnecting client detect a stale frame (D17). */
   seq: number

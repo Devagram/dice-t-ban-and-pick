@@ -67,6 +67,7 @@
                 "type": "BAN",
                 "id": "ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan"
               },
@@ -221,6 +222,7 @@
                 "type": "BAN",
                 "id": "rounds.0.ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan",
                 "roundIndex": 0
@@ -269,6 +271,7 @@
                 "type": "BAN",
                 "id": "rounds.1.ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan",
                 "roundIndex": 1
@@ -395,7 +398,7 @@
               "enabled": true
             }
           },
-          "modeContentHash": "fc2b16b58952"
+          "modeContentHash": "981e8fe1cf68"
         },
         {
           "parameters": {
@@ -456,6 +459,7 @@
                 "type": "BAN",
                 "id": "rounds.0.ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan",
                 "roundIndex": 0
@@ -504,6 +508,7 @@
                 "type": "BAN",
                 "id": "rounds.1.ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan",
                 "roundIndex": 1
@@ -630,7 +635,164 @@
               "enabled": true
             }
           },
-          "modeContentHash": "9d679874651c"
+          "modeContentHash": "3ee349811e29"
+        }
+      ]
+    },
+    "bo1-bring3-ban1": {
+      "modeId": "bo1-bring3-ban1",
+      "schemaVersion": 1,
+      "definition": {
+        "modeId": "bo1-bring3-ban1",
+        "label": "Bo1 — bring 3, ban 1",
+        "parameters": {},
+        "modules": [
+          {
+            "type": "SIMULTANEOUS_COMMIT",
+            "id": "draft",
+            "commits": {
+              "picks": {
+                "count": 3,
+                "pool": "legalDraftPool"
+              },
+              "metaBan": null
+            },
+            "reveal": {
+              "picks": "IMMEDIATE",
+              "metaBan": "NONE"
+            }
+          },
+          {
+            "type": "ROUND_LOOP",
+            "id": "rounds",
+            "count": 1,
+            "template": [
+              {
+                "type": "BAN",
+                "id": "ban",
+                "tier": "ROUND",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundBan"
+              },
+              {
+                "type": "SELECT",
+                "id": "select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick"
+              },
+              {
+                "type": "ROLL",
+                "id": "roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "PLAY_ORDER"
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "report",
+                "allowTie": true
+              }
+            ],
+            "overrides": {}
+          }
+        ],
+        "onTie": {
+          "scoring": "HALF_POINT",
+          "consumesCharacters": true
+        },
+        "match": {
+          "resolution": "ALWAYS_1_ROUND",
+          "stopWhenDecided": false
+        },
+        "overtime": {
+          "enabled": false
+        }
+      },
+      "variants": [
+        {
+          "parameters": {},
+          "mode": {
+            "modeId": "bo1-bring3-ban1",
+            "label": "Bo1 — bring 3, ban 1",
+            "parameters": {},
+            "program": [
+              {
+                "type": "SIMULTANEOUS_COMMIT",
+                "id": "draft",
+                "roundIndex": null,
+                "commits": {
+                  "picks": {
+                    "count": 3,
+                    "pool": "legalDraftPool"
+                  },
+                  "metaBan": null
+                },
+                "reveal": {
+                  "picks": "IMMEDIATE",
+                  "metaBan": "NONE"
+                },
+                "revealTags": {
+                  "picks": "draft:reveal",
+                  "metaBan": null
+                }
+              },
+              {
+                "type": "BAN",
+                "id": "rounds.0.ban",
+                "tier": "ROUND",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundBan",
+                "roundIndex": 0
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.select",
+                "mode": "SIMULTANEOUS_HIDDEN",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "ROLL",
+                "id": "rounds.0.roll",
+                "dice": {
+                  "count": 1,
+                  "sides": 6
+                },
+                "actors": "BOTH",
+                "resolve": "HIGHEST",
+                "onTie": "REROLL",
+                "assigns": "PLAY_ORDER",
+                "roundIndex": 0
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.0.report",
+                "allowTie": true,
+                "roundIndex": 0
+              }
+            ],
+            "onTie": {
+              "scoring": "HALF_POINT",
+              "consumesCharacters": true
+            },
+            "match": {
+              "resolution": "ALWAYS_1_ROUND",
+              "stopWhenDecided": false
+            },
+            "overtime": {
+              "enabled": false
+            }
+          },
+          "modeContentHash": "5f3b1d287e71"
         }
       ]
     },
@@ -723,6 +885,7 @@
                 "type": "BAN",
                 "id": "ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan"
               },
@@ -907,6 +1070,7 @@
                 "type": "BAN",
                 "id": "rounds.0.ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan",
                 "roundIndex": 0
@@ -955,6 +1119,7 @@
                 "type": "BAN",
                 "id": "rounds.1.ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan",
                 "roundIndex": 1
@@ -1081,7 +1246,7 @@
               "enabled": true
             }
           },
-          "modeContentHash": "3777fc670408"
+          "modeContentHash": "f3d01fc32ef6"
         },
         {
           "parameters": {
@@ -1172,6 +1337,7 @@
                 "type": "BAN",
                 "id": "rounds.0.ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan",
                 "roundIndex": 0
@@ -1220,6 +1386,7 @@
                 "type": "BAN",
                 "id": "rounds.1.ban",
                 "tier": "ROUND",
+                "mode": "SEQUENTIAL",
                 "actor": "privilegeHolder",
                 "pool": "legalRoundBan",
                 "roundIndex": 1
@@ -1346,7 +1513,7 @@
               "enabled": true
             }
           },
-          "modeContentHash": "0f462892be9a"
+          "modeContentHash": "64027c050dd2"
         }
       ]
     }

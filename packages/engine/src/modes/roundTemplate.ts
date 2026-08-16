@@ -32,7 +32,14 @@ export const ROUND_TEMPLATE: RoundModuleSpec[] = [
     options: ['DRAFT_PRIVILEGE', 'TURN_ORDER'],
     loserGets: 'COMPLEMENT',
   },
-  { type: 'BAN', id: 'ban', tier: 'ROUND', actor: 'privilegeHolder', pool: 'legalRoundBan' },
+  {
+    type: 'BAN',
+    id: 'ban',
+    tier: 'ROUND',
+    mode: 'SEQUENTIAL',
+    actor: 'privilegeHolder',
+    pool: 'legalRoundBan',
+  },
   {
     type: 'SELECT',
     id: 'selectFirst',
@@ -131,6 +138,74 @@ export const ROUND_LOOP: RoundLoopSpec = {
 export const TIE_RULE: TieRule = { scoring: 'HALF_POINT', consumesCharacters: true }
 export const MATCH_RULE: MatchRule = { resolution: 'ALWAYS_3_ROUNDS', stopWhenDecided: true }
 export const OVERTIME_RULE: OvertimeRule = { enabled: true }
+
+// --- D36: the single game ----------------------------------------------------------------------
+
+/**
+ * One round, both seats banning at once, and the higher roll playing first.
+ *
+ * Not a variation on `ROUND_TEMPLATE`: almost everything that template carries exists to
+ * distribute an asymmetric ban fairly across three rounds — the roll for privilege (D2), the
+ * round-1 inversion (D10), the alternating select order (§9.3). Over a single game none of it has
+ * anywhere to balance out, so the ban is symmetric and the roll does one job.
+ *
+ * **And that job is deciding play order, not handing out the right to decide it.** D23/D24 made
+ * the declaration a real choice by deferring it until both picks were open — you may put yourself
+ * second knowing the match-up. The owner's call for this format is the simpler table rule: high
+ * roll goes first. So there is no `declareOrder` here, and the roll writes the answer itself
+ * (`assigns: PLAY_ORDER`) rather than leaving the record silent about who started.
+ *
+ * The roll still sits *after* both hidden phases. Both the ban and the pick are better decisions
+ * made without knowing who will go first.
+ */
+export const BO1_TEMPLATE: RoundModuleSpec[] = [
+  {
+    type: 'BAN',
+    id: 'ban',
+    tier: 'ROUND',
+    mode: 'SIMULTANEOUS_HIDDEN',
+    actor: 'BOTH',
+    pool: 'legalRoundBan',
+  },
+  {
+    type: 'SELECT',
+    id: 'select',
+    mode: 'SIMULTANEOUS_HIDDEN',
+    actor: 'BOTH',
+    pool: 'legalRoundPick',
+  },
+  {
+    type: 'ROLL',
+    id: 'roll',
+    dice: { count: 1, sides: 6 },
+    actors: 'BOTH',
+    resolve: 'HIGHEST',
+    assigns: 'PLAY_ORDER',
+    onTie: 'REROLL',
+  },
+  { type: 'REPORT_RESULT', id: 'report', allowTie: true },
+]
+
+export const BO1_ROUND_LOOP: RoundLoopSpec = {
+  type: 'ROUND_LOOP',
+  id: 'rounds',
+  count: 1,
+  template: BO1_TEMPLATE,
+  overrides: {},
+}
+
+/**
+ * D36 — and `count: 1` above must agree with this, which the loader checks.
+ *
+ * Overtime is off. It fires when regulation ends level and both seats can still play, and after
+ * one drawn round that is nearly always true — so it would not be a tiebreaker, it would be a
+ * second round. A tied Bo1 is a drawn match, which is what HALF_POINT has meant since D21.
+ */
+export const BO1_MATCH_RULE: MatchRule = {
+  resolution: 'ALWAYS_1_ROUND',
+  stopWhenDecided: false,
+}
+export const BO1_OVERTIME_RULE: OvertimeRule = { enabled: false }
 
 /** D25 — one parameter, declared by both modes. The 3-vs-4 question is settled by §15, not here. */
 export const DRAFT_COUNT_PARAM = {

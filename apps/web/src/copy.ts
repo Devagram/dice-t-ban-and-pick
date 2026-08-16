@@ -32,6 +32,11 @@ export const MODE_BLURBS: Record<string, string> = {
   'bring-ban1':
     'Each of you names one character to deny the other. Both bans are revealed, then you draft ' +
     'in secret knowing what is gone.',
+  // D36. Says "one game" first, because that is the thing a host is choosing between and the only
+  // part that cannot be changed once the room is open.
+  'bo1-bring3-ban1':
+    'One game. Bring three each, then you both ban one of the other’s at the same time and play ' +
+    'one of the two you have left.',
 }
 
 /** D23/D24 — the turn-order holder *decides*, and may put themselves second. */
@@ -71,3 +76,23 @@ export const DRAW_NOTE = 'Three rounds, one and a half each. Nobody takes it.'
 export const REPORT_HELP =
   'Play the round, then record who won. This app does not score the game — it only decides who ' +
   'bans, who picks, and who goes first.'
+
+/**
+ * D38 — the same moment, in a tournament, where the other seat has already answered.
+ *
+ * Says what disagreeing *does*, because the honest answer is "it stops the bracket and fetches a
+ * human", and somebody about to press it should know that rather than discover it.
+ */
+export const CONFIRM_HELP =
+  'Agree and the round is recorded. Pick something else and the match is flagged for the ' +
+  'organiser — so if you both just misremembered, sort it out between you first.'
+
+/**
+ * D39 — why the undo button went away.
+ *
+ * A control that silently stops appearing is worse than one that explains itself, and "the
+ * bracket has moved on" is a reason a player will accept.
+ */
+export const FROZEN_NOTE =
+  'This result is locked in — the tournament has already moved on from it. Ask the organiser if ' +
+  'it needs changing.'

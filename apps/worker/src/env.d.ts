@@ -8,9 +8,10 @@
  * would be a *different* type that happens to share a name, and every test would see an empty
  * object with no error at the declaration site to explain why.
  *
- * Deliberately one entry long. D19 settled that room code plus seat token is the permanent
- * identity model, so there is no KV for accounts, no D1 for standings, and no queue for
- * provisioning — a match is the largest thing this system knows about.
+ * It was "deliberately one entry long", on the grounds that D19 settled room code plus seat token
+ * as the permanent identity model and a match was therefore the largest thing this system knew
+ * about. D37 reverses that: a tournament is larger. What has *not* changed is the rest of the
+ * sentence — still no KV for accounts, no D1, no queue. Four Durable Objects and nothing else.
  */
 declare namespace Cloudflare {
   interface Env {
@@ -19,6 +20,13 @@ declare namespace Cloudflare {
     PAIR_HISTORY: DurableObjectNamespace
     /** D29 — one per deployment: names, results, standings. */
     REGISTRY: DurableObjectNamespace
+    /**
+     * D37 — one per tournament, named by its code.
+     *
+     * The binding that D19 said would never exist. It holds the bracket's authority and none of
+     * its logic: the maths is pure and lives in `@banpick/bracket`.
+     */
+    TOURNAMENT: DurableObjectNamespace
     /**
      * D34 — the admin dashboard's shared secret, set with `wrangler secret put ADMIN_KEY`.
      *

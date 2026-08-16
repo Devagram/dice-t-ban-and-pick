@@ -31,16 +31,58 @@ export interface RoundState {
     attempts: number
     throws: Record<Seat, number>[]
   } | null
-  ban: { by: Seat; target: { seat: Seat; slotIndex: SlotIdx } } | null
+  /**
+   * D36 — keyed by the seat that *placed* the ban, holding the opponent slot it hit.
+   *
+   * It was one `{ by, target }` record, which could not represent a round where both seats ban.
+   * The target seat is dropped rather than lost: D3 already requires a round ban to target an
+   * opponent slot, and `ban.A` therefore names a slot on B's board by construction — a stored
+   * `target.seat` was a second copy of a fact the key already carried, and the only thing a second
+   * copy can do is disagree.
+   *
+   * Sliced for the same reason `selection` is: a simultaneous ban is sealed until both are in, and
+   * one phase enum cannot say "public here, sealed there" about the same field.
+   */
+  ban: Record<Seat, Slice<SlotIdx | null>>
   /**
    * Sliced because round 2 selects simultaneously and hidden, while rounds 0–1 select
    * sequentially in public. This is the case that forces §7's per-slice visibility: one phase
    * enum cannot say "public here, sealed there" about the same field.
    */
   selection: Record<Seat, Slice<SlotIdx | null>>
-  /** D24 — declared after both selections are revealed, so it is a real decision. */
-  playOrder: { declaredBy: Seat; first: Seat } | null
+  /**
+   * D24 — declared after both selections are revealed, so it is a real decision.
+   *
+   * D36 — `declaredBy` is null when nobody decided and the dice did: the Bo1's higher roll simply
+   * goes first. Recorded rather than left blank, because "who went first" is worth having in the
+   * log either way, and naming the roll winner as the declarer would put a decision in the record
+   * that nobody made.
+   */
+  playOrder: { declaredBy: Seat | null; first: Seat } | null
+  /**
+   * D38 — what each seat says happened.
+   *
+   * Under `ONE_SIDED` the first entry resolves the round immediately and the other stays null,
+   * which is D15 unchanged. Under `BOTH_SEATS` the round resolves only when both are in **and
+   * they agree**; two entries that disagree leave `result` null and the round disputed.
+   *
+   * A seat may change its claim while the round is unresolved. Two people who misreported and
+   * then talked should be able to fix it between themselves — escalating every fat finger to an
+   * organizer would make the confirmation step cost more than it saves.
+   */
+  reports: Record<Seat, RoundOutcome | null>
+  /** Set once the round is agreed. Null while it is unreported, half-reported, or disputed. */
   result: RoundOutcome | null
+}
+
+/** D38 — both seats have claimed a result and the claims differ. Derived, never stored. */
+export function isDisputed(round: RoundState): boolean {
+  return (
+    round.result === null &&
+    round.reports.A !== null &&
+    round.reports.B !== null &&
+    round.reports.A !== round.reports.B
+  )
 }
 
 /** Spec §5. */

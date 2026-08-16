@@ -1,11 +1,14 @@
 /// <reference types="@cloudflare/workers-types" />
 
 /**
- * Room codes and seat tokens — the whole identity model, permanently (D19).
+ * Room codes, seat tokens — and since D37, tournament codes and entrant tokens.
  *
- * "Room code plus seat token is the entire identity model for v1", and D19 makes that permanent
- * rather than provisional: there is no tournament layer coming, so no owning entity above a
- * match will ever need to exist.
+ * This file used to open by saying room code plus seat token was the entire identity model
+ * "permanently rather than provisionally, because there is no tournament layer coming". There is
+ * one coming. What D19 actually got right survives intact and is worth stating instead: **no
+ * accounts, no passwords, and nothing that crosses devices except a link.** D41's entrant token
+ * is another bearer credential minted the same way and carried the same way, not the beginning of
+ * a login.
  */
 
 /**
@@ -61,6 +64,50 @@ export async function hashToken(token: string): Promise<string> {
  */
 export function resumeUrl(origin: string, roomCode: string, token: string): string {
   return `${origin}/r/${roomCode}#${token}`
+}
+
+// --- D37: tournaments -------------------------------------------------------------------------
+
+/**
+ * A tournament code, prefixed so it can never be mistaken for a room code.
+ *
+ * Same alphabet and same length, with a `T-` in front. The router should never have to guess
+ * which kind of code it is holding, and a six-character string that is valid as both is a bug
+ * waiting for the day somebody pastes one into the wrong box — at which point they join a
+ * stranger's match instead of getting a 404.
+ */
+const TOURNAMENT_PREFIX = 'T-'
+
+export function generateTournamentCode(): string {
+  return `${TOURNAMENT_PREFIX}${generateRoomCode()}`
+}
+
+export function normalizeTournamentCode(input: string): string {
+  return input.trim().toUpperCase()
+}
+
+export function isTournamentCode(input: string): boolean {
+  const code = normalizeTournamentCode(input)
+  return code.startsWith(TOURNAMENT_PREFIX) && isRoomCode(code.slice(TOURNAMENT_PREFIX.length))
+}
+
+/**
+ * D41 — an entrant's credential for their seat in a tournament match.
+ *
+ * The same 256 bits from the same CSPRNG as a seat token, and the same trade (§17): it lives in a
+ * link, it will end up in browser history, and losing the browser loses it. That is why D41 also
+ * gives the organizer a way to re-mint one — the token is the convenience, the organizer is the
+ * recovery.
+ *
+ * **Not** the player id. Gating a seat on the player id would lock an entrant out of their own
+ * match the moment they opened it on a phone (D35), which is the exact failure this exists to
+ * prevent. The token authorises; the player id still attributes.
+ */
+export const mintEntrantToken = mintSeatToken
+
+/** The tournament's public page. The entrant token rides in the fragment, like a resume link. */
+export function tournamentUrl(origin: string, code: string, token?: string): string {
+  return token ? `${origin}/t/${code}#${token}` : `${origin}/t/${code}`
 }
 
 /**

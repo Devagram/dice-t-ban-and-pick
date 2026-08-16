@@ -3,7 +3,7 @@
 // The only file in the repo that asks for Node's types, and it asks explicitly. The root
 // tsconfig sets `types: []` so nothing is ambient — otherwise `packages/engine` would silently
 // gain `process`, `Buffer`, and a clock, which is what its no-IO lint exists to prevent.
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Roster } from '@banpick/types'
 
@@ -24,6 +24,22 @@ export const ROSTER_75 = JSON.parse(repoFile('roster/roster.75.fixture.json')) a
 
 export function modeSource(name: string): string {
   return repoFile(`modes/${name}.yaml`)
+}
+
+/**
+ * Every mode in `modes/`, discovered rather than listed.
+ *
+ * The bundle generator used to hold a hardcoded array, which made "adding a mode is config" false
+ * in a small but real way: a new YAML file loaded, validated, and then silently failed to reach
+ * the worker because nobody remembered to add its name in a second place. Sorted so the generated
+ * bundle does not depend on directory order.
+ */
+export function shippedModeIds(): string[] {
+  const dir = fileURLToPath(new URL('../../../modes/', import.meta.url))
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.yaml'))
+    .map((f) => f.slice(0, -'.yaml'.length))
+    .sort()
 }
 
 /** Loads a shipped mode from `modes/`, against the placeholder roster unless told otherwise. */

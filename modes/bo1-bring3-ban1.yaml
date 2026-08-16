@@ -1,0 +1,101 @@
+# D36 — a single game. Bring three, ban one of theirs, play one of your two.
+#
+# The first mode that is not a Bo3, and the first with a **symmetric** ban. Both of those cost
+# engine work, which is worth recording plainly because §1 promises they should not have:
+#
+#   - **Regulation length was a constant.** `ROUND_COUNT = 3` sat in the engine and decided how
+#     many round states a match allocated. A one-round mode declared here would still have been
+#     given three, two of them unplayable and indistinguishable in the stored record from rounds
+#     that were played and tied. `match.resolution` now says how long regulation is and the engine
+#     reads it. The promise held for everything else in this file; it did not hold for that.
+#   - **The ban module assumed one banner.** It recorded a single `{ by, target }` per round and
+#     treated "a BAN event exists" as done, so the second seat would never have been asked. It
+#     tracks per seat now, the same way SELECT always has.
+#
+# **Why the ban is simultaneous.** The asymmetric ban in the Bo3 modes is paid for over three
+# rounds: D2 hands it out against turn order, D10 inverts it, and the seat that loses the ban in
+# one round gets it in the next. None of that machinery exists across a single game — a roll that
+# hands one player a free ban and the other nothing would be the whole match decided by a die
+# before either seat had made a decision. Both banning blind costs nothing and is symmetric by
+# construction.
+#
+# **Why the roll sits after the picks, and why it decides outright.** Both the ban and the
+# selection are more interesting made without knowing who will go first. And unlike the Bo3 modes,
+# the winner does not then *declare* an order (D23/D24) — the owner's rule for this format is the
+# plain one, high roll plays first, so the roll writes play order directly and there is no
+# declaration step to make.
+schemaVersion: 1
+mode: bo1-bring3-ban1
+label: 'Bo1 — bring 3, ban 1'
+
+# No parameters. `draftCount` is a live balance question for the Bo3 modes (D25); here three is
+# the format rather than a setting — at two there is nothing to ban and at four the ban stops
+# mattering, so a parameter would only offer two broken games.
+
+modules:
+  # Both bring three, revealed the moment both are in. Public from here on: the ban that follows
+  # is a choice *about* what the opponent brought, so it has to be visible to be a choice at all.
+  - use: SIMULTANEOUS_COMMIT
+    id: draft
+    commits:
+      picks:
+        count: 3
+        pool: legalDraftPool
+        crossSeatMirrors: ALLOWED # D1
+        selfDuplicates: FORBIDDEN # D12
+    reveal:
+      picks: IMMEDIATE
+
+  - use: ROUND_LOOP
+    id: rounds
+    # One round, and `match.resolution` below says the same thing. The loader refuses a mode
+    # where those two disagree — see `validateRoundCount`.
+    count: 1
+    template:
+      # Both ban, blind, against a roster they can already see. Sealed until both are placed:
+      # revealing the first would let the second seat ban around it, which is the whole game.
+      - use: BAN
+        id: ban
+        mode: SIMULTANEOUS_HIDDEN
+        tier: ROUND
+        actor: BOTH
+        pool: legalRoundBan
+
+      # Two left each, so this is a real choice rather than D26's auto-commit.
+      - use: SELECT
+        id: select
+        mode: SIMULTANEOUS_HIDDEN
+        actor: BOTH
+        pool: legalRoundPick
+
+      # High roll plays first, full stop. `PLAY_ORDER` rather than D11's `TURN_ORDER`: that one
+      # hands over the *right to decide*, which D23/D24 turned into a real choice by deferring it
+      # until both picks were open. This format does not have that choice, so there is no
+      # `declareOrder` after it and the roll records the answer itself.
+      - use: ROLL
+        id: roll
+        dice: 1d6
+        actors: BOTH
+        resolve: HIGHEST
+        assigns: PLAY_ORDER
+        onTie: REROLL
+
+      - use: REPORT_RESULT
+        id: report
+        allowTie: true
+
+onTie:
+  scoring: HALF_POINT
+  consumesCharacters: true
+
+match:
+  resolution: ALWAYS_1_ROUND
+  # Nothing to skip: there is no second round for a lead to make dead. Set false rather than true
+  # to say that plainly — a `true` here would read as though it did something.
+  stopWhenDecided: false
+
+# A tied single round is a drawn match, which is what HALF_POINT has always meant. Overtime is
+# deliberately off: it fires when regulation ends level and both seats can play on, and after one
+# drawn round that is nearly always true — it would not be a tiebreaker, it would be round two.
+overtime:
+  enabled: false

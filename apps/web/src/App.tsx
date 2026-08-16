@@ -7,6 +7,9 @@ import { Lobbies } from './screens/Lobbies.js'
 import { Leaderboard } from './screens/Leaderboard.js'
 import { Lobby } from './screens/Lobby.js'
 import { Match } from './screens/Match.js'
+import { Tournament } from './screens/Tournament.js'
+import { NewTournament } from './screens/NewTournament.js'
+import { Organizer } from './screens/Organizer.js'
 import { recallSeat, rememberSeat } from './transport.js'
 
 /**
@@ -31,6 +34,9 @@ type Route =
   | { screen: 'lobbies' }
   | { screen: 'history' }
   | { screen: 'admin' }
+  | { screen: 'tournament'; code: string }
+  | { screen: 'organizer'; code: string }
+  | { screen: 'new-tournament' }
 
 function readRoute(): Route {
   const path = location.pathname
@@ -68,8 +74,28 @@ function readRoute(): Route {
   if (/^\/lobbies\/?$/.test(path)) return { screen: 'lobbies' }
   // D34 — history is public; the dashboard behind it is not (the *server* enforces that, not
   // this route — a client-side check would only hide the buttons).
-  if (/^\/history\/?$/.test(path)) return { screen: 'history' }
+  // D37 Phase 8 — `/tournaments` is the same screen. The tournament index is history, and a
+  // second page listing one panel of it would be a second thing to keep in step.
+  if (/^\/(history|tournaments)\/?$/.test(path)) return { screen: 'history' }
   if (/^\/admin\/?$/.test(path)) return { screen: 'admin' }
+  // D37 Phase 9 — creating one. Linked from the front door, unlike `/admin` and the console:
+  // starting a tournament is an ordinary thing to want, and a feature nobody can reach is a
+  // feature that was not delivered.
+  if (/^\/organizer\/?$/.test(path)) return { screen: 'new-tournament' }
+  /*
+   * D37 — the tournament page. Public, so no token is required to reach it; an entrant's link
+   * carries theirs in the **fragment**, which never leaves the browser and is handed on to the
+   * match page when they go to play.
+   */
+  const tournament = /^\/t\/(T-[A-Z0-9]{6})\/?$/i.exec(path)
+  if (tournament) return { screen: 'tournament', code: tournament[1]!.toUpperCase() }
+  /*
+   * Phase 7 — the organiser console. Unlinked from anywhere, like `/admin`: hiding it is not the
+   * security measure (the organiser token is), it just keeps a screen full of destructive controls
+   * out of the way of the people who are only here to play.
+   */
+  const running = /^\/t\/(T-[A-Z0-9]{6})\/run\/?$/i.exec(path)
+  if (running) return { screen: 'organizer', code: running[1]!.toUpperCase() }
 
   return { screen: 'home' }
 }
@@ -99,6 +125,14 @@ export function App() {
 
     case 'admin':
       return <Admin onBack={home} />
+
+    case 'tournament':
+      return <Tournament code={route.code} onBack={home} />
+
+    case 'organizer':
+      return <Organizer code={route.code} onBack={home} />
+    case 'new-tournament':
+      return <NewTournament onBack={home} />
 
     case 'lobbies':
       return (

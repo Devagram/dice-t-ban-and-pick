@@ -113,6 +113,7 @@ describe('canonical ruleset serialization', () => {
     onTie: { scoring: 'HALF_POINT', consumesCharacters: true },
     match: { resolution: 'ALWAYS_3_ROUNDS', stopWhenDecided: true },
     overtime: { enabled: false },
+    resultReporting: 'ONE_SIDED',
     modeContentHash: 'abc123def456',
     ...over,
   })
@@ -127,6 +128,12 @@ describe('canonical ruleset serialization', () => {
     // genuinely gained a field, so the hash genuinely changed. Rulesets written before that date
     // hash differently, which is correct: they described a different set of rules. This is what
     // the assertion is for, and updating it is a decision rather than a chore.
+    //
+    // **Moved again on 2026-08-15**, when D38 added `resultReporting`. Same situation and the
+    // same verdict: a match that requires both seats to confirm a result is playing under
+    // different rules from one that does not, and it should not hash the same. Every ruleset
+    // written before today carried an implicit `ONE_SIDED`, so the pre-D38 digest describes the
+    // same rules under a shorter name — but the serialization is what this pins, and it moved.
     expect(canonicalRuleset(ruleset())).toBe(
       '{"constraints":{"crossSeatMirrors":"ALLOWED","repeatBans":"FORBIDDEN",' +
         '"selfDuplicates":"FORBIDDEN"},' +
@@ -135,9 +142,10 @@ describe('canonical ruleset serialization', () => {
         '"modeContentHash":"abc123def456","modeId":"base",' +
         '"onTie":{"consumesCharacters":true,"scoring":"HALF_POINT"},' +
         '"overtime":{"enabled":false},"parameters":{"draftCount":4},' +
+        '"resultReporting":"ONE_SIDED",' +
         '"rosterVersion":"2026.07.28-1"}',
     )
-    expect(rulesetHash(ruleset())).toBe('ef3d08f8160c')
+    expect(rulesetHash(ruleset())).toBe('d36ed8e6f37a')
   })
 
   it('is insensitive to globalBanned order', () => {

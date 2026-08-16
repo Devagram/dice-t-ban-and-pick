@@ -42,9 +42,14 @@ export default tseslint.config(
     },
   },
 
-  // --- Check 2: no IO, no ambient nondeterminism, inside the engine ---------------
+  // --- Check 2: no IO, no ambient nondeterminism, inside the pure packages --------
+  //
+  // `packages/bracket` (D37) is here for the same reasons `packages/engine` is, not by analogy:
+  // a bracket is a fold over a result log, so a wall clock or an unseeded shuffle would make a
+  // tournament unreproducible the moment its Durable Object hibernated. The seeding draw takes
+  // its randomness from the creation event, exactly as the dice do.
   {
-    files: ['packages/engine/src/**/*.ts'],
+    files: ['packages/engine/src/**/*.ts', 'packages/bracket/src/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -53,7 +58,7 @@ export default tseslint.config(
             {
               group: ['node:*', 'fs', 'path', 'crypto', 'os', 'http', 'https'],
               message:
-                'packages/engine is pure: zero IO (spec §5). If you need a file, it belongs to Phase 2.',
+                'These packages are pure: zero IO (spec §5). If you need a file, it belongs to the loader.',
             },
           ],
         },
@@ -63,23 +68,24 @@ export default tseslint.config(
         {
           name: 'Date',
           message:
-            'The engine is a pure function of its event log (spec §9/D9). Wall-clock time is not an input.',
+            'These are pure functions of their event logs (spec §9/D9). Wall-clock time is not an input.',
         },
         {
           name: 'crypto',
-          message: 'Randomness comes from the seeded RNG keyed by (seed, seq) — see D9 and §11.1.',
+          message:
+            'Randomness is seeded from the creation event — see D9, §11.1, and the bracket rng note.',
         },
         {
           name: 'process',
-          message: 'packages/engine is pure: no environment access.',
+          message: 'Pure package: no environment access.',
         },
         // Visible to the type checker since `lib` gained DOM for apps/web. TypeScript's lib is
         // a whole-program setting, so the engine's zero-IO boundary is enforced here by name.
-        { name: 'fetch', message: 'packages/engine is pure: zero IO (spec §5).' },
-        { name: 'WebSocket', message: 'packages/engine is pure: zero IO (spec §5).' },
-        { name: 'localStorage', message: 'packages/engine is pure: zero IO (spec §5).' },
-        { name: 'document', message: 'packages/engine has no UI and no DOM.' },
-        { name: 'window', message: 'packages/engine has no UI and no DOM.' },
+        { name: 'fetch', message: 'Pure package: zero IO (spec §5).' },
+        { name: 'WebSocket', message: 'Pure package: zero IO (spec §5).' },
+        { name: 'localStorage', message: 'Pure package: zero IO (spec §5).' },
+        { name: 'document', message: 'Pure package: no UI and no DOM.' },
+        { name: 'window', message: 'Pure package: no UI and no DOM.' },
       ],
       'no-restricted-properties': [
         'error',
@@ -87,13 +93,12 @@ export default tseslint.config(
           object: 'Math',
           property: 'random',
           message:
-            'Rolls replay exactly (§11 non-negotiable 1). Use the counter-based RNG in rng.ts.',
+            'Replay must be exact (§11 non-negotiable 1). Use the counter-based RNG in rng.ts.',
         },
         {
           object: 'Date',
           property: 'now',
-          message:
-            'The engine is a pure function of its event log. Wall-clock time is not an input.',
+          message: 'A pure function of its event log. Wall-clock time is not an input.',
         },
       ],
     },

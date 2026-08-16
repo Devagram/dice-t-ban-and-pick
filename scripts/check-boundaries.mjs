@@ -39,12 +39,44 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url))
  */
 const ENGINE_CONSUMERS = new Set(['packages/engine', 'packages/loader', 'apps/worker'])
 
+/**
+ * D37 — `@banpick/bracket` gets the same treatment, and the reason is *not* the same as D18's.
+ *
+ * D18 keeps the engine from the client because a client that can compute legality eventually
+ * will, and then two implementations of the rules drift. Nothing about a bracket is secret and
+ * the client will happily be told the whole thing — the bracket graphic renders it.
+ *
+ * The rule here is about **authority**, not secrecy. Advancement is decided by the tournament
+ * object and nowhere else; a client holding `advance` would sooner or later use it to predict a
+ * result optimistically, and an optimistic bracket that disagrees with the server is exactly the
+ * "two truths, and the stale one is the one nobody is looking at" failure D39 was written to
+ * prevent. The client gets the *derived* bracket over the wire, never the function that derives
+ * it.
+ */
+const BRACKET_CONSUMERS = new Set(['packages/bracket', 'apps/worker'])
+
+const RESTRICTED = [
+  {
+    pkg: '@banpick/engine',
+    consumers: ENGINE_CONSUMERS,
+    note: 'spec D18 and docs/SPEC-GAPS.md G5',
+  },
+  {
+    pkg: '@banpick/bracket',
+    consumers: BRACKET_CONSUMERS,
+    note: 'spec D37 and docs/TOURNAMENT-PLAN.md',
+  },
+]
+
 const WORKSPACE_GLOBS = ['packages', 'apps']
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mjs)$/
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage', '.git', '.wrangler'])
 
-const IMPORT_RE =
-  /(?:from\s*|import\s*\(\s*|require\s*\(\s*)['"](@banpick\/engine(?:\/[^'"]*)?)['"]/g
+const importRe = (pkg) =>
+  new RegExp(
+    `(?:from\\s*|import\\s*\\(\\s*|require\\s*\\(\\s*)['"](${pkg.replace('/', '\\/')}(?:\\/[^'"]*)?)['"]`,
+    'g',
+  )
 
 const failures = []
 
@@ -84,41 +116,45 @@ function* walk(dir) {
 const workspaces = listWorkspaces()
 
 for (const ws of workspaces) {
-  const allowed = ENGINE_CONSUMERS.has(ws.id)
-
-  // 1. Manifest
   const manifest = JSON.parse(readFileSync(join(ws.abs, 'package.json'), 'utf8'))
   const declared = {
     ...manifest.dependencies,
     ...manifest.peerDependencies,
     ...manifest.optionalDependencies,
   }
-  if (!allowed && Object.hasOwn(declared, '@banpick/engine')) {
-    failures.push(`${ws.id}/package.json declares a dependency on @banpick/engine`)
-  }
 
-  // 2. Source
-  if (allowed) continue
-  for (const file of walk(ws.abs)) {
-    const src = readFileSync(file, 'utf8')
-    IMPORT_RE.lastIndex = 0
-    let match
-    while ((match = IMPORT_RE.exec(src)) !== null) {
-      const line = src.slice(0, match.index).split('\n').length
-      failures.push(`${relative(ROOT, file).split(sep).join('/')}:${line} imports ${match[1]}`)
+  for (const { pkg, consumers } of RESTRICTED) {
+    if (consumers.has(ws.id)) continue
+
+    // 1. Manifest
+    if (Object.hasOwn(declared, pkg)) {
+      failures.push(`${ws.id}/package.json declares a dependency on ${pkg}`)
+    }
+
+    // 2. Source — separately, because hoisting lets an undeclared import resolve anyway
+    const re = importRe(pkg)
+    for (const file of walk(ws.abs)) {
+      const src = readFileSync(file, 'utf8')
+      re.lastIndex = 0
+      let match
+      while ((match = re.exec(src)) !== null) {
+        const line = src.slice(0, match.index).split('\n').length
+        failures.push(`${relative(ROOT, file).split(sep).join('/')}:${line} imports ${match[1]}`)
+      }
     }
   }
 }
 
 if (failures.length > 0) {
-  console.error('\nD18 package boundary violated:\n')
+  console.error('\nPackage boundary violated:\n')
   for (const f of failures) console.error(`  ✗ ${f}`)
-  console.error(
-    `\n@banpick/engine may only be imported by: ${[...ENGINE_CONSUMERS].join(', ')}.` +
-      '\nEverything else gets @banpick/types. See spec D18 and docs/SPEC-GAPS.md G5.\n',
-  )
+  for (const { pkg, consumers, note } of RESTRICTED) {
+    console.error(`\n${pkg} may only be imported by: ${[...consumers].join(', ')}. See ${note}.`)
+  }
+  console.error('\nEverything else gets @banpick/types.\n')
   process.exit(1)
 }
 
 const scanned = workspaces.map((w) => w.id).join(', ') || '(none yet)'
-console.log(`D18 boundary OK — checked ${workspaces.length} workspace(s): ${scanned}`)
+const guarded = RESTRICTED.map((r) => r.pkg).join(' + ')
+console.log(`D18/D37 boundary OK — ${guarded} across ${workspaces.length} workspace(s): ${scanned}`)

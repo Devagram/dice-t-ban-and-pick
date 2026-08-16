@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "banpick",
+  "name": "dice-t-ban-and-pick",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
 
@@ -18,6 +18,9 @@
       // D29 — one per deployment: claimed names, match results, and the standings derived from
       // them. Single object by design; see the scale note in RegistryDO.ts.
       { "name": "REGISTRY", "class_name": "RegistryDO" },
+      // D37 — one per tournament, named by its code. The authority for a bracket; the bracket
+      // maths itself is pure and lives in @banpick/bracket.
+      { "name": "TOURNAMENT", "class_name": "TournamentDO" },
     ],
   },
 
@@ -50,6 +53,12 @@
     {
       "tag": "v3",
       "new_sqlite_classes": ["RegistryDO"],
+    },
+    {
+      // D37. A new Durable Object *class* needs a migration — unlike D31's open-room list, which
+      // was a new table on a class that already existed.
+      "tag": "v4",
+      "new_sqlite_classes": ["TournamentDO"],
     },
   ],
 

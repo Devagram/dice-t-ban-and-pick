@@ -3,7 +3,16 @@
 import type { CreateMatchResponse, Roster } from '@banpick/types'
 
 import rosterAsset from '../../../roster/roster.json' with { type: 'json' }
-import { generateRoomCode, isRoomCode, joinUrl, normalizeRoomCode } from './identity.js'
+import {
+  generateRoomCode,
+  generateTournamentCode,
+  isRoomCode,
+  isTournamentCode,
+  joinUrl,
+  normalizeRoomCode,
+  normalizeTournamentCode,
+  tournamentUrl,
+} from './identity.js'
 import { listModes } from './modes.js'
 
 const ROSTER = rosterAsset as Roster
@@ -27,6 +36,7 @@ const ADMIN_ACTIONS = new Set(['edit', 'delete', 'players', 'merge'])
 export { MatchDO } from './MatchDO.js'
 export { PairHistoryDO } from './PairHistoryDO.js'
 export { RegistryDO } from './RegistryDO.js'
+export { TournamentDO } from './TournamentDO.js'
 
 /**
  * The Worker entry point: a router, and nothing more.
@@ -103,7 +113,10 @@ export default {
       // D34 — the history page's two reads. Public and read-only: these are the same rows the
       // standings are already derived from, shown rather than summarised.
       path === '/api/matches' ||
-      path === '/api/matchups'
+      path === '/api/matchups' ||
+      // D37 Phase 8 — the tournament index. Public, and served from the registry rather than from
+      // any tournament object, because those are swept after a week and this list is not.
+      path === '/api/tournaments'
     ) {
       const registry = env.REGISTRY.get(env.REGISTRY.idFromName('registry'))
       const action =
@@ -119,6 +132,53 @@ export default {
 
     if (path === '/api/match' && request.method === 'POST') {
       return createMatch(request, env, url)
+    }
+
+    // D37 — tournaments. Created by an organizer, read by anybody: a bracket is public for the
+    // same reason D31's lobby list and D34's history are, and most people looking at one are
+    // spectators rather than entrants.
+    if (path === '/api/tournament' && request.method === 'POST') {
+      return createTournament(request, env, url)
+    }
+
+    const tournament =
+      /^\/api\/tournament\/([^/]+)(?:\/(relink|provision|ws|resolve|voidSlot|correct|cascade|reseed|entrants))?$/.exec(
+        path,
+      )
+    if (tournament) {
+      const code = normalizeTournamentCode(tournament[1]!)
+      if (!isTournamentCode(code)) {
+        return json({ error: 'BAD_TOURNAMENT_CODE', detail: 'not a tournament code' }, 400)
+      }
+      /*
+       * **Every mutation here is gated by the organizer token** (Phase 7), checked inside the
+       * Durable Object against an allowlist rather than route by route — see `ORGANIZER_ACTIONS`.
+       * The gate lives there because that is where the token is stored, and a second check out
+       * here would be a second place for the two to disagree.
+       *
+       * `view`, `cascade` and `ws` are deliberately open. The first two only read, and the bracket
+       * they describe is public; the socket is read-only and most people watching a bracket are
+       * not playing in it.
+       */
+      const action = tournament[2] ?? 'view'
+      const response = await tournamentStub(env, code).fetch(
+        new Request(`${url.origin}/${action}`, request),
+      )
+
+      /*
+       * D37 Phase 8 — a finished tournament keeps its page after its object is swept.
+       *
+       * D42 deletes a tournament's storage seven days after its last activity, and a week later is
+       * usually exactly when somebody follows a link from the history to see who won. So a 404 on
+       * a read falls through to the registry's archived bracket, which was filed the moment the
+       * tournament finished. Only for the plain read: a mutation against a swept tournament is
+       * genuinely gone and should say so rather than appear to half-work.
+       */
+      if (response.status === 404 && action === 'view') {
+        const archived = await archivedTournament(env, code)
+        if (archived) return json({ ...archived, archived: true })
+      }
+      return response
     }
 
     const match = /^\/api\/match\/([^/]+)\/(preview|seat|ws|rematch)$/.exec(path)
@@ -155,6 +215,22 @@ async function createMatch(request: Request, env: Env, url: URL): Promise<Respon
     return json({ error: 'MALFORMED_BODY', detail: 'body must be a JSON object' }, 400)
   }
 
+  /*
+   * D37 — a tournament binding cannot be asked for from out here.
+   *
+   * It turns off open seating (D41) and keeps the room out of the lobby list (D31), so a client
+   * that could set one could mint itself a private room claiming to belong to somebody's event.
+   * `TournamentDO` addresses the match object directly and is the only caller that may attach one.
+   * Refused loudly rather than stripped: silently ignoring a field somebody sent is how they end
+   * up debugging why their tournament match behaves like a casual one.
+   */
+  if ('tournament' in body) {
+    return json(
+      { error: 'TOURNAMENT_BINDING_REFUSED', detail: 'only a tournament can open its own matches' },
+      400,
+    )
+  }
+
   // A collision would land on a match that already exists, which the DO rejects with 409. Six
   // characters from a 30-symbol alphabet is ~7×10^8 codes; at this scale retrying twice is
   // more than enough, and failing loudly beats silently joining strangers together.
@@ -181,9 +257,91 @@ async function createMatch(request: Request, env: Env, url: URL): Promise<Respon
   return json({ error: 'ROOM_CODE_EXHAUSTED', detail: 'could not allocate a room code' }, 503)
 }
 
+/**
+ * D37 — create a tournament, and hand back the code plus one entrant token per entrant.
+ *
+ * The tokens are returned **once**, here, and never again: only their hashes are stored, exactly
+ * as D17 treats a seat token. That is what makes D41's "the organizer can re-mint one" the
+ * recovery path rather than a convenience, and it is why this response is the only place they
+ * exist in the clear.
+ *
+ * Shaped like `createMatch` deliberately, including the collision retry — the code is the DO's
+ * name, so it has to exist before there is an object to ask for one.
+ */
+async function createTournament(request: Request, env: Env, url: URL): Promise<Response> {
+  let body: object
+  try {
+    const parsed: unknown = JSON.parse(await request.text())
+    if (typeof parsed !== 'object' || parsed === null) throw new Error('not an object')
+    body = parsed
+  } catch {
+    return json({ error: 'MALFORMED_BODY', detail: 'body must be a JSON object' }, 400)
+  }
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const code = generateTournamentCode()
+    const response = await tournamentStub(env, code).fetch(
+      new Request(`${url.origin}/create`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...body, code }),
+      }),
+    )
+
+    if (response.status === 409) continue // collision; try another code
+    if (!response.ok) return response
+
+    const created = (await response.json()) as {
+      organizerToken: string
+      entrants: { entrantId: string; displayName: string; seed: number; entrantToken: string }[]
+    }
+    return json(
+      {
+        code,
+        url: tournamentUrl(url.origin, code),
+        /*
+         * Returned once, here, and never again — only its hash is stored. Whoever creates the
+         * tournament is its organizer, and if they lose this there is no recovery: the tournament
+         * simply has no organizer from then on, which is the fail-closed reading and the same one
+         * `ADMIN_KEY` gets.
+         */
+        organizerToken: created.organizerToken,
+        entrants: created.entrants.map((e) => ({
+          ...e,
+          // D41 — the token rides in the fragment, so it never reaches a server log or a proxy.
+          url: tournamentUrl(url.origin, code, e.entrantToken),
+        })),
+      },
+      201,
+    )
+  }
+
+  return json({ error: 'CODE_EXHAUSTED', detail: 'could not allocate a tournament code' }, 503)
+}
+
 /** One DO per match, named by room code (D8). */
 function stubFor(env: Env, roomCode: string): DurableObjectStub {
   return env.MATCH.get(env.MATCH.idFromName(roomCode))
+}
+
+/**
+ * The archived final bracket of a tournament whose own object is gone, or `null`.
+ *
+ * `null` covers both "never existed" and "still running": the registry only holds a bracket for a
+ * finished tournament, so a running one that 404s here is a code nobody has heard of either way.
+ */
+async function archivedTournament(env: Env, code: string): Promise<object | null> {
+  const response = await env.REGISTRY.get(env.REGISTRY.idFromName('registry')).fetch(
+    `https://registry/archive?code=${encodeURIComponent(code)}`,
+  )
+  if (!response.ok) return null
+  const body = (await response.json()) as { view?: object }
+  return body.view ?? null
+}
+
+/** One DO per tournament, named by its code (D37). */
+function tournamentStub(env: Env, code: string): DurableObjectStub {
+  return env.TOURNAMENT.get(env.TOURNAMENT.idFromName(code))
 }
 
 /** Forwards to the DO with the action as the path, preserving method, headers, and body. */

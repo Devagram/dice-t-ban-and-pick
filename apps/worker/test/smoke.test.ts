@@ -17,9 +17,11 @@ describe('the worker is alive', () => {
         return r.json()
       })
       .then((modes) => {
-        expect(modes).toHaveLength(2)
+        // Listed rather than counted: which modes ship is the assertion, and a bare length check
+        // passes just as happily when one is swapped for another.
         expect((modes as { modeId: string }[]).map((m) => m.modeId).sort()).toEqual([
           'base',
+          'bo1-bring3-ban1',
           'bring-ban1',
         ])
       })

@@ -45,6 +45,7 @@ function rulesetFor(loaded: ReturnType<typeof loadShipped>, draftCount: 3 | 4, r
     onTie: variant.mode.onTie,
     match: variant.mode.match,
     overtime: variant.mode.overtime,
+    resultReporting: 'ONE_SIDED',
     modeContentHash: variant.modeContentHash,
   }
   return { variant, ruleset }

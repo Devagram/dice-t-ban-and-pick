@@ -1,6 +1,9 @@
 import type { ModeDefinition } from '@banpick/types'
 
 import {
+  BO1_MATCH_RULE,
+  BO1_OVERTIME_RULE,
+  BO1_ROUND_LOOP,
   DRAFT_COUNT_PARAM,
   MATCH_RULE,
   OVERTIME_RULE,
@@ -95,9 +98,47 @@ export const bringBan1Mode: ModeDefinition = {
   overtime: OVERTIME_RULE,
 }
 
+/**
+ * D36 — a single game: bring three, both ban one of the other's, play one of your two.
+ *
+ * The first mode that is not a Bo3, and it is the one that showed §1's "modes are config, never
+ * engine code" had two holes in it. Regulation length was a constant in the engine rather than a
+ * property of the mode, and `BAN` assumed exactly one banner per round. Both are fixed rather
+ * than worked around — see `MatchRule.resolution` and the note on `ban`.
+ *
+ * No parameters. `draftCount` is a live balance question for the Bo3 modes (D25); here it is the
+ * format itself — two brought leaves nothing to ban, four makes the ban an inconvenience — so a
+ * parameter would only enumerate broken games.
+ */
+export const bo1Bring3Ban1Mode: ModeDefinition = {
+  modeId: 'bo1-bring3-ban1',
+  label: 'Bo1 — bring 3, ban 1',
+  parameters: {},
+  modules: [
+    {
+      type: 'SIMULTANEOUS_COMMIT',
+      id: 'draft',
+      commits: {
+        // Literal rather than a parameter, and three rather than four: the ban has to leave a
+        // real choice behind it without leaving so much that it stops mattering.
+        picks: { count: 3, pool: 'legalDraftPool' },
+        metaBan: null,
+      },
+      // Public immediately. The ban that follows is a choice *about* what the opponent brought,
+      // so it cannot be made against a sealed board.
+      reveal: { picks: 'IMMEDIATE', metaBan: 'NONE' },
+    },
+    BO1_ROUND_LOOP,
+  ],
+  onTie: TIE_RULE,
+  match: BO1_MATCH_RULE,
+  overtime: BO1_OVERTIME_RULE,
+}
+
 export const MODES: Record<string, ModeDefinition> = {
   base: baseMode,
   'bring-ban1': bringBan1Mode,
+  'bo1-bring3-ban1': bo1Bring3Ban1Mode,
 }
 
 export * from './roundTemplate.js'

@@ -104,6 +104,27 @@ export function announceAmendment(
   }
 }
 
+// --- D37: the tournament socket -----------------------------------------------------------------
+
+/**
+ * **The bracket, to everyone watching.**
+ *
+ * Routed through this module because the rule is that *nothing* in the worker touches the socket
+ * API except here, and an exception for "but this one is public" is exactly how a choke point
+ * stops being one. `scripts/check-outbound.mjs` would fail the build either way.
+ *
+ * There is no `project()` call and there must not be one: a `TournamentView` is not a projection
+ * of match state, it is entrant names, scores and advancement — every field of which is public
+ * for the same reason D31's lobby list and D34's history are. What matters is the **negative**
+ * guarantee, and it is structural rather than filtered: this function's argument type cannot
+ * express anything from inside a live match, so there is no in-progress draft, no sealed ban and
+ * no hidden selection available to leak. The redaction test asserts it against the real frame
+ * anyway, because a type is a promise and a wire capture is a property.
+ */
+export function broadcastBracket(sockets: Iterable<WebSocket>, view: unknown): void {
+  for (const socket of sockets) deliver(socket, { type: 'BRACKET', view } as ServerMessage)
+}
+
 /** A protocol-level problem. Also carries no state. */
 export function sendProtocolError(
   socket: WebSocket,

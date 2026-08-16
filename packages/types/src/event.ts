@@ -119,8 +119,11 @@ export type EventPayload =
        */
       throws: Record<Seat, number>[]
       winner: Seat
-      /** D11 — in round 2 the roll assigns TURN_ORDER directly, with no CHOOSE. */
-      assigns: 'TURN_ORDER' | null
+      /**
+       * D11 — in round 2 the roll assigns TURN_ORDER directly, with no CHOOSE.
+       * D36 — and PLAY_ORDER where the higher roll simply goes first.
+       */
+      assigns: 'TURN_ORDER' | 'PLAY_ORDER' | null
     }
   | {
       type: 'CHOOSE'
@@ -179,6 +182,20 @@ export type EventPayload =
    * and this only records that a player asked for them.
    */
   | { type: 'ROLL_READY'; moduleId: string; roundIndex: RoundIdx; seat: Seat }
+  /**
+   * **D39 — an outside authority has consumed this match's result.**
+   *
+   * Appended by `MatchDO` when a tournament tells it the bracket has advanced on this match. From
+   * that moment D15's undo and D33's amendment are closed to the players: the result is no longer
+   * only theirs to change, and a bracket that moved on cannot have the ground shift under it.
+   *
+   * An **event** rather than a flag on the object, and that is the load-bearing choice. Freezing
+   * happens after creation, so it cannot be snapshotted into the ruleset; putting it in the log
+   * instead keeps the engine pure, keeps the state replayable, and — the part that actually
+   * matters to a player — means `legalActions` stops offering the undo rather than offering a
+   * button that gets rejected.
+   */
+  | { type: 'RESULTS_FROZEN'; reason: string }
   /** D15 — open to either seat until the next round's roll. Covers the fat finger, not the lie. */
   | { type: 'UNDO_LAST_RESULT'; roundIndex: RoundIdx; requestedBy: Seat }
   /** D33 — a round's result, corrected after the fact. Carries the new outcome, not a delta. */

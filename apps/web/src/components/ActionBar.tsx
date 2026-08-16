@@ -4,6 +4,7 @@ import {
   PRIVILEGE_HELP,
   PRIVILEGE_OPTION_HELP,
   PRIVILEGE_PROMPT,
+  CONFIRM_HELP,
   REPORT_HELP,
   TURN_ORDER_HELP,
   TURN_ORDER_PROMPT,
@@ -201,16 +202,36 @@ function ReportControl({
     return player?.name ? player.name : `Seat ${outcome}`
   }
 
+  /*
+   * D38 — the same control, asking a different question.
+   *
+   * When `confirming` is set the opponent has already said what happened, so this is no longer
+   * "who won" but "do you agree". The client is told which it is rather than working it out from
+   * the round state: §11 non-negotiable 4 says it renders `legalActions` and never computes
+   * legality, and "the other seat has reported, so this is a confirmation" is a rule.
+   *
+   * Disagreeing is not a separate action. Naming a different outcome *is* the disagreement, which
+   * is why the buttons stay the same buttons — the only thing that changes is which one is marked
+   * as agreement, and the sentence above them.
+   */
+  const claimed = action.confirming
+
   return (
     <section className="prompt">
-      <h3 className="prompt__title">Who won round {action.roundIndex + 1}?</h3>
-      <p className="prompt__help">{REPORT_HELP}</p>
+      <h3 className="prompt__title">
+        {claimed === null
+          ? `Who won round ${action.roundIndex + 1}?`
+          : `They say ${claimed === 'TIE' ? 'it was a tie' : `${nameFor(claimed)} won`}`}
+      </h3>
+      <p className="prompt__help">{claimed === null ? REPORT_HELP : CONFIRM_HELP}</p>
       <div className="prompt__options">
         {ordered.map((outcome) => (
           <button
             key={outcome}
             type="button"
-            className={`btn btn--option ${outcome === view.seat ? 'btn--option-self' : ''}`}
+            className={`btn btn--option ${outcome === view.seat ? 'btn--option-self' : ''} ${
+              outcome === claimed ? 'btn--option-agree' : ''
+            }`}
             onClick={() =>
               onAct({
                 type: 'REPORT_RESULT',
@@ -222,7 +243,13 @@ function ReportControl({
             }
           >
             <span className="btn__label">
-              {outcome === 'TIE' ? 'A tie' : outcome === view.seat ? 'I won' : 'They won'}
+              {outcome === claimed
+                ? 'Agree'
+                : outcome === 'TIE'
+                  ? 'A tie'
+                  : outcome === view.seat
+                    ? 'I won'
+                    : 'They won'}
             </span>
             {outcome === 'TIE' ? (
               <span className="btn__sub">Half a point each, and both characters are spent.</span>

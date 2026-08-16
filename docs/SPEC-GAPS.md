@@ -18,7 +18,7 @@ The spec is unusually good — event-sourced, pure engine, set-algebra pools, pe
 | G5  | Client engine import vs trust model                             | **RESOLVED → D18** (`@banpick/types` to the client, `@banpick/engine` to the DO only, enforced in CI) |
 | G6  | No disconnect / abandon / timeout policy                        | **RESOLVED → D17** (seat token, resume link, full resync, 7-day idle expiry, no forfeit)              |
 | G7  | `ruleset.hash` canonical serialization                          | **RESOLVED → D20** (hash cut from URL)                                                                |
-| G8  | "Tournament app" has no tournament layer                        | **RESOLVED → D19** (no tournament layer, permanently; `globalBanned` survives)                        |
+| G8  | "Tournament app" has no tournament layer                        | ~~RESOLVED → D19~~ **REOPENED → D37** (2026-08-15). See [`TOURNAMENT-PLAN.md`](TOURNAMENT-PLAN.md)    |
 | G9  | O1 understated; sample size too small                           | **RESOLVED → D22 / D25** (default 4; `draftCount` is a host-selectable parameter, A/B tested via §15) |
 | G10 | `VOID_AND_REPLAY` / `ROLL_OFF` unspecified                      | **RESOLVED → D21** (cut, deferred not permanent)                                                      |
 | G11 | The roster does not exist                                       | **RESOLVED → D14** (`roster/roster.json`, retire never delete)                                        |
@@ -137,7 +137,7 @@ The interesting one is withdrawal. Say no and the seal is a real cryptographic-s
 
 ---
 
-## G8 — "Tournament app" has no tournament layer — RESOLVED → D19
+## G8 — "Tournament app" has no tournament layer — ~~RESOLVED → D19~~ **REOPENED → D37**
 
 The repository is named `dice-t-ban-and-pick` and the brief was a _tournament_ app. The spec describes a two-player match tool. Tournament bans exist (§4, D5, "set by organizer, event lifetime") but there is no event entity, no organizer role, no bracket, no standings, and no match provisioning.
 
@@ -147,6 +147,23 @@ This is not a criticism of the spec's scope — a sharp v1 is correct. It is a w
 2. **Ruleset ownership.** §12 has the _host_ choosing the mode and ban list. In a tournament, the _organizer_ does, and the host may not override. Model `Ruleset` as resolvable from an event, not only from host input, even if v1 only ever uses host input.
 
 **Recommendation:** keep the tournament layer out of v1, but land those two affordances in Phase 1. If the answer is "tournament is v1," this register needs a different conversation and the phase plan below shifts substantially.
+
+> **2026-08-15 — the answer became "tournament is v1", and this warning was right.**
+>
+> D19 declined both affordances; D37 reinstates the layer, and [`TOURNAMENT-PLAN.md`](TOURNAMENT-PLAN.md)
+> Phases 2–3 are largely those two paragraphs, built four phases later against a shipped protocol
+> instead of a blank one. The cost is real but modest — a snapshotted `tournament` binding rather
+> than a nullable `eventId`, and a create path that bypasses host input.
+>
+> It is worth being precise about what this vindicates and what it does not. **The warning was
+> correct; the recommendation to act on it was still wrong.** Carrying two unused fields through
+> Phases 1–6 would have cost more attention than retrofitting them once has — the register said
+> "one field", and one field with no consumer is a field that quietly rots. What actually cost
+> something was D19's _permanence_, which turned an open question into a closed one and let §17,
+> the delivery plan, and D15's rationale all harden around an assumption nobody re-examined.
+>
+> The lesson is not "keep more doors open". It is that a register may record an answer without
+> recording that the answer can never change.
 
 ---
 
@@ -358,7 +375,17 @@ The escape hatch: no real matches exist yet, so the ten placeholders can be dele
 
 Either seat reports, no confirmation, `UNDO_LAST_RESULT` open to either seat until the next round's roll.
 
-**The earlier "keep it two-sided-capable" recommendation is withdrawn.** It existed solely to survive a tournament retrofit, and D19 rules that out. Carrying a second reporter field and a `DISPUTE` state forever, for a scenario that will not occur, is the speculative generality this design otherwise avoids. `reportedBy: Seat` stays for log attribution — that is useful in casual play for its own sake.
+~~**The earlier "keep it two-sided-capable" recommendation is withdrawn.** It existed solely to survive a tournament retrofit, and D19 rules that out. Carrying a second reporter field and a `DISPUTE` state forever, for a scenario that will not occur, is the speculative generality this design otherwise avoids.~~ `reportedBy: Seat` stays for log attribution — that is useful in casual play for its own sake.
+
+> **Struck 2026-08-15 by D38.** The scenario occurred. Two-sided reporting is reinstated for
+> matches carrying a tournament binding, along with the `DISPUTE` state, and **D15 is unchanged
+> for casual play** — either seat still reports, still without confirmation, still with the undo
+> window open until the next roll. That split is the part worth noting: the withdrawal treated
+> "two-sided" as a property of the app, and it is a property of the _match_.
+>
+> The judgement was not wrong at the time. Declining to carry an unused field for four phases was
+> right, and paying for it once here is cheaper than having carried it throughout. What was wrong
+> was the confidence that the scenario "will not occur" — see G8.
 
 Also written into §17: **the app does not simulate, score, or validate the dice game.** That non-goal was load-bearing and unstated, which is precisely why this gap was invisible through the first review.
 
@@ -387,13 +414,31 @@ Two policies worth flagging because they are the only places the answer is "no":
 
 The argument is not that the client would compute legality today. It is that if the client _can_, then the first time someone wants a snappier UI, it will — and then two implementations of the rules drift, and §7's redaction guarantee degrades from a property into a promise. Not shipping the code is cheaper than maintaining the discipline.
 
-### G8 → D19 — No tournament layer, permanently
+### G8 → ~~D19~~ → **REOPENED, then D37 (2026-08-15)**
 
-**This reverses my earlier advice** to keep the door open with a nullable `eventId` and an organizer-resolvable ruleset. That advice was insurance priced against an unknown. The unknown is now known, and the premium is no longer worth paying.
+> **G8 is open again.** D19's answer — "no tournament layer, permanently" — was reversed by
+> **D37**. The plan is [`TOURNAMENT-PLAN.md`](TOURNAMENT-PLAN.md), and D38–D42 settle the five
+> questions it turned on. The original resolution is kept below because its downstream list is
+> exactly the bill the reversal has to pay, item by item.
+>
+> **The lesson worth keeping is about the word, not the judgement.** "Permanently" is not a
+> stronger form of "no" — it is a claim about the future that a register cannot make. Everything
+> else here was sound: the reasoning was right, the simplifications were real, and reversing it is
+> costing precisely what this entry predicted it would.
 
-What survives is the **global ban tier**. A host saying "not tonight" is genuinely useful casually. It was named a _tournament_ ban only because an organizer was assumed to set it; the host sets it, so it is `globalBanned` throughout the spec now. The mechanism earned its place, the name did not.
+**D19's original resolution, struck:**
 
-Downstream simplifications: no owning entity above a match (room code plus seat token is the permanent identity model, not a provisional one), no `DISPUTE` state, and the bearer-credential resume link moves from _tolerable_ to _appropriate_.
+~~**This reverses my earlier advice** to keep the door open with a nullable `eventId` and an organizer-resolvable ruleset. That advice was insurance priced against an unknown. The unknown is now known, and the premium is no longer worth paying.~~
+
+What survives is the **global ban tier**, and it survives D37 too. A host saying "not tonight" is genuinely useful casually and an organizer saying it is useful in a tournament. It was named a _tournament_ ban only because an organizer was assumed to set it; both set it now, and `globalBanned` remains the better name for a mechanism that never cared who chose.
+
+~~Downstream simplifications: no owning entity above a match (room code plus seat token is the permanent identity model, not a provisional one), no `DISPUTE` state, and the bearer-credential resume link moves from _tolerable_ to _appropriate_.~~
+
+**What each of those now costs:**
+
+- **An owning entity above a match** — `TournamentDO`, plus a `tournament` binding snapshotted into the match creation event. Plan Phases 2–3.
+- **A `DISPUTE` state** — reinstated by **D38** as a `DISPUTED` slot, for tournament matches only. Casual play keeps D15's single-sided report exactly as written.
+- **The bearer-credential resume link** — still appropriate. **D41**'s entrant token makes the same trade a second time, deliberately rather than by inheritance.
 
 ### D10 round 2 — confirmed as (a), fresh roll
 

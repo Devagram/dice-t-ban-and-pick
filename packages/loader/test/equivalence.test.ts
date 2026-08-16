@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { baseMode, bringBan1Mode, resolveMode } from '@banpick/engine'
+import { baseMode, bo1Bring3Ban1Mode, bringBan1Mode, resolveMode } from '@banpick/engine'
 import { canonicalJson, type ModeDefinition } from '@banpick/types'
 import { defaultVariant, variantFor } from '@banpick/loader'
 
@@ -19,14 +19,28 @@ import { loadShipped } from './helpers.js'
 const PAIRS: [name: string, code: ModeDefinition][] = [
   ['base', baseMode],
   ['bring-ban1', bringBan1Mode],
+  // D36. Parameterless, so its only combination is the empty one — hence the parameter space
+  // driving the loop below rather than a hardcoded [3, 4].
+  ['bo1-bring3-ban1', bo1Bring3Ban1Mode],
 ]
+
+/** Every combination the mode declares, which for a parameterless mode is exactly one: none. */
+function combinationsOf(mode: ModeDefinition): Record<string, string | number>[] {
+  const names = Object.keys(mode.parameters)
+  if (names.length === 0) return [{}]
+  return names.reduce<Record<string, string | number>[]>(
+    (acc, name) =>
+      acc.flatMap((base) => mode.parameters[name]!.values.map((v) => ({ ...base, [name]: v }))),
+    [{}],
+  )
+}
 
 describe('YAML equals code', () => {
   for (const [name, code] of PAIRS) {
-    for (const draftCount of [3, 4] as const) {
-      it(`${name} at draftCount ${draftCount} resolves identically`, () => {
-        const fromYaml = variantFor(loadShipped(name), { draftCount }).mode
-        const fromCode = resolveMode(code, { draftCount })
+    for (const parameters of combinationsOf(code)) {
+      it(`${name} at ${JSON.stringify(parameters)} resolves identically`, () => {
+        const fromYaml = variantFor(loadShipped(name), parameters).mode
+        const fromCode = resolveMode(code, parameters)
 
         // Deep equality on the whole resolved mode: the program, the interpolated label, the
         // resolved parameters, and the tie and match rules.

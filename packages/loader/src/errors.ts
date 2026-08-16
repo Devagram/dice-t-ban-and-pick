@@ -27,6 +27,10 @@ export type LoadErrorCode =
   | 'PARAMETER_SPACE'
   /** §13/G14 — the (scoring, resolution, overtime) triple is not provably terminating. */
   | 'NON_TERMINATING'
+  /** D36 — the round loop's `count` and `match.resolution` disagree about how long regulation is. */
+  | 'ROUND_COUNT_MISMATCH'
+  /** D36 — a SIMULTANEOUS_HIDDEN ban with a single actor, which hides nothing from anyone. */
+  | 'BAN_SHAPE'
   /** The mode is structurally sound but does not resolve — e.g. an override names nothing. */
   | 'RESOLUTION_FAILED'
 

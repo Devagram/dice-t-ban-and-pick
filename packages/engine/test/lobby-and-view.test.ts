@@ -42,6 +42,7 @@ function created(overrides: Partial<Ruleset> = {}): EventEnvelope {
     onTie: mode.onTie,
     match: mode.match,
     overtime: mode.overtime,
+    resultReporting: 'ONE_SIDED',
     modeContentHash: 'test-hash',
     ...overrides,
   }

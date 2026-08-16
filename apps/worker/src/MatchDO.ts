@@ -1,9 +1,10 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import { DurableObject } from 'cloudflare:workers'
-import { ENGINE_VERSION, legalActions, reduce, systemStep } from '@banpick/engine'
+import { ENGINE_VERSION, legalActions, reduce, resultsFrozen, systemStep } from '@banpick/engine'
 import {
   activeRoster,
+  isDisputed,
   SEATS,
   type ClaimSeatResponse,
   type ClientMessage,
@@ -73,15 +74,52 @@ function seatDetail(state: MatchState, seat: Seat) {
 }
 
 /** The claim body, treated as untrusted — an older client sends none at all. */
-async function readPlayer(request: Request): Promise<{ id: string; name: string } | null> {
+/**
+ * The seat-claim body, read **once**.
+ *
+ * It used to be two readers, and it cannot be: a `Request` body streams, so a second `json()` on
+ * the same request throws. D41 adds an entrant token alongside the player, so both come out of one
+ * parse.
+ */
+async function readSeatClaim(
+  request: Request,
+): Promise<{ player: { id: string; name: string } | null; entrantToken: string | null }> {
   try {
-    const body = (await request.json()) as { playerId?: unknown; displayName?: unknown }
-    if (typeof body?.playerId !== 'string' || !body.playerId) return null
-    const name = typeof body.displayName === 'string' ? body.displayName.slice(0, 40) : ''
-    return { id: body.playerId.slice(0, 64), name }
+    const body = (await request.json()) as {
+      playerId?: unknown
+      displayName?: unknown
+      entrantToken?: unknown
+    }
+    const player =
+      typeof body?.playerId === 'string' && body.playerId
+        ? {
+            id: body.playerId.slice(0, 64),
+            name: typeof body.displayName === 'string' ? body.displayName.slice(0, 40) : '',
+          }
+        : null
+    const entrantToken =
+      typeof body?.entrantToken === 'string' && body.entrantToken ? body.entrantToken : null
+    return { player, entrantToken }
   } catch {
-    return null
+    return { player: null, entrantToken: null }
   }
+}
+
+/**
+ * D37 — the tournament binding, and only `TournamentDO` may set one.
+ *
+ * `/api/match` refuses the field outright (see `createMatch` in index.ts), so the only caller that
+ * reaches here with one is the tournament addressing the object directly. Validated anyway rather
+ * than trusted: this is the field that turns off open seating, and a malformed one would turn it
+ * off with nothing able to turn it back on.
+ */
+function readTournamentBinding(body: unknown): { code: string; slotId: string } | null {
+  const raw = (body as { tournament?: unknown }).tournament
+  if (typeof raw !== 'object' || raw === null) return null
+  const { code, slotId } = raw as { code?: unknown; slotId?: unknown }
+  if (typeof code !== 'string' || !code) return null
+  if (typeof slotId !== 'string' || !slotId) return null
+  return { code, slotId }
 }
 
 const ROSTER = rosterAsset as Roster
@@ -187,6 +225,16 @@ export class MatchDO extends DurableObject<Env> {
     const viability = this.checkRosterViability(variant, globalBanned, allowRepeatBans)
     if (viability) return json(viability, 400)
 
+    /*
+     * D37/D38 — read before the ruleset is built, because it decides one of its fields.
+     *
+     * A match that belongs to a bracket needs both seats to agree on a result, and "belongs to a
+     * bracket" is exactly what this binding says. Derived here rather than passed in beside it:
+     * two ways of saying the same thing could disagree, and the one that would go wrong is a
+     * tournament match quietly reporting one-sided.
+     */
+    const tournament = readTournamentBinding(body)
+
     const seed = crypto.randomUUID()
     const event: EventEnvelope = {
       v: 1,
@@ -196,7 +244,13 @@ export class MatchDO extends DurableObject<Env> {
       payload: {
         type: 'MATCH_CREATED',
         seed,
-        ruleset: rulesetFor(variant, ROSTER.rosterVersion, globalBanned, allowRepeatBans),
+        ruleset: rulesetFor(
+          variant,
+          ROSTER.rosterVersion,
+          globalBanned,
+          allowRepeatBans,
+          tournament ? 'BOTH_SEATS' : 'ONE_SIDED',
+        ),
         roster: ROSTER,
         mode: variant.mode,
         engineVersion: ENGINE_VERSION,
@@ -212,16 +266,36 @@ export class MatchDO extends DurableObject<Env> {
       return json({ error: 'ALREADY_CREATED', detail: 'this room code is in use' }, 409)
     }
     setMeta(this.sql, 'roomCode', body.roomCode ?? '')
+
+    /*
+     * D37 — the tournament binding, snapshotted like everything else in this object.
+     *
+     * Only `TournamentDO` can set it: `/api/match` refuses the field outright, so a client cannot
+     * mint itself a room that claims to belong to an event. What it changes here is two things —
+     * seating stops being first-come (D41) and the room stays out of the open lobby list (D31).
+     */
+    if (tournament) setMeta(this.sql, 'tournament', JSON.stringify(tournament))
+
     this.touch()
-    // D31 — the room joins the lobby list the moment it exists. `waitUntil` for the same reason
-    // as every other registry write: bookkeeping must not sit between a host and their room.
-    this.ctx.waitUntil(
-      this.announceRoom(body.roomCode ?? '', {
-        modeLabel: variant.mode.label,
-        seatsTaken: 0,
-        status: 'OPEN',
-      }),
-    )
+    if (tournament) {
+      /*
+       * D31 — and deliberately *not* announced.
+       *
+       * A listed room is an invitation, and this one is not: only two named people may sit down,
+       * so listing it would put an entry in the lobby that every reader is refused by. An absent
+       * room is better than one that looks joinable and is not.
+       */
+    } else {
+      // D31 — the room joins the lobby list the moment it exists. `waitUntil` for the same reason
+      // as every other registry write: bookkeeping must not sit between a host and their room.
+      this.ctx.waitUntil(
+        this.announceRoom(body.roomCode ?? '', {
+          modeLabel: variant.mode.label,
+          seatsTaken: 0,
+          status: 'OPEN',
+        }),
+      )
+    }
     return json({ ok: true }, 201)
   }
 
@@ -292,8 +366,6 @@ export class MatchDO extends DurableObject<Env> {
     if (!state) return json({ error: 'NO_MATCH', detail: 'nothing has been created here' }, 404)
 
     const taken = new Set(claimedSeats(this.sql))
-    const seat = SEATS.find((s) => !taken.has(s))
-    if (!seat) return json({ error: 'MATCH_FULL', detail: 'both seats are taken' }, 409)
 
     /*
      * D28 — who is sitting down.
@@ -302,7 +374,49 @@ export class MatchDO extends DurableObject<Env> {
      * and a seat with no id simply has no history to carry. Self-asserted and unverified (§1's
      * trust model), which is why the *id* is what the rule keys on and the name is only a label.
      */
-    const player = await readPlayer(request)
+    const { player: claimed, entrantToken } = await readSeatClaim(request)
+
+    /*
+     * D41 — in a tournament, the seat is assigned and the entrant token is what opens it.
+     *
+     * Three things change, and each is a deliberate reversal of a rule that is correct outside a
+     * tournament:
+     *
+     *   - **Not first-come.** D31's lobby is open on purpose; a match two named people are
+     *     scheduled to play is not.
+     *   - **Not the player id.** A player id belongs to a browser (D35), so gating on it would
+     *     lock an entrant out of their own match the moment they opened it on a phone — the exact
+     *     failure D41 exists to prevent.
+     *   - **Not the claimed name either.** The tournament hands back the entrant's *registered*
+     *     identity and the seat is filled with that, so the bracket and the leaderboard cannot
+     *     disagree about who played, and a new browser does not mint a second person mid-event.
+     */
+    const binding = this.tournament()
+    let seat: Seat | undefined
+    let player = claimed
+
+    if (binding) {
+      if (!entrantToken) {
+        return json(
+          {
+            error: 'ENTRANT_TOKEN_REQUIRED',
+            detail: 'this seat is reserved — open the match from your entrant link',
+          },
+          403,
+        )
+      }
+      const authorized = await this.authorizeEntrant(binding, entrantToken)
+      if ('error' in authorized) return json(authorized, authorized.status)
+      seat = authorized.seat
+      player = { id: authorized.playerId, name: authorized.displayName }
+      if (taken.has(seat)) {
+        return json({ error: 'SEAT_TAKEN', detail: 'you are already seated in this match' }, 409)
+      }
+    } else {
+      seat = SEATS.find((s) => !taken.has(s))
+      if (!seat) return json({ error: 'MATCH_FULL', detail: 'both seats are taken' }, 409)
+    }
+
     /*
      * D29 — a seat needs a name.
      *
@@ -353,15 +467,18 @@ export class MatchDO extends DurableObject<Env> {
      * the list uses to say "join" or "watch", so it has to be accurate at exactly this moment.
      */
     const filled = SEATS.filter((s) => withHistory.seatsFilled[s]).length
-    this.ctx.waitUntil(
-      this.announceRoom(roomCode, {
-        seatsTaken: filled,
-        status: filled >= 2 ? 'PLAYING' : 'OPEN',
-        // The host is whoever sat in A. Sent only when it is this claim, so a B-seat claim does
-        // not overwrite a name already recorded.
-        ...(seat === 'A' && player?.name ? { hostName: player.name } : {}),
-      }),
-    )
+    // D37 — a tournament room is not in the list, so there is nothing to keep up to date.
+    if (!binding) {
+      this.ctx.waitUntil(
+        this.announceRoom(roomCode, {
+          seatsTaken: filled,
+          status: filled >= 2 ? 'PLAYING' : 'OPEN',
+          // The host is whoever sat in A. Sent only when it is this claim, so a B-seat claim does
+          // not overwrite a name already recorded.
+          ...(seat === 'A' && player?.name ? { hostName: player.name } : {}),
+        }),
+      )
+    }
     const origin = new URL(request.url).origin || url.origin
     const response: ClaimSeatResponse = {
       seat,
@@ -442,6 +559,157 @@ export class MatchDO extends DurableObject<Env> {
     })
   }
 
+  /** D37 — the tournament this match belongs to, or null for an ordinary one. */
+  private tournament(): { code: string; slotId: string } | null {
+    const raw = getMeta(this.sql, 'tournament')
+    if (!raw) return null
+    try {
+      return JSON.parse(raw) as { code: string; slotId: string }
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Asks the tournament whether this token opens this slot, and which seat it opens.
+   *
+   * Live rather than snapshotted — see the note on `TournamentDO.authorize`. The short version:
+   * a match's *rules* are frozen at creation because they must not change under the players, but
+   * *who may sit* is exactly what an organizer needs to be able to correct mid-event.
+   */
+  private async authorizeEntrant(
+    binding: { code: string; slotId: string },
+    token: string,
+  ): Promise<
+    | { seat: Seat; playerId: string; displayName: string }
+    | { error: string; detail: string; status: 403 | 404 | 502 }
+  > {
+    const stub = this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName(binding.code))
+    const response = await stub.fetch('https://tournament/authorize', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ slotId: binding.slotId, token }),
+    })
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string; detail?: string }
+      return {
+        error: body.error ?? 'NOT_AUTHORIZED',
+        detail: body.detail ?? 'the tournament refused that entrant link',
+        status: response.status === 404 ? 404 : 403,
+      }
+    }
+
+    const body = (await response.json()) as {
+      seat: Seat
+      playerId: string
+      displayName: string
+    }
+    return { seat: body.seat, playerId: body.playerId, displayName: body.displayName }
+  }
+
+  /**
+   * D37 — tells the tournament how this match finished.
+   *
+   * Beside `recordResult` and for the same reason it is not a `MATCH_COMPLETE` hook: D15's undo
+   * can reopen a finished match and complete it differently, producing a *second* completion. The
+   * tournament's result log is append-only and last-write-wins, so calling this again is how a
+   * corrected outcome reaches the bracket — no replay detection required at either end.
+   *
+   * A **draw** is reported as such rather than swallowed. D21 makes a level match a legal terminal
+   * state and D36's Bo1 allows a tied round, so this is reachable, and a bracket that silently
+   * ignored it would stall with nothing anywhere saying why.
+   */
+  private async reportToTournament(state: MatchState): Promise<void> {
+    const binding = this.tournament()
+    if (!binding) return
+
+    const stubOf = () => this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName(binding.code))
+
+    /*
+     * D38 — a disagreement is worth telling the bracket about *before* the match ends, because it
+     * never will end: a disputed round does not resolve, so waiting for `COMPLETE` would leave the
+     * slot showing READY while two people argue. The organizer needs to see it while it is
+     * happening, not never.
+     *
+     * Sent on every settle while a dispute stands. The tournament's log is append-only and the
+     * status is derived from the last entry, so repeats are harmless and a later agreement
+     * supersedes them.
+     */
+    if (state.rounds.some((round) => isDisputed(round))) {
+      await stubOf().fetch('https://tournament/report', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slotId: binding.slotId, disputed: true }),
+      })
+      return
+    }
+
+    if (state.status !== 'COMPLETE' || state.outcome === null) return
+
+    const players = playersOf(state)
+    if (!players) return
+
+    /*
+     * The winner is named by **player id**, and the tournament maps it back to an entrant. Sending
+     * the seat letter instead would be shorter and wrong: a D39 correction can move a slot to a
+     * different pair of entrants, and a letter would then mean somebody else.
+     */
+    const winnerPlayerId = state.outcome === 'DRAW' ? null : players[state.outcome as Seat].id
+
+    const response = await stubOf().fetch('https://tournament/report', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(
+        winnerPlayerId === null
+          ? { slotId: binding.slotId, drawn: true }
+          : { slotId: binding.slotId, winnerPlayerId },
+      ),
+    })
+
+    /*
+     * D39 — the bracket says it has moved on, so this match freezes **itself**.
+     *
+     * Deliberately not the tournament calling back to a `/freeze` endpoint here. That was the
+     * first shape and it deadlocked: a Durable Object reaching back into the one mid-call to it is
+     * a cycle, and the visible symptom was a bracket that advanced and then stopped opening
+     * rounds. Hearing "consumed" in a reply this object was already waiting for gets the same
+     * guarantee with no cycle.
+     */
+    const body = (await response.json().catch(() => ({}))) as { consumed?: unknown }
+    if (body.consumed === true) this.freezeResults()
+  }
+
+  /**
+   * D39 — closes D15's undo and D33's amendment for the players.
+   *
+   * An appended event, not a flag: `legalActions` then stops *offering* the undo rather than
+   * offering a button the server refuses, and the whole thing still replays. The reason travels
+   * with it so the client can say why instead of a control quietly disappearing.
+   */
+  private freezeResults(): void {
+    const state = this.rebuild()
+    if (!state || resultsFrozen(state).frozen) return
+
+    const event: EventEnvelope = {
+      v: 1,
+      seq: state.log.length,
+      tag: 'results:frozen',
+      actor: 'SYSTEM',
+      payload: {
+        type: 'RESULTS_FROZEN',
+        reason: 'the tournament bracket has advanced on this result',
+      },
+    }
+    const result = reduce(state, event)
+    if (!result.ok) return
+    if (!tryAppendEvent(this.sql, event)) return
+
+    // The players are looking at a screen with an undo button on it. Tell them now, with the
+    // reason, rather than letting them find out by pressing it.
+    this.settleAndBroadcast(result.state)
+  }
+
   /**
    * D29 — files the result, once the match has one.
    *
@@ -475,6 +743,9 @@ export class MatchDO extends DurableObject<Env> {
           winnerId,
           scoreA: state.seats.A.score,
           scoreB: state.seats.B.score,
+          // D37 — so history can tell a tournament game from a casual one, and so D34's admin
+          // edit can refuse the ones whose winner a bracket has already acted on.
+          ...(this.tournament() ? { tournamentId: this.tournament()!.code } : {}),
           // Enough to answer "what do they always play?" — §15's open O6 question — without
           // keeping the event log, which is a separate feature with separate retention.
           detail: {
@@ -836,17 +1107,24 @@ export class MatchDO extends DurableObject<Env> {
        */
       this.ctx.waitUntil(this.recordBans(settled))
       this.ctx.waitUntil(this.recordResult(settled))
+      // D37 — and the bracket, which advances on it. Same `waitUntil` reasoning: a player should
+      // not wait on a second object before their action is acknowledged.
+      this.ctx.waitUntil(this.reportToTournament(settled))
       // D31 — and it leaves the lobby list. Only on COMPLETE, so D15's undo reopening a match
       // does not strand a finished room on the list: `settleAndBroadcast` runs again and the
       // room is re-announced by the same code path that removed it.
-      this.ctx.waitUntil(
-        settled.status === 'COMPLETE'
-          ? this.announceRoom(getMeta(this.sql, 'roomCode') ?? '', { status: 'CLOSED' })
-          : this.announceRoom(getMeta(this.sql, 'roomCode') ?? '', {
-              seatsTaken: 2,
-              status: 'PLAYING',
-            }),
-      )
+      //
+      // A tournament room was never listed (see `handleCreate`), so there is nothing to remove.
+      if (!this.tournament()) {
+        this.ctx.waitUntil(
+          settled.status === 'COMPLETE'
+            ? this.announceRoom(getMeta(this.sql, 'roomCode') ?? '', { status: 'CLOSED' })
+            : this.announceRoom(getMeta(this.sql, 'roomCode') ?? '', {
+                seatsTaken: 2,
+                status: 'PLAYING',
+              }),
+        )
+      }
       return
     }
 

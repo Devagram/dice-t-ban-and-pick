@@ -1,5 +1,5 @@
 import {
-  ROUND_COUNT,
+  regulationRounds,
   publicSlice,
   isRoundIdx,
   type EventEnvelope,
@@ -27,9 +27,16 @@ export function createMatch(event: EventEnvelope): MatchState {
   const p = event.payload as PayloadOf<'MATCH_CREATED'>
 
   const rounds: RoundState[] = []
-  // D30 — one extra round state when the mode declares overtime. It may never be played;
-  // `isDecided` is what decides that, and it needs the round to exist to reason about.
-  const roundCount = ROUND_COUNT + (p.mode.overtime.enabled ? 1 : 0)
+  /*
+   * D30 — one extra round state when the mode declares overtime. It may never be played;
+   * `isDecided` is what decides that, and it needs the round to exist to reason about.
+   *
+   * D36 — and the regulation count comes from the mode rather than from a constant. Allocating
+   * three for a one-round mode was not merely wasteful: the two extra rounds are indistinguishable
+   * from rounds that were played and tied, so they reached the stored record and the history page
+   * as real-looking blanks.
+   */
+  const roundCount = regulationRounds(p.mode.match) + (p.mode.overtime.enabled ? 1 : 0)
   for (let i = 0; i < roundCount; i++) {
     if (!isRoundIdx(i)) throw new RangeError(`round index ${i} out of range`)
     rounds.push({
@@ -37,9 +44,13 @@ export function createMatch(event: EventEnvelope): MatchState {
       privilegeHolder: null,
       turnOrderHolder: null,
       roll: null,
-      ban: null,
+      // D36 — one entry per seat, because a simultaneous ban has two. A mode where only one seat
+      // bans simply leaves the other entry null.
+      ban: { A: publicSlice(null), B: publicSlice(null) },
       selection: { A: publicSlice(null), B: publicSlice(null) },
       playOrder: null,
+      // D38 — one claim per seat. Under D15's one-sided reporting only one is ever filled.
+      reports: { A: null, B: null },
       result: null,
     })
   }

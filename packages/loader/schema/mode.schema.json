@@ -53,7 +53,8 @@
       "required": ["resolution", "stopWhenDecided"],
       "properties": {
         "resolution": {
-          "enum": ["ALWAYS_3_ROUNDS"]
+          "enum": ["ALWAYS_1_ROUND", "ALWAYS_3_ROUNDS"],
+          "description": "D36 — regulation length. Enumerated rather than an integer so G14's terminating-triple table stays a table a reader can check, and because RoundIdx bounds what the state can address anyway. A ROUND_LOOP whose count disagrees with this is a load error."
         },
         "stopWhenDecided": {
           "type": "boolean"
@@ -420,7 +421,8 @@
                 "const": "REROLL"
               },
               "assigns": {
-                "enum": ["TURN_ORDER", null]
+                "enum": ["TURN_ORDER", "PLAY_ORDER", null],
+                "description": "TURN_ORDER (D11) gives the winner the right to declare play order later. PLAY_ORDER (D36) makes the winner play first outright, with no declaration to follow — a round using it should not also carry a declareOrder CHOOSE."
               }
             }
           }
@@ -494,6 +496,10 @@
               "id": true,
               "tier": {
                 "const": "ROUND"
+              },
+              "mode": {
+                "enum": ["SEQUENTIAL", "SIMULTANEOUS_HIDDEN"],
+                "description": "D36. Defaults to SEQUENTIAL, so a mode written before simultaneous bans existed keeps meaning what it meant. SIMULTANEOUS_HIDDEN requires actor: BOTH — checked by the loader, not here, because the message is worth writing in prose."
               },
               "actor": {
                 "$ref": "#/$defs/actorRef"

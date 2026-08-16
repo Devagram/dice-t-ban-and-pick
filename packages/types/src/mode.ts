@@ -76,8 +76,17 @@ export interface RollSpec {
   actors: 'BOTH'
   resolve: 'HIGHEST'
   onTie: 'REROLL'
-  /** D11 — non-null in round 2, where the roll assigns turn order and no CHOOSE exists. */
-  assigns: 'TURN_ORDER' | null
+  /**
+   * What the winning roll is worth, when it is worth anything beyond drama.
+   *
+   * - `TURN_ORDER` (D11) — the winner becomes `turnOrderHolder` and later *declares* play order.
+   *   Round 2 of a Bo3, where no draft privilege is left to alternate.
+   * - `PLAY_ORDER` (D36) — the winner simply plays first, and there is no declaration at all.
+   *   Deliberately does **not** also set `turnOrderHolder`: holding a right you never exercise
+   *   would show up as "you set order" on a strip where nobody sets anything.
+   * - `null` — the roll only feeds D2's privilege choice.
+   */
+  assigns: 'TURN_ORDER' | 'PLAY_ORDER' | null
 }
 
 export interface ChooseSpec {
@@ -101,6 +110,14 @@ export interface BanSpec {
   type: 'BAN'
   id: string
   tier: 'ROUND'
+  /**
+   * D36 — the same two shapes `SELECT` has, and for the same reason.
+   *
+   * `SEQUENTIAL` is one seat banning in the open, which is every Bo3 round. `SIMULTANEOUS_HIDDEN`
+   * is both seats banning blind and revealing together; it is only meaningful with `actor: BOTH`,
+   * and the loader says so rather than leaving a half-configured ban to behave oddly at run time.
+   */
+  mode: 'SEQUENTIAL' | 'SIMULTANEOUS_HIDDEN'
   actor: ActorRef
   pool: PoolName
 }

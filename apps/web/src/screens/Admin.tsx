@@ -556,7 +556,18 @@ function EditRow({
           <div className="adminrow__line" key={seat}>
             <span className="adminrow__label">Seat {seat}</span>
             {players.length === 0 ? (
-              <code className="playerrow__id">{current}</code>
+              <>
+                <code className="playerrow__id">{current}</code>
+                {/*
+                 * Says why rather than just showing inert text. The control needs the directory
+                 * to have something to offer, the directory needs an accepted key, and a plain
+                 * id with no explanation beside it reads as "this one cannot be changed" — which
+                 * is the opposite of true and the exact wrong conclusion to leave someone with.
+                 */}
+                <span className="adminrow__hint">
+                  reassigning needs an accepted admin key — the list of players comes with it
+                </span>
+              </>
             ) : (
               <select
                 className="field__input adminrow__who"

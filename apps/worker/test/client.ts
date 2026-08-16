@@ -34,6 +34,8 @@ export class TestClient {
   readonly progress: Extract<ServerMessage, { type: 'OPPONENT_PROGRESS' }>[] = []
   readonly rematches: Extract<ServerMessage, { type: 'REMATCH' }>[] = []
   readonly amendments: Extract<ServerMessage, { type: 'RESULT_AMENDED' }>[] = []
+  /** D37 — bracket frames, for the tournament socket. Always empty on a match client. */
+  readonly brackets: unknown[] = []
 
   private constructor(
     readonly seatToken: string,
@@ -66,6 +68,31 @@ export class TestClient {
     })
     if (!response.ok)
       throw new Error(`claimSeat failed: ${response.status} ${await response.text()}`)
+    const body = (await response.json()) as ClaimSeatResponse
+    return new TestClient(body.seatToken, body.websocketUrl, body.seat)
+  }
+
+  /**
+   * D41 — sits down in a tournament match with an entrant token.
+   *
+   * The player id is deliberately a fresh random one every time: the whole point of the entrant
+   * token is that it works from a browser the tournament has never seen, and a test that passed
+   * the registered id would prove nothing about that. The server fills the seat under the
+   * entrant's *registered* identity regardless of what is sent here.
+   */
+  static async claimSeatWithToken(roomCode: string, entrantToken: string): Promise<TestClient> {
+    const response = await SELF.fetch(`https://example.com/api/match/${roomCode}/seat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        playerId: `browser-${crypto.randomUUID()}`,
+        displayName: 'whatever this browser thinks',
+        entrantToken,
+      }),
+    })
+    if (!response.ok) {
+      throw new Error(`claimSeatWithToken failed: ${response.status} ${await response.text()}`)
+    }
     const body = (await response.json()) as ClaimSeatResponse
     return new TestClient(body.seatToken, body.websocketUrl, body.seat)
   }
@@ -120,6 +147,10 @@ export class TestClient {
       else if (message.type === 'OPPONENT_PROGRESS') this.progress.push(message)
       else if (message.type === 'REMATCH') this.rematches.push(message)
       else if (message.type === 'RESULT_AMENDED') this.amendments.push(message)
+      // D37 — the tournament socket's only frame. A match client never receives one; it is listed
+      // here because `ServerMessage` is one union and the exhaustive else below is what keeps a
+      // new frame type from being silently filed as an error.
+      else if (message.type === 'BRACKET') this.brackets.push(message.view)
       // Everything left really is an error. Named types are listed above so that adding a
       // server message and forgetting this line is a type error rather than a silent
       // reclassification into `errors`.

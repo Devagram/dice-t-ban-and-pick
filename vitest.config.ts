@@ -83,6 +83,26 @@ export default defineConfig({
           functions: 100,
           statements: 100,
         },
+        /**
+         * D37 — the bracket's routing, at the engine's bar.
+         *
+         * `advance.ts` and `derive.ts` are where a wrong branch eliminates somebody who should
+         * still be playing, and the exhaustive N=4/N=8 sweeps exist to reach every one of them.
+         * A threshold below 100 here would mean a branch nobody plays, in the code that decides
+         * who goes home.
+         */
+        'packages/bracket/src/advance.ts': {
+          branches: 100,
+          lines: 100,
+          functions: 100,
+          statements: 100,
+        },
+        'packages/bracket/src/derive.ts': {
+          branches: 100,
+          lines: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },

@@ -79,6 +79,11 @@ export function Home({ onCreated }: { onCreated: (roomCode: string) => void }) {
           <a className="btn btn--quiet" href="/history">
             History
           </a>
+          {/* D37 — the door to the tournament layer. Everything else about it is reached from a
+              link somebody hands you; this is the one part that has to be findable. */}
+          <a className="btn btn--quiet" href="/organizer">
+            Run a tournament
+          </a>
         </div>
       </header>
 

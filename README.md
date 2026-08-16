@@ -4,13 +4,15 @@ Two-player ban/pick tool for a dice game, with pluggable rulesets.
 
 The design is the primary document — read it before the code:
 
-- [`banpick-design-spec.md`](banpick-design-spec.md) — the spec. Decisions D1–D26, closed.
+- [`banpick-design-spec.md`](banpick-design-spec.md) — the spec. Decisions D1–D43.
 - [`docs/DELIVERY-PLAN.md`](docs/DELIVERY-PLAN.md) — phased plan and exit criteria.
+- [`docs/TOURNAMENT-PLAN.md`](docs/TOURNAMENT-PLAN.md) — the tournament layer, phases 0–8. Reverses D19.
 - [`docs/SPEC-GAPS.md`](docs/SPEC-GAPS.md) — the gap register, all items resolved.
 - [`roster/README.md`](roster/README.md) — the three rules that keep replacing characters safe.
 
-**Status:** Phases 1–4 complete — the app is playable end to end. Phase 5 (event log export and
-instrumentation) is next, and the plan is right that it is the most valuable deliverable in it.
+**Status:** the app is playable end to end, and the tournament layer (D37–D43) is built. Read a
+phase's _Found while building_ notes before changing anything in it — several of them exist
+because the first answer was wrong and the wrong answer was plausible.
 
 ---
 
@@ -19,10 +21,11 @@ instrumentation) is next, and the plan is right that it is the most valuable del
 ```
 packages/types/     @banpick/types   — the wire contract. The only package the client imports.
 packages/engine/    @banpick/engine  — reduce, legalActions, project. Pure, zero IO.
+packages/bracket/   @banpick/bracket — seeding, routing, advancement. Pure, and depends on nothing.
 packages/loader/    @banpick/loader  — mode YAML -> validated, resolved, hashed. Build-time only.
-apps/worker/        @banpick/worker  — one Durable Object per match. The authority.
+apps/worker/        @banpick/worker  — one DO per match, one per tournament. The authority.
 apps/web/           @banpick/web     — the client. Renders PlayerView, posts actions, has no rules.
-modes/                               — base.yaml and bring-ban1.yaml. Adding a mode is config.
+modes/                               — the three shipped rulesets. Adding a mode is (mostly) config.
 roster/                              — the versioned character asset, plus a 75-entry fixture.
 scripts/                             — the two structural checks CI runs.
 ```
@@ -149,6 +152,44 @@ The player list is admin-only, but be clear about what that buys: `/api/matches`
 every row on it already names both players' ids. The key gates the never-played ids and the
 merge itself, not the existence of ids.
 
+## Tournaments (D37–D43)
+
+**Run a tournament** on the front page (`/organizer`): type the entrants one per line, pick a
+format and the modes, and create it. A name that has played here before keeps its record; anyone
+else starts fresh, which the screen says before you commit — there are no accounts to look people
+up by (D35), so this is a match against the public history and a new id when it misses.
+
+What comes back exists **once** and is never recoverable:
+
+- **The organizer token.** Whoever creates the tournament is its organizer. Lose it and the
+  tournament has no organizer from then on — the same fail-closed reading `ADMIN_KEY` gets, and
+  deliberately _not_ `ADMIN_KEY` itself: that key gates rewriting every recorded result in the
+  deployment, and running Thursday's event should not require handing it out.
+- **One link per entrant**, with their token in the URL fragment so it never reaches a server log.
+  It authorises the seat; it is not an account, and D41's answer to a lost one is that the
+  organizer re-mints it.
+
+Only those two people can sit in a bracket match, in the seats the bracket gave them — not
+first-come like the open lobby. Any mode can be the tournament's default, and any bracket position
+(losers, the winners final, the grand final, D40's reset) can override it: a losers bracket of Bo1
+under a Bo3 winners bracket is configuration, not a special case.
+
+`/t/<code>` is the bracket, public and live over a socket. Both seats confirm a result (D38);
+disagreeing produces a disputed slot rather than a winner. Once a result has advanced the bracket
+it is **frozen** (D39) — no player undo, no amendment — and only the organizer changes it, which
+re-derives the bracket from the corrected log and shows what that will cost before applying it.
+
+A tournament's own storage is swept **7 days** after its last activity (D42). Its final bracket
+and champion are filed with the registry when it finishes and outlive it (D43), so the page keeps
+working — marked `Archived`, because at that point there is nothing left to watch. A tournament
+abandoned half-played is not archived: it has no final anything, and inventing a page for it would
+be showing a result that never happened.
+
+Bracket matches are ordinary matches and count everywhere ordinary matches do — leaderboard,
+head-to-head, history — flagged with their tournament code on the history rows. They cannot be
+edited from `/admin`: that would move the leaderboard and leave the bracket saying something else,
+so it refuses with a `TOURNAMENT_MATCH` conflict and points at the organizer console instead.
+
 ## The CI checks, and why they exist
 
 Each of these encodes a guarantee that is a **property** of the build rather than a promise in
@@ -167,7 +208,7 @@ rule that holds until the first hurry.
    Neither survives an ambient clock or an unseeded random.
 4. **Coverage thresholds** — 100% branch on `legalActions` and `project`, ≥90% line overall,
    scoped to `packages/*`. The v8 provider collects nothing from workerd, so the worker's
-   assurance is its 41 integration tests in the real runtime rather than a line count. See
+   assurance is its integration tests in the real runtime rather than a line count. See
    finding F7 in the delivery plan.
 
 ## Testing
@@ -210,11 +251,37 @@ with.
 | Why is SHA-256 hand-written here?                      | [`sha256.ts`](packages/loader/src/sha256.ts)                  |
 | What can a mode file actually say?                     | [`mode.schema.json`](packages/loader/schema/mode.schema.json) |
 
+## The shipped modes
+
+| Mode              | Shape                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `base`            | Bo3. Draft in secret, then three rounds of roll → ban → pick.                       |
+| `bring-ban1`      | Bo3. Both meta-ban one character first, revealed, then draft against that.          |
+| `bo1-bring3-ban1` | **Bo1 (D36).** Bring three each, both ban one of the other's, play one of your two. |
+
 ## Adding a mode
 
-Write a YAML file in [`modes/`](modes/) and load it. That is the whole procedure — §1 requires
-that new modes are config and never engine code, and Phase 2 settled it: both shipped modes
-resolve from YAML to programs byte-identical to the ones Phase 1 built in TypeScript.
+Write a YAML file in [`modes/`](modes/), run `npm run build:modes`, and it ships. The mode list is
+read off the directory, so there is no second place to register it.
 
-If a mode you want cannot be expressed, that is a finding about the module boundary and belongs
-in `docs/SPEC-GAPS.md`. It is not a reason to edit `@banpick/engine`.
+§1 requires that new modes are config and never engine code, and Phase 2 settled it for the two
+Bo3 modes: both resolve from YAML to programs byte-identical to the ones built in TypeScript, and
+[`equivalence.test.ts`](packages/loader/test/equivalence.test.ts) keeps proving it.
+
+**D36 is the honest counter-example, and it is worth reading before you assume the promise is
+total.** Adding a one-round mode with a symmetric ban needed engine changes, because two things
+that should have been properties of a mode were not:
+
+- **Regulation length was a constant.** `ROUND_COUNT = 3` lived in the engine and decided how many
+  round states a match allocated. A one-round mode would still have been given three, two of them
+  unplayable — and an unplayed round is indistinguishable in the stored record from one that was
+  played and tied, so they would have reached the history page as blank rows. `match.resolution`
+  now says how long regulation is and the engine reads it.
+- **A round had exactly one banner.** `BAN` recorded a single `{ by, target }` and treated the
+  existence of any BAN event as completion, so a second seat would never have been asked to act.
+  It tracks per seat now, the way `SELECT` always has, and gained `SIMULTANEOUS_HIDDEN` alongside.
+
+Both were fixed rather than worked around, and both are the kind of thing §1 was written to catch:
+the boundary held for everything else in that mode file. If a mode you want cannot be expressed,
+that is a finding about the module boundary and belongs in `docs/SPEC-GAPS.md` — and it may, as
+here, turn out to be a real gap rather than a reason to give up on the rule.

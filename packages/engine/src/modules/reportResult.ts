@@ -1,4 +1,6 @@
 import {
+  isDisputed as disputedRound,
+  otherSeat,
   SEATS,
   type Action,
   type EventEnvelope,
@@ -29,10 +31,18 @@ type Ctx = ModuleCtx<ReportModule>
  * unverifiable human claim enters an otherwise fully authoritative system, and that is by
  * design.
  *
- * D15 accordingly: either seat reports, no confirmation. A confirm step is ceremony against a
- * trusted counterparty (§1), and the real failure mode is a fat finger, which `UNDO_LAST_RESULT`
- * covers. `reportedBy` stays in the log for attribution, which is useful in casual play for its
- * own sake — not because a `DISPUTE` state is coming (D19 ruled that out).
+ * D15 accordingly, and **still, for casual play**: either seat reports, no confirmation. A confirm
+ * step is ceremony against a trusted counterparty (§1), and the real failure mode is a fat finger,
+ * which `UNDO_LAST_RESULT` covers.
+ *
+ * **D38 adds the other shape, for tournaments only.** `resultReporting: 'BOTH_SEATS'` makes the
+ * round wait for both claims and resolve only if they agree; disagreeing claims leave it disputed.
+ * This is the two-sided schema SPEC-GAPS recommended and §17 withdrew — withdrawn *because* D19
+ * ruled tournaments out, which D37 reverses. The comment there now says so too.
+ *
+ * Which shape applies is a **property of the match**, read off the snapshotted ruleset, not a mode
+ * of the app: a casual game between friends and a quarter-final can be running side by side in the
+ * same deployment and neither should behave like the other.
  */
 export const reportResult: PhaseModule<ReportModule> = {
   reads: [],
@@ -41,18 +51,35 @@ export const reportResult: PhaseModule<ReportModule> = {
   essential: true,
 
   awaiting({ state, mod }: Ctx): Seat[] {
-    return reported(state, mod) ? [] : [...SEATS]
+    if (resolved(state, mod)) return []
+    if (!bothSeats(state)) return [...SEATS]
+    // Under D38 a seat that has already claimed is not being waited on — but a seat whose claim
+    // was contradicted is, because it may change it. Disputed rounds await both again.
+    const round = state.rounds[findRoundIndex(mod)]!
+    if (disputedRound(round)) return [...SEATS]
+    return SEATS.filter((seat) => round.reports[seat] === null)
   },
 
-  legalActions({ state, mod }: Ctx, _seat: Seat): Action[] {
-    if (reported(state, mod)) return []
+  legalActions({ state, mod }: Ctx, seat: Seat): Action[] {
+    if (resolved(state, mod)) return []
     const outcomes: RoundOutcome[] = mod.allowTie ? ['A', 'B', 'TIE'] : ['A', 'B']
+    const round = state.rounds[findRoundIndex(mod)]!
+
+    if (bothSeats(state)) {
+      // Nothing to offer a seat that has claimed and has not been contradicted: it is waiting on
+      // the other one, and a control that re-submits the same answer is noise.
+      if (round.reports[seat] !== null && !disputedRound(round)) return []
+    }
+
     return [
       {
         type: 'REPORT_RESULT',
         moduleId: mod.id,
         roundIndex: findRoundIndex(mod),
         outcomes,
+        // What the *other* seat has claimed, so the client can render "confirm or disagree"
+        // without deciding on its own that this is a confirmation (§11 non-negotiable 4).
+        confirming: bothSeats(state) ? round.reports[otherSeat(seat)] : null,
       },
     ]
   },
@@ -66,7 +93,7 @@ export const reportResult: PhaseModule<ReportModule> = {
     if (p.type !== 'REPORT_RESULT') {
       return reject('WRONG_PHASE', `${mod.id} expects REPORT_RESULT, got ${p.type}`)
     }
-    if (reported(state, mod)) {
+    if (resolved(state, mod)) {
       return reject('DUPLICATE_COMMIT', `round ${mod.roundIndex} is already reported`)
     }
     if (p.outcome === 'TIE' && !mod.allowTie) {
@@ -75,15 +102,44 @@ export const reportResult: PhaseModule<ReportModule> = {
 
     const next = cloneState(state)
     const round = roundOf(next, mod)
-    round.result = p.outcome
-    applyScore(next, p.outcome, +1)
+
+    if (!bothSeats(next)) {
+      // D15 — one claim settles it. Unchanged, and the `reports` entry is recorded alongside so
+      // the two shapes leave the same shape of state behind.
+      round.reports[p.reportedBy] = p.outcome
+      round.result = p.outcome
+      applyScore(next, p.outcome, +1)
+      next.log.push(event)
+      return { ok: true, state: next }
+    }
+
+    if (round.reports[p.reportedBy] === p.outcome) {
+      // Re-sending the same claim changes nothing and would otherwise sit in the log as a second
+      // event saying the same thing. Refused rather than absorbed, so a double-clicked button is
+      // visibly a no-op instead of quietly growing the log.
+      return reject('DUPLICATE_COMMIT', `seat ${p.reportedBy} already claimed ${p.outcome}`)
+    }
+
+    round.reports[p.reportedBy] = p.outcome
+    const other = round.reports[otherSeat(p.reportedBy)]
+
+    /*
+     * Agreement resolves. Disagreement does **not** — and it also does not pick a winner, escalate,
+     * or invent a tiebreak. The round simply stays open with both claims on it, both seats able to
+     * change theirs, and (in a tournament) the slot showing as disputed to the organizer. Two
+     * people who disagree about who won is not a case an algorithm should settle.
+     */
+    if (other !== null && other === p.outcome) {
+      round.result = p.outcome
+      applyScore(next, p.outcome, +1)
+    }
 
     next.log.push(event)
     return { ok: true, state: next }
   },
 
   isComplete({ state, mod }: Ctx): boolean {
-    return reported(state, mod)
+    return resolved(state, mod)
   },
 }
 
@@ -103,9 +159,13 @@ export function applyScore(state: Ctx['state'], outcome: RoundOutcome, sign: 1 |
   }
 }
 
-function reported(state: Ctx['state'], mod: ReportModule): boolean {
-  return (
-    state.rounds[findRoundIndex(mod)]?.result !== null &&
-    state.rounds[findRoundIndex(mod)]?.result !== undefined
-  )
+/** Agreed, and therefore scored. A disputed round is reported twice and resolved zero times. */
+function resolved(state: Ctx['state'], mod: ReportModule): boolean {
+  const result = state.rounds[findRoundIndex(mod)]?.result
+  return result !== null && result !== undefined
+}
+
+/** D38 — read off the snapshotted ruleset, so a replay applies what the match was played under. */
+function bothSeats(state: Ctx['state']): boolean {
+  return state.ruleset.resultReporting === 'BOTH_SEATS'
 }

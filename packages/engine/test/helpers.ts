@@ -85,7 +85,8 @@ export const blindBanMode: ModeDefinition = {
 
 export interface MatchOptions {
   mode: ModeDefinition
-  draftCount: 3 | 4
+  /** Omit for a mode that declares no parameters — D36's Bo1 fixes its draft at three. */
+  draftCount?: 3 | 4
   seed?: string
   roster?: Roster
   globalBanned?: CharId[]
@@ -104,7 +105,12 @@ export interface MatchOptions {
  */
 export function startMatch(opts: MatchOptions): MatchState {
   const roster = opts.roster ?? ROSTER_10
-  const resolved = resolveMode(opts.mode, { draftCount: opts.draftCount })
+  // `resolveMode` refuses a parameter the mode does not declare, so a parameterless mode has to
+  // be handed nothing rather than `{ draftCount: undefined }`.
+  const resolved = resolveMode(
+    opts.mode,
+    opts.draftCount === undefined ? {} : { draftCount: opts.draftCount },
+  )
 
   const ruleset: Ruleset = {
     modeId: resolved.modeId,
@@ -115,9 +121,12 @@ export function startMatch(opts: MatchOptions): MatchState {
     onTie: resolved.onTie,
     match: resolved.match,
     overtime: resolved.overtime,
+    // D38 — D15's one-sided reporting, which is what every engine fixture has always assumed.
+    // The two-sided shape gets its own tests rather than changing these.
+    resultReporting: 'ONE_SIDED',
     // Phase 2 computes this for real over the canonical mode content. Here it only has to be
     // stable, so the test fixtures are stable.
-    modeContentHash: `test-${resolved.modeId}-${opts.draftCount}`,
+    modeContentHash: `test-${resolved.modeId}-${opts.draftCount ?? 'fixed'}`,
   }
 
   let state = expectOk(

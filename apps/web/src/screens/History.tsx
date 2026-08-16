@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react'
 import {
   fetchMatches,
   fetchMatchups,
+  fetchTournaments,
   type MatchDetail,
   type MatchRecord,
   type Matchup,
+  type TournamentSummary,
 } from '../api.js'
 
 /**
@@ -23,15 +25,17 @@ import {
 export function History({ onBack }: { onBack: () => void }) {
   const [matches, setMatches] = useState<MatchRecord[] | null>(null)
   const [matchups, setMatchups] = useState<Matchup[]>([])
+  const [tournaments, setTournaments] = useState<TournamentSummary[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
-    Promise.all([fetchMatches(), fetchMatchups()])
-      .then(([m, mu]) => {
+    Promise.all([fetchMatches(), fetchMatchups(), fetchTournaments()])
+      .then(([m, mu, t]) => {
         if (!live) return
         setMatches(m)
         setMatchups(mu)
+        setTournaments(t)
       })
       .catch(() => {
         if (live) setError('Could not load the history.')
@@ -55,6 +59,34 @@ export function History({ onBack }: { onBack: () => void }) {
         <p className="alert" role="alert">
           {error}
         </p>
+      ) : null}
+
+      {/*
+       * D37 Phase 8 — tournaments, above the matchups.
+       *
+       * Served from the registry rather than from any tournament object: those are swept a week
+       * after their last activity (D42), and a week later is usually exactly when somebody wants
+       * to look up who won.
+       */}
+      {tournaments.length > 0 ? (
+        <section className="panel">
+          <h2 className="panel__title">Tournaments</h2>
+          <ul className="matchups">
+            {tournaments.map((t) => (
+              <li key={t.code} className="matchup">
+                <a className="matchup__names" href={`/t/${t.code}`}>
+                  {t.code}
+                </a>
+                <span className="matchup__record">
+                  {t.champion ? `${t.champion} won` : 'in progress'}
+                </span>
+                <span className="matchup__played">
+                  {t.entrants.length} {t.entrants.length === 1 ? 'entrant' : 'entrants'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {matchups.length > 0 ? (
@@ -113,6 +145,12 @@ export function MatchCard({ match }: { match: MatchRecord }) {
           {formatScore(match.scoreA)}–{formatScore(match.scoreB)}
         </span>
         <span className="hmatch__winner">{match.winnerId === null ? 'Draw' : `${winner} won`}</span>
+        {/* D37 — a bracket match is not a casual one, and the record should say so. */}
+        {match.tournamentId ? (
+          <a className="hmatch__tournament" href={`/t/${match.tournamentId}`}>
+            {match.tournamentId}
+          </a>
+        ) : null}
         <span className="hmatch__when">{whenever(match.playedAt)}</span>
       </div>
 

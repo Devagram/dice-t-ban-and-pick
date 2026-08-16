@@ -1,5 +1,5 @@
 import {
-  ROUND_COUNT,
+  regulationRounds,
   SEATS,
   type EventEnvelope,
   type MatchOutcome,
@@ -44,6 +44,18 @@ export function reduce(state: MatchState | null, event: EventEnvelope): ReduceRe
   if (event.payload.type === 'PAIRING_RESOLVED') return resolvePairing(state, event)
   if (event.payload.type === 'UNDO_LAST_RESULT') return undoLastResult(state, event)
   if (event.payload.type === 'AMEND_RESULT') return amendResult(state, event)
+  /*
+   * D39 — a tournament has advanced on this result.
+   *
+   * Accepted at any status, including COMPLETE, because that is the only status it ever arrives
+   * at: the bracket consumes a *finished* match. Idempotent by being additive — a second freeze
+   * says the same thing the first one did.
+   */
+  if (event.payload.type === 'RESULTS_FROZEN') {
+    const next = cloneState(state)
+    next.log.push(event)
+    return { ok: true, state: next }
+  }
   if (event.payload.type === 'MATCH_COMPLETE') {
     const next = cloneState(state)
     next.status = 'COMPLETE'
@@ -249,22 +261,23 @@ function undoLastResult(state: MatchState, event: EventEnvelope): ReduceResult {
 // --- Match resolution (§10, D21) ------------------------------------------------------------
 
 /**
- * `ALWAYS_3_ROUNDS` with `stopWhenDecided`, and D30's overtime.
+ * The mode's declared regulation length with `stopWhenDecided`, and D30's overtime.
  *
  * Regulation is the general form `|lead| > roundsRemaining`, which reduces to exactly what D21
- * describes: after two rounds only 2–0 is settled, because at 1.5–0.5 a draw is still reachable
- * and a draw is a legal terminal state.
+ * describes for a Bo3: after two rounds only 2–0 is settled, because at 1.5–0.5 a draw is still
+ * reachable and a draw is a legal terminal state. The same expression handles D36's one-round
+ * mode without a branch — a single round has nothing remaining and nothing to skip.
  *
  * **Overtime is counted separately, and that separation is the whole trick.** It is a round in
  * the program but not a round anyone can win the match in during regulation, so folding it into
  * `remaining` would make a 2–0 lead after two rounds look unsettled and drag a dead rubber back
- * onto the board. `ROUND_COUNT` is therefore the regulation count and `state.rounds.length` is
- * the array size — see the note on both in `@banpick/types`.
+ * onto the board. `regulationRounds` is therefore the regulation count and `state.rounds.length`
+ * is the array size — see the note on both in `@banpick/types`.
  */
 export function isDecided(state: MatchState): boolean {
   if (state.cursor >= state.mode.program.length) return true
 
-  const regulation = state.rounds.filter((r) => r.index < ROUND_COUNT)
+  const regulation = state.rounds.filter((r) => r.index < regulationRounds(state.mode.match))
   const remaining = regulation.length - regulation.filter((r) => r.result !== null).length
   const lead = Math.abs(state.seats.A.score - state.seats.B.score)
 
@@ -287,7 +300,7 @@ export function isDecided(state: MatchState): boolean {
  * answer without anyone remembering to special-case it.
  */
 function bothSeatsCanPlayOn(state: MatchState): boolean {
-  const overtime = state.rounds.find((r) => r.index >= ROUND_COUNT)
+  const overtime = state.rounds.find((r) => r.index >= regulationRounds(state.mode.match))
   return SEATS.every(
     (seat) =>
       state.seats[seat].slots.value.some((slot) => !slot.consumed) ||

@@ -87,6 +87,12 @@ export function rulesetFor(
   rosterVersion: string,
   globalBanned: string[],
   allowRepeatBans: boolean,
+  /**
+   * D38 — defaulted to D15's one-sided reporting, so every existing caller keeps the behaviour it
+   * had. Only a tournament passes `BOTH_SEATS`, and it does so at provisioning, which is what
+   * makes confirmation a property of the match rather than a mode of the app.
+   */
+  resultReporting: Ruleset['resultReporting'] = 'ONE_SIDED',
 ): Ruleset {
   return {
     modeId: variant.mode.modeId,
@@ -104,6 +110,7 @@ export function rulesetFor(
     onTie: variant.mode.onTie,
     match: variant.mode.match,
     overtime: variant.mode.overtime,
+    resultReporting,
     modeContentHash: variant.modeContentHash,
   }
 }

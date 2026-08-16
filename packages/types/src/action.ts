@@ -52,6 +52,18 @@ export type Action =
       moduleId: string
       roundIndex: RoundIdx
       outcomes: RoundOutcome[]
+      /**
+       * D38 — what the opponent has already claimed, when they have claimed something.
+       *
+       * The whole reason it is here rather than derived: §11 non-negotiable 4 says the client
+       * renders `legalActions()` and never computes legality. Without this the client would have
+       * to look at the round, notice the other seat has reported, and decide on its own that this
+       * is now a *confirmation* — which is the rule leaking into the client by another route.
+       *
+       * `null` means nobody has reported yet, so every outcome is an ordinary claim. Non-null
+       * means one of `outcomes` is "agree" and the rest are "disagree", and the client can say so.
+       */
+      confirming: RoundOutcome | null
     }
   /**
    * Take hold of your own die.

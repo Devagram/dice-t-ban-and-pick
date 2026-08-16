@@ -106,6 +106,8 @@ export interface MatchRecord {
     rounds: (string | null)[]
     seats: Record<'A' | 'B', { drafted: string[]; played: string[]; metaBan: string | null }>
   } | null
+  /** D37 — present only for a bracket match. The history page badges these. */
+  tournamentId?: string
 }
 
 export interface HeadToHead {
@@ -250,6 +252,140 @@ export function adminDeleteMatch(key: string, roomCode: string): Promise<void> {
     headers: { 'content-type': 'application/json', 'x-admin-key': key },
     body: JSON.stringify({ roomCode }),
   }).then(json<{ ok: true }>) as unknown as Promise<void>
+}
+
+// --- D37: tournaments -----------------------------------------------------------------------------
+
+/**
+ * The bracket, as the server sends it.
+ *
+ * Declared here rather than imported, because the client **cannot** import `@banpick/bracket` —
+ * `scripts/check-boundaries.mjs` fails the build if it tries. That rule is about authority rather
+ * than secrecy: a client holding `advance` would eventually predict a result optimistically, and
+ * an optimistic bracket disagreeing with the server is the two-truths failure D39 exists to
+ * prevent. So the client is told the whole bracket and given no way to compute one.
+ */
+export type SlotStatus =
+  | 'PENDING'
+  | 'READY'
+  | 'DONE'
+  | 'BYE'
+  | 'DISPUTED'
+  | 'VOIDED'
+  | 'DRAWN'
+  /** D37 — overlaid by the tournament, not derived by the bracket: a room exists and is being played. */
+  | 'LIVE'
+
+export type BracketSide = 'WINNERS' | 'LOSERS' | 'GRAND_FINAL'
+
+export interface BracketSlot {
+  slot: {
+    id: string
+    side: BracketSide
+    round: number
+    match: number
+    winnerTo: string | null
+    loserTo: string | null
+  }
+  status: SlotStatus
+  /** `null` where the side is a bye or not yet known — `status` says which. */
+  entrants: [string | null, string | null]
+  winner: string | null
+  position: string
+  modeId: string
+  roomCode: string | null
+}
+
+export interface TournamentEntrant {
+  entrantId: string
+  playerId: string
+  displayName: string
+  seed: number
+}
+
+export interface TournamentView {
+  code: string
+  status: string
+  format: 'SINGLE_ELIMINATION' | 'DOUBLE_ELIMINATION'
+  grandFinalReset: boolean
+  createdAt: number
+  entrants: TournamentEntrant[]
+  slots: BracketSlot[]
+  champion: string | null
+  complete: boolean
+  /**
+   * D37 Phase 8 — this bracket came from the registry's archive, not from a live tournament.
+   *
+   * Set only once the tournament object has been swept (D42, seven days). Nothing here can change
+   * again, so there is nothing to watch: the page says so and does not open a socket.
+   */
+  archived?: boolean
+}
+
+/** D37 Phase 8 — one line per tournament, from the registry rather than from any tournament. */
+export interface TournamentSummary {
+  code: string
+  format: string
+  entrants: string[]
+  champion: string | null
+  createdAt: number
+  updatedAt: number
+  complete: boolean
+}
+
+/**
+ * Every tournament this deployment has seen.
+ *
+ * Served by `RegistryDO`, not by the tournaments themselves — those are swept a week after their
+ * last activity (D42), and a week later is usually exactly when somebody wants to look up who won.
+ */
+export function fetchTournaments(): Promise<TournamentSummary[]> {
+  return fetch('/api/tournaments')
+    .then(json<{ tournaments: TournamentSummary[] }>)
+    .then((r) => r.tournaments ?? [])
+}
+
+export function fetchTournament(code: string): Promise<TournamentView> {
+  return fetch(`/api/tournament/${encodeURIComponent(code)}`).then(json<TournamentView>)
+}
+
+/** What the organizer types: a name, and the player id it should count towards. */
+export interface EntrantInput {
+  playerId: string
+  displayName: string
+}
+
+export interface TournamentConfigInput {
+  format?: 'SINGLE_ELIMINATION' | 'DOUBLE_ELIMINATION'
+  seeding?: 'AS_ENTERED' | 'RANDOM' | 'MANUAL'
+  grandFinalReset?: boolean
+  default?: { modeId: string }
+  overrides?: Record<string, { modeId: string }>
+}
+
+/**
+ * The one response in the app that cannot be fetched again.
+ *
+ * The organizer token and every entrant token exist here and nowhere else — only their hashes are
+ * stored (D41), the same contract D17 gives a seat token. Whatever the screen does not put on
+ * screen is gone.
+ */
+export interface CreatedTournament {
+  code: string
+  url: string
+  organizerToken: string
+  entrants: { entrantId: string; displayName: string; seed: number; url: string }[]
+}
+
+export function createTournament(body: {
+  entrants: EntrantInput[]
+  config: TournamentConfigInput
+}): Promise<CreatedTournament> {
+  return fetch('/api/tournament', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(json<CreatedTournament>)
 }
 
 // --- D35: the player directory ------------------------------------------------------------------

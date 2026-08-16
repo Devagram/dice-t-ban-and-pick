@@ -25,6 +25,8 @@ export { createMatch, ENGINE_VERSION, majorOf } from './createMatch.js'
 
 export { rollDie, rollDice, type RollKey } from './rng.js'
 export * from './pools.js'
-export { MODES, baseMode, bringBan1Mode } from './modes/index.js'
+export { MODES, baseMode, bringBan1Mode, bo1Bring3Ban1Mode } from './modes/index.js'
 export { moduleFor, REGISTRY } from './modules/index.js'
+/** D39 — the worker asks this to explain a frozen match; the engine asks it to gate the undo. */
+export { resultsFrozen, undoableRound } from './undoWindow.js'
 export type { PhaseModule, ModuleCtx, ApplyResult } from './context.js'

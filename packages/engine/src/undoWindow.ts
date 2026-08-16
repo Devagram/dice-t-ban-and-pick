@@ -27,8 +27,31 @@ export function roundHasPlayerAction(state: MatchState, index: RoundIdx): boolea
   )
 }
 
+/**
+ * **D39 — an outside authority has consumed this result, and the players may no longer change it.**
+ *
+ * Read off the log rather than a field, because everything here is: `RESULTS_FROZEN` is appended
+ * when a tournament advances its bracket on this match, so it replays like every other fact and
+ * `legalActions` stops offering the undo instead of offering a button the server will refuse.
+ *
+ * Only the *players* are stopped. An organizer correction re-derives the bracket from a corrected
+ * log (plan Phase 7), which is a different path with a different authority behind it — the point
+ * is not that the result is immutable, it is that it is no longer only these two people's to
+ * change.
+ */
+export function resultsFrozen(state: MatchState): { frozen: boolean; reason: string } {
+  for (const event of state.log) {
+    if (event.payload.type === 'RESULTS_FROZEN') {
+      return { frozen: true, reason: event.payload.reason }
+    }
+  }
+  return { frozen: false, reason: '' }
+}
+
 /** The round whose result may still be undone, or `null` if none may. */
 export function undoableRound(state: MatchState): RoundIdx | null {
+  if (resultsFrozen(state).frozen) return null
+
   for (let i = state.rounds.length - 1; i >= 0; i--) {
     const round = state.rounds[i]!
     if (round.result === null) continue

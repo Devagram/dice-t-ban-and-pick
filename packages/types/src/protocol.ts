@@ -101,6 +101,21 @@ export type ServerMessage =
    */
   | { type: 'REMATCH'; roomCode: string; by: Seat }
   /**
+   * **D37 — the whole bracket, to everyone watching it.**
+   *
+   * Sent in full on connect and again on every change, with no deltas — the same choice D17 makes
+   * for `VIEW` and for the same reason: a reconnect stops being a special case, and there is no
+   * client-side merge that can drift from the server.
+   *
+   * `view` is a `TournamentView` (entrants, slot statuses, advancement, room codes). It is
+   * deliberately **not** typed as such here: `@banpick/types` is the wire contract shared with the
+   * client, and the tournament's shape lives in the worker beside the object that owns it. What
+   * the client needs from this package is that a frame of this type exists and carries a payload;
+   * what it may safely contain is a property of the sender, asserted on the real frame by the
+   * redaction test rather than promised by a type.
+   */
+  | { type: 'BRACKET'; view: unknown }
+  /**
    * D33 — someone corrected an earlier round, and the other seat is told rather than left to
    * notice the score move.
    *

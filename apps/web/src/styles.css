@@ -2686,6 +2686,267 @@ select {
   font-size: 0.75rem;
 }
 
+/* D37 — the badge that says a match was played in a bracket rather than casually. */
+.hmatch__tournament {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* --- D37: the bracket ------------------------------------------------------- */
+
+/*
+ * Scrolls inside its own box, and this is the load-bearing rule.
+ *
+ * 32 entrants is roughly 1400 units wide. Letting that reach the document would put a horizontal
+ * scrollbar on the *page*, which makes every other screen feel broken on a phone — the bracket
+ * would have broken the app rather than merely being wide.
+ */
+.bracket__scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  padding-bottom: 0.5rem;
+}
+
+.bracket__svg {
+  display: block;
+  /* Intrinsic width so the scroll container has something to scroll; never shrunk to fit, because
+     a 32-entrant bracket scaled to a phone is unreadable rather than compact. */
+  min-width: max-content;
+  font-family: var(--font-ui, system-ui, sans-serif);
+}
+
+.bracket__link {
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+/*
+ * **The base draws the box; the states only change what varies.**
+ *
+ * Written this way because the stylesheet already has two scars from the opposite: a `--modifier`
+ * outliving the rule it modified, leaving the variants doing all the drawing and none of them
+ * asked to. Here the shape, fill and stroke live on `.bslot` as custom properties, and a state
+ * sets one variable. Losing a state rule costs a colour; losing the base is impossible, because
+ * without it there are no variables to set.
+ */
+.bslot {
+  --slot-fill: var(--panel);
+  --slot-stroke: var(--line);
+  --slot-stroke-w: 1;
+  --slot-dash: none;
+  --slot-status: var(--muted);
+}
+
+.bslot__box {
+  fill: var(--slot-fill);
+  stroke: var(--slot-stroke);
+  stroke-width: var(--slot-stroke-w);
+  stroke-dasharray: var(--slot-dash);
+}
+
+.bslot__split {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.bslot__name {
+  fill: var(--text);
+  font-size: 12px;
+}
+
+.bslot__name--won {
+  fill: var(--good);
+  font-weight: 600;
+}
+
+.bslot__name--tbd {
+  fill: var(--muted);
+  font-style: italic;
+}
+
+.bslot__meta {
+  fill: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bslot__status {
+  fill: var(--slot-status);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* One state per reason a slot is not simply waiting. Three of them are questions for a person. */
+.bslot--ready {
+  --slot-stroke: var(--accent);
+}
+
+.bslot--live {
+  --slot-stroke: var(--accent);
+  --slot-stroke-w: 2;
+}
+
+.bslot--done {
+  --slot-fill: var(--panel-2);
+}
+
+.bslot--bye {
+  --slot-dash: 3 3;
+}
+
+.bslot--disputed,
+.bslot--drawn {
+  --slot-stroke: var(--warn);
+  --slot-stroke-w: 2;
+  --slot-status: var(--warn);
+}
+
+.bslot--voided {
+  --slot-stroke: var(--danger);
+  --slot-dash: 4 2;
+  --slot-status: var(--danger);
+}
+
+/* The viewer's own match, findable at a glance in a wall of boxes. */
+.bslot--mine {
+  --slot-stroke: var(--gold);
+  --slot-stroke-w: 2;
+}
+
+/*
+ * The accessible bracket: present in the DOM always, off screen visually.
+ *
+ * Not `display: none` — that would hide it from a screen reader too, which is the one audience it
+ * exists for. Restored for print, because an organiser wanting the bracket on paper wants the
+ * list, not a screenshot of an SVG.
+ */
+.bracket__list {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media print {
+  .bracket__scroll {
+    display: none;
+  }
+
+  .bracket__list {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    white-space: normal;
+  }
+}
+
+.tlive {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.tlive--on {
+  color: var(--good);
+}
+
+.tentrants {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tentrant {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.tentrant__seed {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Whether this name joins an existing record or starts one — said on the chip, before creating. */
+.tentrant__note {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+/*
+ * The handover: the one screen in the app whose contents cannot be fetched again.
+ *
+ * Long, unwrappable links in a monospace block, because they are going to be copied rather than
+ * read — and they break to the next line rather than widening the page, which on a phone would
+ * put a horizontal scrollbar on the whole document.
+ */
+.handover {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.handover__row {
+  display: grid;
+  gap: 0.15rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.handover__name {
+  font-weight: 600;
+}
+
+.handover__link {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.handover__token {
+  display: block;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+/* --- D38/D39: confirming a result, and a frozen one ------------------------- */
+
+/* The option that agrees with what the opponent already said. */
+.btn--option-agree {
+  border-color: var(--accent);
+}
+
+.rounds__frozen {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 /* --- D35: player ids and consolidation -------------------------------------- */
 
 /* The key field's answer to "did that work?", which it previously had no way to give. */
