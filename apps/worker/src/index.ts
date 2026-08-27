@@ -30,8 +30,12 @@ const ROSTER = rosterAsset as Roster
  * `merge` operates on. It is **not** what keeps a player id private — `/api/matches` is public
  * and every row on it names both ids. That is a property of D19's no-accounts model rather than
  * an oversight here, but it is the reason this comment does not claim otherwise.
+ *
+ * `add` (D44) writes a match this deployment never refereed. It belongs behind the same key as
+ * `edit` for the same reason: D34's line is about writing the stored record directly, and
+ * inventing a row is that power used a different way rather than a lesser one.
  */
-const ADMIN_ACTIONS = new Set(['edit', 'delete', 'players', 'merge'])
+const ADMIN_ACTIONS = new Set(['add', 'edit', 'delete', 'players', 'merge'])
 
 export { MatchDO } from './MatchDO.js'
 export { PairHistoryDO } from './PairHistoryDO.js'

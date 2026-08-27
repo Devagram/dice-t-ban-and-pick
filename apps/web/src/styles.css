@@ -3067,6 +3067,33 @@ select {
   user-select: all;
 }
 
+/*
+ * D44 — the add-a-match form.
+ *
+ * Shares the edit row's vocabulary (`adminrow__grid`, `adminrow__line`) on purpose: the controls
+ * mean the same things there, and a second visual language for "set the winner" would be two
+ * things to learn for one idea.
+ */
+.addmatch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.addmatch__seat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+/* The counterpart of `hmatch__tournament`: this row was typed in, not reported by two seats. */
+.hmatch__manual {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .merge {
   margin-top: 0.9rem;
   padding-top: 0.9rem;

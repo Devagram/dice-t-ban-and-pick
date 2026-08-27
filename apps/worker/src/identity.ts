@@ -120,3 +120,30 @@ export function tournamentUrl(origin: string, code: string, token?: string): str
 export function joinUrl(origin: string, roomCode: string): string {
   return `${origin}/j/${roomCode}`
 }
+
+// --- D44: a record with no room behind it -------------------------------------------------------
+
+/**
+ * D44 — the code for a match that was added by hand rather than played here.
+ *
+ * `matches` is keyed by room code, so a backfilled game needs one, and it must be a code no room
+ * will ever have: the registry upserts on that key, so a hand-added record wearing a plausible
+ * six-character code would be silently overwritten the day `generateRoomCode` produced it for a
+ * real game. Prefixed for the same reason a tournament code is — the router should never have to
+ * guess what kind of code it is holding — and readable at a glance, because the history and the
+ * dashboard both put it on screen next to codes that *are* rooms.
+ */
+const MANUAL_PREFIX = 'M-'
+
+export function generateManualCode(): string {
+  return `${MANUAL_PREFIX}${generateRoomCode()}`
+}
+
+/*
+ * There is deliberately no `isManualCode` beside this, unlike `isRoomCode` and
+ * `isTournamentCode`. Nothing on the server has to recognise one: `isRoomCode` already rejects an
+ * eight-character code, so a record can never address a room, and the only reader that cares is
+ * the history page — which is on the other side of the boundary `check-boundaries.mjs` enforces
+ * and keeps its own `isHandAdded`. A predicate written here for symmetry would be a second
+ * definition of the prefix that nothing calls.
+ */

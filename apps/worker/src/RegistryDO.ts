@@ -2,6 +2,8 @@
 
 import { DurableObject } from 'cloudflare:workers'
 
+import { generateManualCode } from './identity.js'
+
 /**
  * **D29 — names, results, and the standings derived from them.**
  *
@@ -258,6 +260,8 @@ export class RegistryDO extends DurableObject<Env> {
         return Response.json({ matches: this.matches(limitFrom(request)) })
       case 'matchups':
         return Response.json({ matchups: this.matchups() })
+      case 'add':
+        return this.add(request)
       case 'edit':
         return this.edit(request)
       case 'delete':
@@ -818,6 +822,151 @@ export class RegistryDO extends DurableObject<Env> {
   }
 
   /**
+   * **D44 — a game that was played, but not here.**
+   *
+   * Every other row in this table is the residue of a match this deployment refereed: a room was
+   * opened, both seats reported, and `record` filed what the log said. This one has no log behind
+   * it at all. It is the evening somebody's laptop was flat, or the six games from before anyone
+   * thought to open the site — history that exists and is simply not written down.
+   *
+   * So it sits beside `edit` rather than beside `record`, behind the same key and for the same
+   * reason: D34 drew the line at *changing the stored record directly*, and inventing one is the
+   * same power used a different way. `record` stays where it is, callable only by a match object
+   * that watched the game happen.
+   *
+   * Two things it deliberately will not do:
+   *
+   * - **It never writes `tournament_id`.** A bracket's results belong to the bracket (D39), which
+   *   derives itself from resolved slots; a hand-written row claiming to be a tournament match
+   *   would be the second truth that decision exists to prevent. A tournament game that went
+   *   unrecorded is fixed from the organizer console, not from here.
+   * - **It stores no rosters.** `detail.seats` is what each side drafted, and nobody drafted
+   *   anything — the history page already renders a match without them, and inventing an empty
+   *   pair of rosters would make a game that was never drafted look like one that was.
+   */
+  private async add(request: Request): Promise<Response> {
+    let body: Record<string, unknown>
+    try {
+      body = (await request.json()) as Record<string, unknown>
+    } catch {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+
+    const a = this.seatFor(body['aId'], body['aName'])
+    const b = this.seatFor(body['bId'], body['bName'])
+    if (!a || !b) {
+      return Response.json(
+        { error: 'MISSING_PLAYER', detail: 'each seat needs a player id, or a name to mint one' },
+        { status: 400 },
+      )
+    }
+    if (a.id === b.id) {
+      return Response.json(
+        { error: 'SELF_MATCH', detail: 'both seats are the same player' },
+        { status: 409 },
+      )
+    }
+
+    const roomCode = this.freeRecordCode()
+    if (!roomCode) {
+      return Response.json(
+        { error: 'CODE_EXHAUSTED', detail: 'could not allocate a code for the record' },
+        { status: 503 },
+      )
+    }
+
+    const rounds = playedRounds(body['rounds'])
+    const match: MatchRecord = {
+      roomCode,
+      // A backfilled game is usually an old one, and `played_at` is what the history sorts on —
+      // so a date that lands it in the wrong week is the whole feature failing quietly. Absent
+      // means now, which is right for "we just finished this off the app".
+      playedAt: playedAt(body['playedAt']),
+      a,
+      b,
+      // Absent is a draw rather than an error: `normalizeWinner` falls back to what is already on
+      // the record, and on a record being created that is nothing. The dashboard always sends one.
+      winnerId: null,
+      scoreA: num(body['scoreA']) ?? 0,
+      scoreB: num(body['scoreB']) ?? 0,
+      detail: rounds ? { rounds } : null,
+    }
+    match.winnerId = normalizeWinner(body['winnerId'], match)
+
+    this.sql.exec(
+      `INSERT INTO matches
+         (room_code, played_at, a_id, a_name, b_id, b_name, winner_id, score_a, score_b, detail,
+          tournament_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      match.roomCode,
+      match.playedAt,
+      match.a.id,
+      match.a.name,
+      match.b.id,
+      match.b.name,
+      match.winnerId,
+      match.scoreA,
+      match.scoreB,
+      JSON.stringify(match.detail),
+    )
+    return Response.json({ ok: true, match })
+  }
+
+  /**
+   * One seat of a hand-added match: an existing id, or a name with a fresh id minted for it.
+   *
+   * The second half is the part worth defending. A player id comes from a browser (D35), so
+   * somebody who has never opened the site has no id to attribute a game to — and the group this
+   * app is for contains exactly that person. Refusing would make the feature useless for the
+   * evening it exists to record; typing a name into a text field and calling it a player would
+   * make the leaderboard a fiction.
+   *
+   * So a name with no id gets an id, and it is a real one: it counts, it can be reassigned, and
+   * when that person does open the site D35's merge folds the two together. That is the same
+   * repair path a second laptop already uses, which is the argument for minting here rather than
+   * inventing a second kind of player that only the admin screen understands.
+   *
+   * An id that was given wins over a name that was not: `names` is where a claimed name lives, and
+   * a caller who sent an id and no name means "whoever that is", not "nobody".
+   */
+  private seatFor(id: unknown, name: unknown): { id: string; name: string } | null {
+    const known = playerRef(id)
+    const label = str(name)
+    if (!known && !label) return null
+    const playerId = known ?? `p_${crypto.randomUUID()}`
+    return { id: playerId, name: label ?? this.claimedName(playerId) }
+  }
+
+  /** The name this id claimed, if it ever claimed one. Empty is an ordinary answer. */
+  private claimedName(playerId: string): string {
+    const row = this.sql
+      .exec<{
+        name: string
+      }>('SELECT name FROM names WHERE player_id = ? ORDER BY claimed_at LIMIT 1', playerId)
+      .toArray()[0]
+    return row?.name ?? ''
+  }
+
+  /**
+   * A record code nothing else holds, or `null`.
+   *
+   * Checked rather than upserted, unlike every other write here. `record` upserts because a match
+   * that completes twice is one match; two hand-added games are two games, and collapsing them
+   * onto a collision would delete one without saying so. The registry can see the whole table, so
+   * it can simply look — the retry loop covers the birthday case rather than a real shortage.
+   */
+  private freeRecordCode(): string | null {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = generateManualCode()
+      const taken = this.sql
+        .exec('SELECT room_code FROM matches WHERE room_code = ?', code)
+        .toArray()
+      if (taken.length === 0) return code
+    }
+    return null
+  }
+
+  /**
    * D34 — an admin correction to a stored match.
    *
    * **This edits the record, not the log**, and the difference is the reason it sits behind a key
@@ -1091,4 +1240,31 @@ function withRounds(detail: unknown, rounds: unknown): unknown {
   const base = (detail ?? {}) as Record<string, unknown>
   if (!Array.isArray(rounds)) return detail
   return { ...base, rounds: rounds.map((r) => (r === 'A' || r === 'B' || r === 'TIE' ? r : null)) }
+}
+
+/**
+ * D44 — the round results of a hand-added match, or `null` if nobody says how it went.
+ *
+ * Trailing unplayed rounds are dropped rather than stored. `stopWhenDecided` means a real 2–0 Bo3
+ * stores `['A', 'A', null]` and the history renders that third `—` as "not played" — true of a
+ * game that ended early, and misleading on a record whose owner simply did not fill the row in.
+ * An array with nothing in it at all becomes no `detail`, which is the shape the history already
+ * handles: a result with no round-by-round behind it.
+ */
+function playedRounds(value: unknown): (('A' | 'B' | 'TIE') | null)[] | null {
+  if (!Array.isArray(value)) return null
+  const rounds = value.map((r) => (r === 'A' || r === 'B' || r === 'TIE' ? r : null))
+  while (rounds.length > 0 && rounds[rounds.length - 1] === null) rounds.pop()
+  return rounds.length > 0 ? rounds : null
+}
+
+/**
+ * When a hand-added match was played. Absent, or nonsense, means now.
+ *
+ * The history sorts on this and renders it as "3d ago", so a zero or a negative from a date field
+ * that failed to parse would file the game in 1970 and bury it under everything.
+ */
+function playedAt(value: unknown): number {
+  const at = num(value)
+  return at !== undefined && at > 0 ? Math.floor(at) : Date.now()
 }

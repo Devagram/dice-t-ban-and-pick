@@ -212,3 +212,190 @@ describe('what an admin edit changes', () => {
     expect((await admin('edit', { roomCode: 'ZZZZZZ', scoreA: 3 }, key())).status).toBe(404)
   })
 })
+
+/**
+ * **D44 — adding a game that was played somewhere else.**
+ *
+ * Every other row in `matches` is the residue of a match this deployment refereed. These are not,
+ * and the tests worth having are about that difference holding: the record counts everywhere a
+ * played one does, it is marked as hand-written rather than passed off as reported, and it cannot
+ * be used to reach the two places D34 and D39 keep shut — the door with no key, and a bracket.
+ */
+describe('adding a match by hand', () => {
+  const key = () => String(env.ADMIN_KEY)
+
+  const add = (body: Record<string, unknown>, useKey = key()) => admin('add', body, useKey)
+
+  const added = async (body: Record<string, unknown>) => {
+    const response = await add(body)
+    expect(response.status).toBe(200)
+    return ((await response.json()) as { match: MatchRecordish }).match
+  }
+
+  it('refuses without the key, like every other write to the record', async () => {
+    // `admin` rather than `add`: the no-key case has to send no header at all, which a default
+    // argument cannot express.
+    expect((await admin('add', { aId: 'nk-1', bId: 'nk-2', winnerId: 'A' })).status).toBe(401)
+    expect((await add({ aId: 'nk-1', bId: 'nk-2', winnerId: 'A' }, 'not-the-key')).status).toBe(401)
+  })
+
+  it('files a match nobody played here, and the standings count it', async () => {
+    const match = await added({
+      aId: 'add-1',
+      aName: 'Tom',
+      bId: 'add-2',
+      bName: 'Alex',
+      winnerId: 'A',
+      scoreA: 2,
+      scoreB: 1,
+      rounds: ['A', 'B', 'A'],
+    })
+
+    // The winner comes back as a player id: the dashboard speaks seats, storage speaks ids, and a
+    // seat letter left in `winner_id` would count for nobody.
+    expect(match.winnerId).toBe('add-1')
+
+    const h2h = (await (
+      await SELF.fetch('https://example.com/api/head-to-head?a=add-1&b=add-2')
+    ).json()) as { wins: number; losses: number; matches: { roomCode: string }[] }
+    expect(h2h).toMatchObject({ wins: 1, losses: 0 })
+    expect(h2h.matches.map((m) => m.roomCode)).toContain(match.roomCode)
+  })
+
+  it('takes a code no room can ever have', async () => {
+    const match = await added({ aId: 'code-1', bId: 'code-2', winnerId: 'B' })
+    /*
+     * `record` upserts by room code. A hand-added row wearing a plausible six-character code would
+     * be silently overwritten the day `generateRoomCode` minted the same one for a real game — so
+     * the prefix is what keeps the two namespaces apart, not a decoration.
+     */
+    expect(match.roomCode.startsWith('M-')).toBe(true)
+    expect(match.roomCode).toHaveLength(8)
+  })
+
+  it('gives each added game its own row rather than upserting over the last', async () => {
+    const first = await added({ aId: 'twice-1', bId: 'twice-2', winnerId: 'A' })
+    const second = await added({ aId: 'twice-1', bId: 'twice-2', winnerId: 'B' })
+
+    expect(second.roomCode).not.toBe(first.roomCode)
+    const h2h = (await (
+      await SELF.fetch('https://example.com/api/head-to-head?a=twice-1&b=twice-2')
+    ).json()) as { wins: number; losses: number }
+    // Two evenings are two games. `record` collapses a repeat because a match that completes twice
+    // is one match; this must not, or the second entry deletes the first.
+    expect(h2h).toMatchObject({ wins: 1, losses: 1 })
+  })
+
+  it('mints a player id for somebody who has never opened the site', async () => {
+    const match = await added({
+      aId: 'known-1',
+      aName: 'Tom',
+      bName: 'Visiting Sam',
+      winnerId: 'B',
+    })
+
+    // A name with no id is the case this exists for — a friend with no browser here. It becomes a
+    // real id, so it counts, it can be reassigned, and D35's merge folds it into their own later.
+    expect(match.b.id).toMatch(/^p_/)
+    expect(match.b.name).toBe('Visiting Sam')
+    expect(match.winnerId).toBe(match.b.id)
+
+    const players = (await (
+      await SELF.fetch('https://example.com/api/admin/players', {
+        headers: { 'x-admin-key': key() },
+      })
+    ).json()) as { players: { playerId: string; played: number; wins: number }[] }
+    expect(players.players.find((p) => p.playerId === match.b.id)).toMatchObject({
+      played: 1,
+      wins: 1,
+    })
+  })
+
+  it('refuses a seat that names nobody at all', async () => {
+    const response = await add({ aId: 'lonely-1', winnerId: 'A' })
+    expect(response.status).toBe(400)
+    expect(((await response.json()) as { error: string }).error).toBe('MISSING_PLAYER')
+  })
+
+  it('refuses a match somebody played against themselves', async () => {
+    const response = await add({ aId: 'same-1', bId: 'same-1', winnerId: 'A' })
+    expect(response.status).toBe(409)
+    expect(((await response.json()) as { error: string }).error).toBe('SELF_MATCH')
+  })
+
+  it('stores no rosters, because nobody drafted anything', async () => {
+    const match = await added({ aId: 'plain-1', bId: 'plain-2', winnerId: null, rounds: ['TIE'] })
+    // A record with an empty pair of rosters would make a game that was never drafted look like
+    // one that was. `rounds` alone is what the history renders for it.
+    expect(match.detail).toEqual({ rounds: ['TIE'] })
+    expect((match.detail as { seats?: unknown }).seats).toBeUndefined()
+  })
+
+  it('drops trailing rounds nobody played rather than storing them as unplayed', async () => {
+    const match = await added({
+      aId: 'trail-1',
+      bId: 'trail-2',
+      winnerId: 'A',
+      rounds: ['A', 'A', null, null],
+    })
+    // `stopWhenDecided` makes a stored `null` mean "the match ended before this round". A row that
+    // was simply left blank must not claim that.
+    expect(match.detail).toEqual({ rounds: ['A', 'A'] })
+
+    const empty = await added({ aId: 'trail-3', bId: 'trail-4', winnerId: 'A', rounds: [null] })
+    expect(empty.detail).toBeNull()
+  })
+
+  it('files the evening it was played, not the evening it was typed in', async () => {
+    const march = new Date(2026, 2, 14, 20).getTime()
+    const match = await added({ aId: 'when-1', bId: 'when-2', winnerId: 'A', playedAt: march })
+    expect(match.playedAt).toBe(march)
+
+    // Nonsense from a date field that failed to parse would file the game in 1970 and bury it
+    // under everything, which is the one thing this column must not do.
+    const fallback = await added({ aId: 'when-3', bId: 'when-4', winnerId: 'A', playedAt: 0 })
+    expect(fallback.playedAt).toBeGreaterThan(march)
+  })
+
+  it('never claims to belong to a tournament, however hard it is asked', async () => {
+    const match = await added({
+      aId: 'bracket-1',
+      bId: 'bracket-2',
+      winnerId: 'A',
+      tournamentId: 'T-ABC123',
+    })
+    /*
+     * D39: a bracket derives itself from resolved slots, so a hand-written row claiming to be a
+     * tournament match is the second truth that decision exists to prevent. It is also the one
+     * that would make `edit` refuse to touch its own row afterwards.
+     */
+    expect(match.tournamentId).toBeUndefined()
+
+    const editable = await admin('edit', { roomCode: match.roomCode, scoreA: 7 }, key())
+    expect(editable.status).toBe(200)
+  })
+
+  it('has no admin at all on a deployment with no key', async () => {
+    const configured = env.ADMIN_KEY
+    delete (env as { ADMIN_KEY?: string }).ADMIN_KEY
+    try {
+      const response = await add({ aId: 'shut-1', bId: 'shut-2', winnerId: 'A' }, 'anything')
+      expect(response.status).toBe(503)
+      expect(((await response.json()) as { error: string }).error).toBe('ADMIN_DISABLED')
+    } finally {
+      if (configured === undefined) delete (env as { ADMIN_KEY?: string }).ADMIN_KEY
+      else (env as { ADMIN_KEY?: string }).ADMIN_KEY = configured
+    }
+  })
+})
+
+/** Just enough of the stored shape for these assertions; the client owns the real type. */
+interface MatchRecordish {
+  roomCode: string
+  playedAt: number
+  a: { id: string; name: string }
+  b: { id: string; name: string }
+  winnerId: string | null
+  detail: unknown
+  tournamentId?: string
+}

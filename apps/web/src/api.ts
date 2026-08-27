@@ -117,7 +117,8 @@ export interface MatchRecord {
   scoreB: number
   detail: {
     rounds: (string | null)[]
-    seats: Record<'A' | 'B', { drafted: string[]; played: string[]; metaBan: string | null }>
+    /** Absent on a D44 record, which nobody drafted for. Both readers already guard on it. */
+    seats?: Record<'A' | 'B', { drafted: string[]; played: string[]; metaBan: string | null }>
   } | null
   /** D37 — present only for a bracket match. The history page badges these. */
   tournamentId?: string
@@ -202,7 +203,14 @@ export function openRematch(roomCode: string, seatToken: string): Promise<string
 
 export interface MatchDetail {
   rounds: (('A' | 'B' | 'TIE') | null)[]
-  seats: Record<'A' | 'B', { drafted: string[]; played: string[]; metaBan: string | null }>
+  /**
+   * What each side drafted — absent on a match added by hand (D44), which nobody drafted for.
+   *
+   * Optional because it always could be: both readers have guarded on it since they were written,
+   * and the type claiming otherwise was the kind of promise that holds until the first row that
+   * did not come from a played match.
+   */
+  seats?: Record<'A' | 'B', { drafted: string[]; played: string[]; metaBan: string | null }>
 }
 
 export interface Matchup {
@@ -257,6 +265,48 @@ export function adminEditMatch(
   })
     .then(json<{ match: MatchRecord }>)
     .then((r) => r.match)
+}
+
+/**
+ * D44 — files a match this deployment never saw.
+ *
+ * Every field is what the admin typed, because there is no log to read it off. `aId`/`bId` may be
+ * omitted for a seat that has no player id yet — the server mints one from the name, and D35's
+ * merge is how it gets folded into a real id once that person opens the site.
+ */
+export function adminAddMatch(
+  key: string,
+  entry: {
+    aId?: string
+    bId?: string
+    aName?: string
+    bName?: string
+    winnerId: 'A' | 'B' | null
+    scoreA: number
+    scoreB: number
+    rounds?: (('A' | 'B' | 'TIE') | null)[]
+    playedAt?: number
+  },
+): Promise<MatchRecord> {
+  return fetch('/api/admin/add', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-admin-key': key },
+    body: JSON.stringify(entry),
+  })
+    .then(json<{ match: MatchRecord }>)
+    .then((r) => r.match)
+}
+
+/**
+ * Whether this record was added by hand rather than played here (D44).
+ *
+ * Read off the room code, which for a hand-added record is minted with a prefix no room can have.
+ * That is not a decoration: a row nobody's client ever reported is a weaker claim than one two
+ * seats agreed on, and the history says which it is looking at rather than presenting both as the
+ * same kind of fact.
+ */
+export function isHandAdded(roomCode: string): boolean {
+  return roomCode.startsWith('M-')
 }
 
 export function adminDeleteMatch(key: string, roomCode: string): Promise<void> {

@@ -4,7 +4,7 @@ Two-player ban/pick tool for a dice game, with pluggable rulesets.
 
 The design is the primary document — read it before the code:
 
-- [`banpick-design-spec.md`](banpick-design-spec.md) — the spec. Decisions D1–D43.
+- [`banpick-design-spec.md`](banpick-design-spec.md) — the spec. Decisions D1–D44.
 - [`docs/DELIVERY-PLAN.md`](docs/DELIVERY-PLAN.md) — phased plan and exit criteria.
 - [`docs/TOURNAMENT-PLAN.md`](docs/TOURNAMENT-PLAN.md) — the tournament layer, phases 0–9. Reverses D19.
 - [`docs/SPEC-GAPS.md`](docs/SPEC-GAPS.md) — the gap register, all items resolved.
@@ -86,7 +86,8 @@ pointing it at `apps/worker` would put the install and the build in the wrong pl
 
 ### The admin key (D34)
 
-`/admin` edits recorded results, and the Worker refuses every edit unless a key is configured:
+`/admin` edits recorded results — and since D44, adds ones that were played away from the site.
+The Worker refuses every write unless a key is configured:
 
 ```bash
 npx wrangler secret put ADMIN_KEY --config apps/worker/wrangler.jsonc
@@ -141,6 +142,41 @@ measures ~60 requests. Hibernation means an idle match costs essentially nothing
 **Renaming the Worker renames the URL.** `name` in `wrangler.jsonc` is the subdomain label;
 change it before the first deploy rather than after, since existing room codes are addressed
 inside the deployment and resume links embed the origin.
+
+## Adding a game that was played elsewhere (D44)
+
+Every other row in the history is the residue of a match this deployment refereed: a room was
+opened, both seats reported, and the result was filed from the log. Some games are not like that —
+the laptop was flat, or the group played six of them before anyone opened the site — and the
+history was simply missing evenings that happened.
+
+**Add a match** on `/admin` writes one of those rows by hand. It counts everywhere a played match
+does: the leaderboard, head-to-head, and the matchup table are queries over the same `matches`
+rows on every read, so there is no recount step and nothing to keep in sync.
+
+- **Rounds drive the score.** Clicking R1/R2/R3 through `A → B → Tie → unplayed` recomputes both
+  scores and the winner under D21's half-point rule, so a Bo3 is three clicks. Both stay editable
+  for a game the form cannot work out.
+- **A seat can be somebody with no player id.** Choose _Somebody not listed…_ and type a name: the
+  server mints a real id for them, which counts, can be reassigned, and is folded into their own id
+  by D35's merge once they play here. Ids belong to browsers, so a friend who has never opened the
+  site has none — refusing them would make this useless for exactly the evenings it exists to
+  record.
+- **The date is the date it was played**, not the date it was typed. The history sorts on it.
+
+Two things it deliberately will not do. It stores **no rosters**, because nobody drafted anything
+and an empty pair would make a game that was never drafted look like one that was. And it never
+writes a `tournamentId`: a bracket derives itself from resolved slots (D39), so a hand-written row
+claiming to be a tournament match would be the second truth that decision exists to prevent — a
+tournament game that went unrecorded is fixed from the organizer console.
+
+Hand-added rows take a room code prefixed `M-`, which no real room can have — the registry upserts
+by room code, so a record wearing a plausible six-character code would be overwritten the day that
+code was minted for an actual game. The history reads that prefix back and labels the row **added
+by hand**: it counts like any other match, but a row nobody's client ever reported is a weaker
+claim than one two seats agreed on, and the page says which it is showing.
+
+Wrong entries are ordinary rows afterwards — edit or delete them from the same screen.
 
 ## Duplicate players (D35)
 

@@ -4,6 +4,7 @@ import {
   fetchMatches,
   fetchMatchups,
   fetchTournaments,
+  isHandAdded,
   type MatchDetail,
   type MatchRecord,
   type Matchup,
@@ -131,6 +132,9 @@ export function History({ onBack }: { onBack: () => void }) {
 
 export function MatchCard({ match }: { match: MatchRecord }) {
   const detail = match.detail as MatchDetail | null
+  // Bound out of `detail` so the narrowing survives into the callback below — and absent on a
+  // match added by hand (D44), which nobody drafted for.
+  const seats = detail?.seats
   const winner =
     match.winnerId === null ? 'Draw' : match.winnerId === match.a.id ? match.a.name : match.b.name
 
@@ -151,6 +155,13 @@ export function MatchCard({ match }: { match: MatchRecord }) {
             {match.tournamentId}
           </a>
         ) : null}
+        {/*
+         * D44 — and neither is a game somebody typed in afterwards. Both seats reported every
+         * other row on this page; this one is one person's recollection, and saying so is the
+         * difference between a record and a claim. It still counts, which is why the label is a
+         * caption rather than an asterisk.
+         */}
+        {isHandAdded(match.roomCode) ? <span className="hmatch__manual">added by hand</span> : null}
         <span className="hmatch__when">{whenever(match.playedAt)}</span>
       </div>
 
@@ -168,13 +179,13 @@ export function MatchCard({ match }: { match: MatchRecord }) {
         </ol>
       ) : null}
 
-      {detail?.seats ? (
+      {seats ? (
         <div className="hrosters">
           {(['A', 'B'] as const).map((seat) => (
             <Roster
               key={seat}
               name={seat === 'A' ? match.a.name : match.b.name}
-              side={detail.seats[seat]}
+              side={seats[seat]}
             />
           ))}
         </div>

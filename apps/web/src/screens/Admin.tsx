@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import {
   ApiError,
+  adminAddMatch,
   adminDeleteMatch,
   adminEditMatch,
   adminFetchPlayers,
@@ -215,6 +216,12 @@ export function Admin({ onBack }: { onBack: () => void }) {
             'Merged.',
           )
         }
+      />
+
+      <AddMatch
+        players={players}
+        disabled={key.length === 0 || check !== 'accepted'}
+        onAdd={(entry) => run(adminAddMatch(key, entry), 'Match added.')}
       />
 
       <section className="panel">
@@ -481,6 +488,302 @@ function Players({
   )
 }
 
+/**
+ * **D44 — recording a game that was not played here.**
+ *
+ * The rest of this screen corrects rows that a match object filed. This one has no match object
+ * behind it: the laptop was flat, or the group played six games before anyone opened the site, and
+ * the history is missing evenings that happened. Everything here is typed rather than read off a
+ * log, which is exactly why it lives behind the same key as `edit` — see the note at the top.
+ *
+ * Two choices worth stating, because both were the other way in the first draft:
+ *
+ * **The rounds drive the score.** Touching a round button recomputes both scores and the winner
+ * under D21's half-point rule, because typing "2–1" and then clicking A, B, A is doing the same
+ * arithmetic twice and disagreeing with yourself is the likely outcome. Both stay editable
+ * afterwards — a game this app has never refereed should still be recordable — but the common case
+ * is three clicks rather than five fields.
+ *
+ * **A seat may be somebody with no player id.** A friend who has never opened the site has no id
+ * to attribute a game to (D35: ids belong to browsers), and refusing them would make this useless
+ * for precisely the evenings it exists to capture. The server mints one, it counts like any other,
+ * and the merge control above is how it joins their real id later.
+ */
+function AddMatch({
+  players,
+  disabled,
+  onAdd,
+}: {
+  players: PlayerSummary[]
+  disabled: boolean
+  onAdd: (entry: Parameters<typeof adminAddMatch>[1]) => void
+}) {
+  const [seats, setSeats] = useState<Record<'A' | 'B', SeatChoice>>({
+    A: BLANK_SEAT,
+    B: BLANK_SEAT,
+  })
+  const [scoreA, setScoreA] = useState('0')
+  const [scoreB, setScoreB] = useState('0')
+  const [winner, setWinner] = useState<'A' | 'B' | 'DRAW'>('DRAW')
+  const [rounds, setRounds] = useState<(('A' | 'B' | 'TIE') | null)[]>([null, null, null, null])
+  const [when, setWhen] = useState(today)
+
+  /** What to call this seat on the buttons and above the score, before anything is stored. */
+  const named = (seat: 'A' | 'B'): string => {
+    const choice = seats[seat]
+    if (choice.naming) return choice.name.trim()
+    return players.find((p) => p.playerId === choice.id)?.name ?? ''
+  }
+
+  /*
+   * A seat is settled once it names somebody — an id from the directory, or a name to mint one
+   * for. Two seats resolving to the same id is the one combination the server refuses, so the
+   * button refuses it first rather than spending a round trip to be told.
+   */
+  const settled = (seat: 'A' | 'B') =>
+    seats[seat].naming ? named(seat) !== '' : seats[seat].id !== ''
+  const clash = seats.A.id !== '' && seats.A.id === seats.B.id
+  const ready = settled('A') && settled('B') && !clash
+
+  const choose = (seat: 'A' | 'B', value: string) =>
+    setSeats((prev) => ({
+      ...prev,
+      [seat]: value === NEW ? { id: '', naming: true, name: '' } : { ...BLANK_SEAT, id: value },
+    }))
+
+  const submit = () => {
+    // The id when there is one, and the *directory's* name beside it: that is what every other
+    // screen calls this player, and a record captioned differently reads as somebody else. An
+    // empty name is left out rather than sent — the server reads the claimed one, which is a
+    // better answer than blanking the caption.
+    const seatFields = (seat: 'A' | 'B') => {
+      const name = named(seat)
+      return {
+        ...(seats[seat].naming ? {} : { [seat === 'A' ? 'aId' : 'bId']: seats[seat].id }),
+        ...(name ? { [seat === 'A' ? 'aName' : 'bName']: name } : {}),
+      }
+    }
+
+    onAdd({
+      ...seatFields('A'),
+      ...seatFields('B'),
+      winnerId: winner === 'DRAW' ? null : winner,
+      scoreA: Number(scoreA) || 0,
+      scoreB: Number(scoreB) || 0,
+      ...(rounds.some((r) => r !== null) ? { rounds } : {}),
+      playedAt: playedAtFrom(when),
+    })
+
+    setSeats({ A: BLANK_SEAT, B: BLANK_SEAT })
+    setScoreA('0')
+    setScoreB('0')
+    setWinner('DRAW')
+    setRounds([null, null, null, null])
+  }
+
+  return (
+    <section className="panel">
+      <h2 className="panel__title">Add a match</h2>
+      <p className="field__help">
+        For a game played away from the site. It counts on the leaderboard exactly like a game
+        played here, and the history marks it as added by hand rather than reported by both seats.
+      </p>
+
+      {disabled ? (
+        <p className="panel__empty">Enter the admin key to add a match.</p>
+      ) : (
+        <div className="addmatch">
+          {(['A', 'B'] as const).map((seat) => (
+            <div className="addmatch__seat" key={seat}>
+              <label className="field">
+                <span className="field__label">Seat {seat}</span>
+                <select
+                  className="field__input"
+                  aria-label={`Player in seat ${seat}`}
+                  value={seats[seat].naming ? NEW : seats[seat].id}
+                  onChange={(e) => choose(seat, e.target.value)}
+                >
+                  <option value="">Choose…</option>
+                  {players.map((p) => (
+                    <option key={p.playerId} value={p.playerId}>
+                      {p.name || 'Unnamed'} — {p.playerId}
+                    </option>
+                  ))}
+                  <option value={NEW}>Somebody not listed…</option>
+                </select>
+              </label>
+
+              {seats[seat].naming ? (
+                <label className="field">
+                  <span className="field__label">Their name</span>
+                  <input
+                    className="field__input"
+                    aria-label={`Name for seat ${seat}`}
+                    value={seats[seat].name}
+                    onChange={(e) =>
+                      setSeats((prev) => ({
+                        ...prev,
+                        [seat]: { id: '', naming: true, name: e.target.value },
+                      }))
+                    }
+                    placeholder="somebody with no player id yet"
+                  />
+                  <span className="adminrow__hint">
+                    gets a new player id — merge it into their real one once they play here
+                  </span>
+                </label>
+              ) : null}
+            </div>
+          ))}
+
+          <div className="adminrow__line">
+            <span className="adminrow__label">Rounds</span>
+            {rounds.map((result, i) => (
+              <button
+                key={i}
+                type="button"
+                className="btn btn--tiny"
+                aria-label={`Round ${i + 1} of the match being added`}
+                onClick={() => {
+                  const next = rounds.map((r, j) => (j === i ? nextOutcome(r) : r))
+                  setRounds(next)
+                  // The score and the winner follow, so the common case is clicking the rounds and
+                  // pressing Add. Both stay editable below, for the game this cannot work out.
+                  const [a, b] = scoreRounds(next)
+                  setScoreA(String(a))
+                  setScoreB(String(b))
+                  setWinner(a > b ? 'A' : b > a ? 'B' : 'DRAW')
+                }}
+              >
+                {i >= 3 ? 'OT' : `R${i + 1}`}:{' '}
+                {result === null ? '—' : result === 'TIE' ? 'Tie' : result}
+              </button>
+            ))}
+          </div>
+
+          <div className="adminrow__grid">
+            <span className="adminrow__label">{named('A') || 'Seat A'}</span>
+            <input
+              className="field__input adminrow__score"
+              aria-label="Score for seat A"
+              value={scoreA}
+              onChange={(e) => setScoreA(e.target.value)}
+            />
+            <span className="adminrow__vs">vs</span>
+            <input
+              className="field__input adminrow__score"
+              aria-label="Score for seat B"
+              value={scoreB}
+              onChange={(e) => setScoreB(e.target.value)}
+            />
+            <span className="adminrow__label">{named('B') || 'Seat B'}</span>
+          </div>
+
+          <div className="adminrow__line">
+            <span className="adminrow__label">Winner</span>
+            {(['A', 'B', 'DRAW'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={`btn btn--tiny ${winner === option ? 'btn--on' : ''}`}
+                onClick={() => setWinner(option)}
+              >
+                {option === 'DRAW' ? 'Draw' : named(option) || `Seat ${option}`}
+              </button>
+            ))}
+          </div>
+
+          <label className="field">
+            <span className="field__label">Played on</span>
+            <input
+              className="field__input"
+              type="date"
+              aria-label="Date it was played"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+            />
+            <p className="field__help">
+              The history sorts on this, so an evening from last month lands where it happened
+              rather than at the top of the page.
+            </p>
+          </label>
+
+          <div className="adminrow__actions">
+            <button
+              type="button"
+              className="btn btn--primary btn--tiny"
+              disabled={!ready}
+              onClick={submit}
+            >
+              Add match
+            </button>
+            {ready ? null : (
+              <span className="adminrow__hint">
+                {clash ? 'both seats are the same player' : 'choose or name both players'}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * One seat of the match being added.
+ *
+ * `naming` rather than an empty id, because "nobody chosen yet" and "somebody I am about to name"
+ * are different states that both have no id, and collapsing them is what makes a name field
+ * appear before anyone asked for one.
+ */
+interface SeatChoice {
+  id: string
+  naming: boolean
+  name: string
+}
+
+const BLANK_SEAT: SeatChoice = { id: '', naming: false, name: '' }
+
+/** The select value meaning "not one of these". Never a player id — those are all `p_`-prefixed. */
+const NEW = '—new—'
+
+/** D21's half-point rule, applied to whatever rounds have been filled in so far. */
+function scoreRounds(rounds: (('A' | 'B' | 'TIE') | null)[]): [number, number] {
+  let a = 0
+  let b = 0
+  for (const result of rounds) {
+    if (result === 'A') a += 1
+    else if (result === 'B') b += 1
+    else if (result === 'TIE') {
+      a += 0.5
+      b += 0.5
+    }
+  }
+  return [a, b]
+}
+
+/** `yyyy-mm-dd` in the local timezone, which is what a `date` input wants. */
+function today(): string {
+  const now = new Date()
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
+/**
+ * A date field to a timestamp.
+ *
+ * Midday local rather than midnight, and not `Date.parse` of the bare string: that reads
+ * `yyyy-mm-dd` as UTC, so anywhere west of Greenwich a game played today is filed as yesterday —
+ * which is the one thing this field exists to get right. Today keeps the current clock time, so a
+ * game added now sorts above one added this morning rather than tying with it.
+ */
+function playedAtFrom(value: string): number {
+  if (value === today()) return Date.now()
+  const [y, m, d] = value.split('-').map(Number)
+  if (!y || !m || !d) return Date.now()
+  return new Date(y, m - 1, d, 12).getTime()
+}
+
 function EditRow({
   match,
   players,
@@ -495,6 +798,8 @@ function EditRow({
   onDelete: () => void
 }) {
   const detail = match.detail as MatchDetail | null
+  /** Bound out so the narrowing survives into the callback; absent on a D44 record. */
+  const seats = detail?.seats
   const [aName, setAName] = useState(match.a.name)
   const [bName, setBName] = useState(match.b.name)
   const [aId, setAId] = useState(match.a.id)
@@ -633,10 +938,10 @@ function EditRow({
        * different game. Their job is to let you recognise the match you are about to edit, which
        * a room code and a date do not do a month later.
        */}
-      {detail?.seats ? (
+      {seats ? (
         <div className="hrosters">
           {(['A', 'B'] as const).map((seat) => (
-            <Roster key={seat} name={seat === 'A' ? aName : bName} side={detail.seats[seat]} />
+            <Roster key={seat} name={seat === 'A' ? aName : bName} side={seats[seat]} />
           ))}
         </div>
       ) : null}
