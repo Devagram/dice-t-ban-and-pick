@@ -32,7 +32,7 @@ type Route =
   | { screen: 'host' }
   | { screen: 'lobby'; roomCode: string }
   | { screen: 'match'; roomCode: string; seatToken: string; websocketUrl: string }
-  | { screen: 'leaderboard'; board: 'players' | 'heroes' }
+  | { screen: 'leaderboard'; board: 'players' | 'heroes' | 'stats' }
   | { screen: 'lobbies' }
   | { screen: 'history' }
   | { screen: 'admin' }
@@ -80,6 +80,8 @@ function readRoute(): Route {
    * it. Its own URL, though, because a board worth arguing about is worth linking to.
    */
   if (/^\/heroes\/?$/.test(path)) return { screen: 'leaderboard', board: 'heroes' }
+  // D50 — the third board. Same screen again: three answers to "how are we doing", not three pages.
+  if (/^\/stats\/?$/.test(path)) return { screen: 'leaderboard', board: 'stats' }
   // D31 — the open-room list, so a game can be found without a link.
   if (/^\/lobbies\/?$/.test(path)) return { screen: 'lobbies' }
   // D34 — history is public; the dashboard behind it is not (the *server* enforces that, not

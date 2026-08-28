@@ -297,6 +297,8 @@ export interface HeroAppearance {
   playedAt: number
   /** `Bo3`, `Bo1` — derived from how many round slots the record holds. */
   format: string
+  /** D51 — the mode itself, on a match recorded since it was stored. */
+  modeId?: string
   draftCount: number
   seat: 'A' | 'B'
   round: number | null
@@ -311,6 +313,52 @@ export interface HeroHistory {
   /** Every opponent this hero has met, best matchup first — not the three each end the board shows. */
   matchups: HeroMatchup[]
   appearances: HeroAppearance[]
+}
+
+/** D50 — a character, and how many times something happened to it. */
+export interface HeroCount {
+  characterId: string
+  count: number
+}
+
+/** D50 — what one player brings, who they ban, and what gets banned against them. */
+export interface PlayerStats {
+  playerId: string
+  name: string
+  matches: number
+  picked: HeroCount[]
+  banned: HeroCount[]
+  bannedAgainst: HeroCount[]
+}
+
+/**
+ * D50 — the fun ones: most picked, most hated, most benched, most stolen.
+ *
+ * Counted over the same stored matches everything else is, so an edited or deleted one stops
+ * counting. `matches` is the sample behind every figure, and worth showing beside them: at twelve
+ * games a "most hated" is a fact about one evening.
+ */
+export interface StatsPage {
+  matches: number
+  picked: HeroCount[]
+  played: HeroCount[]
+  benched: HeroCount[]
+  banned: HeroCount[]
+  stolen: HeroCount[]
+  mirrored: HeroCount[]
+  /** D51 — the round ban, counted apart from the meta ban. */
+  denied: HeroCount[]
+  /** D51 — chosen second in a round, knowing what it was against. */
+  counterPicked: HeroCount[]
+  /** D51 — chosen first, and answered. */
+  answered: HeroCount[]
+  /** Rounds with a knowable selection order — zero on everything recorded before D51. */
+  sequentialRounds: number
+  players: PlayerStats[]
+}
+
+export function fetchStats(): Promise<StatsPage> {
+  return fetch('/api/stats').then(json<StatsPage>)
 }
 
 /** Fetched when a hero's row is opened, not with the board. */
@@ -408,6 +456,39 @@ export function adminAddMatch(
  */
 export function isHandAdded(roomCode: string): boolean {
   return roomCode.startsWith('M-')
+}
+
+/**
+ * D49 — removes a tournament from the record, and closes the object behind it.
+ *
+ * Resolves to how many matches were **released** rather than deleted: the games were played and
+ * still count, they simply stop belonging to a bracket that no longer exists. Worth showing,
+ * because "deleted" understates a command that also let a dozen matches out of a tournament.
+ */
+export function adminDeleteTournament(key: string, code: string): Promise<{ released: number }> {
+  return fetch('/api/admin/deleteTournament', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-admin-key': key },
+    body: JSON.stringify({ code }),
+  }).then(json<{ ok: true; released: number }>)
+}
+
+/**
+ * D49 — corrects an entrant's name on a finished tournament, summary and archived bracket alike.
+ *
+ * The only field of a tournament this screen may edit: everything else is derived from the slots
+ * the bracket resolved, and an admin restating one of those would be a second truth. Refused while
+ * the tournament is still running, which rewrites this record on every result.
+ */
+export function adminRenameEntrant(
+  key: string,
+  rename: { code: string; from: string; to: string },
+): Promise<{ tournaments: TournamentSummary[] }> {
+  return fetch('/api/admin/renameEntrant', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-admin-key': key },
+    body: JSON.stringify(rename),
+  }).then(json<{ ok: true; tournaments: TournamentSummary[] }>)
 }
 
 export function adminDeleteMatch(key: string, roomCode: string): Promise<void> {

@@ -15,6 +15,7 @@ import {
 } from '../api.js'
 import { Portrait } from '../components/Portrait.js'
 import { playerId } from '../player.js'
+import { StatsBoard } from './Stats.js'
 
 /**
  * D29 — the table.
@@ -48,7 +49,7 @@ export function Leaderboard({
   board,
   onBack,
 }: {
-  board: 'players' | 'heroes'
+  board: 'players' | 'heroes' | 'stats'
   onBack: () => void
 }) {
   return (
@@ -56,7 +57,11 @@ export function Leaderboard({
       <header className="hero">
         <h1 className="title">Leaderboard</h1>
         <p className="hero__sub">
-          {board === 'heroes' ? 'Every hero drafted here' : 'Everyone who has played here'}
+          {board === 'heroes'
+            ? 'Every hero drafted here'
+            : board === 'stats'
+              ? 'What everybody brings, and who everybody bans'
+              : 'Everyone who has played here'}
         </p>
         {/* In the header, where every other screen keeps it. This one had it alone at the foot of
             the page, so the way out moved depending on how many people had played. */}
@@ -85,9 +90,16 @@ export function Leaderboard({
         >
           Heroes
         </a>
+        <a
+          className={`boards__tab ${board === 'stats' ? 'boards__tab--on' : ''}`}
+          href="/stats"
+          aria-current={board === 'stats' ? 'page' : undefined}
+        >
+          Stats
+        </a>
       </nav>
 
-      {board === 'heroes' ? <HeroesBoard /> : <PlayersBoard />}
+      {board === 'heroes' ? <HeroesBoard /> : board === 'stats' ? <StatsBoard /> : <PlayersBoard />}
     </main>
   )
 }
@@ -523,8 +535,14 @@ function HeroHistoryPanel({
                     heroes, and a hero is only ever as good as somebody was with it. */}
                 <strong>{a.player.name || 'Unknown'}</strong> vs {a.opponent.name || 'Unknown'}
               </span>
-              <span className="hgame__mode">
-                {a.format}
+              {/* D51 — the mode when the record knows it, and the shape it implies when it does
+                  not. A named mode and an inferred `Bo3` are different claims, so the named one
+                  wins where there is one. */}
+              <span
+                className="hgame__mode"
+                title={a.modeId ? `mode ${a.modeId}` : 'from the round count'}
+              >
+                {a.modeId ?? a.format}
                 {a.draftCount > 0 ? ` · draft ${a.draftCount}` : ''}
               </span>
               <span className="hgame__round">

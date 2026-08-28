@@ -746,3 +746,69 @@ describe('the games behind a hero', () => {
     expect((await r.fetch('https://r/hero')).status).toBe(400)
   })
 })
+
+/**
+ * **D51 — the record actually collects what the pages ask for.**
+ *
+ * Every other test here seeds the registry by hand, which proves the aggregation and proves
+ * nothing about whether a played match produces the shape it aggregates. These play one and read
+ * what was filed: the gap D51 closed was between the match and the record, so that is where it has
+ * to be checked.
+ */
+describe('what a played match now writes down', () => {
+  it('files the mode, the selection order, and the round bans', async () => {
+    const match = await seatedMatch({ modeId: 'base', draftCount: 4, players: ['col-1', 'col-2'] })
+    await playToCompletion(match.a, match.b, ['A', 'B', 'A'])
+    await match.a.settle(40)
+
+    const stored = (await matchesSettle(1)).find((m) => m.roomCode === match.roomCode)!
+    const detail = stored.detail as {
+      rounds: (string | null)[]
+      modeId?: string
+      firstToSelect?: (string | null)[]
+      seats: Record<'A' | 'B', { roundBans?: (string | null)[]; lineup: (string | null)[] }>
+    }
+
+    // The mode, rather than a format inferred from how many slots the record happens to hold.
+    expect(detail.modeId).toBe('base')
+
+    /*
+     * One entry per round slot, aligned with `rounds` exactly as `lineup` is. Rounds 0 and 1
+     * select in public and have an order; round 2 is `SIMULTANEOUS_HIDDEN`, where both seats
+     * commit blind and the order the events arrived in is an accident rather than a decision.
+     */
+    expect(detail.firstToSelect).toHaveLength(detail.rounds.length)
+    expect(detail.firstToSelect!.slice(0, 2).every((s) => s === 'A' || s === 'B')).toBe(true)
+    expect(detail.firstToSelect![2]).toBeNull()
+
+    // The round ban, stored as the character it denied rather than the slot index it named — an
+    // index means nothing to a reader with no board to resolve it against.
+    expect(detail.seats.A.roundBans).toHaveLength(detail.rounds.length)
+    const denied = detail.seats.A.roundBans!.filter((id): id is string => typeof id === 'string')
+    expect(denied.length).toBeGreaterThan(0)
+    // Whatever A denied was on B's board, which is what D3 means by targeting an opponent slot.
+    const theirs = (stored.detail as { seats: Record<'B', { drafted: string[] }> }).seats.B.drafted
+    for (const id of denied) expect(theirs).toContain(id)
+  })
+
+  it('reaches the stats board as counter-picks and denials', async () => {
+    const match = await seatedMatch({ modeId: 'base', draftCount: 4, players: ['col-3', 'col-4'] })
+    await playToCompletion(match.a, match.b, ['A', 'A'])
+    await match.a.settle(40)
+    await matchesSettle(1)
+
+    const page = (await (await SELF.fetch('https://example.com/api/stats')).json()) as {
+      denied: { characterId: string; count: number }[]
+      counterPicked: { characterId: string; count: number }[]
+      sequentialRounds: number
+    }
+
+    /*
+     * The point of the whole change: a match played today answers the two questions the board had
+     * to leave blank. Two rounds played, both sequential in this mode, so both are counter-picks.
+     */
+    expect(page.sequentialRounds).toBeGreaterThan(0)
+    expect(page.counterPicked.length).toBeGreaterThan(0)
+    expect(page.denied.length).toBeGreaterThan(0)
+  })
+})

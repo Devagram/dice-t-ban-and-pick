@@ -197,6 +197,47 @@ A recorded lineup always beats a deduced one, including on a match an admin has 
 This is the instrumentation §15 asks for, arriving late: win rate by hero is what makes "is this
 hero any good, or is that one player" a question with an answer.
 
+## The stats board (D50)
+
+`/stats` is the leaderboard's third tab: not who is winning, but what everybody does. Most picked,
+most hated (named in the meta ban), most played, most benched, most mirrored — and **most stolen**,
+which is banning a character off somebody and then drafting it yourself. D4 scopes a ban to the
+opponent rather than removing the character from the match, so that is legal, pointed, and worth
+counting.
+
+Pick a player and it answers three more: what they bring, who they ban, and **what gets banned
+against them** — the one thing nobody can look up any other way, since it is a fact about them
+recorded by somebody else.
+
+The sample sits above the superlatives. At a dozen games "most hated" is a fact about one evening,
+and printing the match count beside it is the difference between a fun statistic and a wrong one.
+Every figure is counted from the stored matches on each read, so an edit or a delete moves them.
+
+### What the record started keeping (D51)
+
+Three of these figures needed facts the match knew and never wrote down. It writes them now, so they
+answer from the next match on and stay honest about the matches before it:
+
+- **Which seat chose first**, per round — a counter-pick is a choice made knowing what it faces, and
+  the record stored both selections and nothing about their order. `null` for a blind round, where
+  the order the two commits arrived in is an accident of the network and nobody countered anybody.
+  Feeds **most counter-picked** and **most answered**, and the page says how many rounds it has
+  rather than showing an empty card that looks broken.
+- **The round ban** (D3), as the character it denied rather than the slot it named — an index means
+  nothing to a reader with no board to resolve it against. It happens three times a match to the
+  meta ban's once, and "most hated" could not see it. Counted separately as **most denied**: one is
+  a character taken off you before you drafted, the other is a card taken away for one round.
+- **The mode**, so a format is read rather than inferred from how many round slots the record holds.
+  That inference is exact for every mode shipped so far and stops being exact the day one ships with
+  a different shape.
+
+**The meta ban's hit rate is still absent, and no amount of collecting fixes it.** §15's O6 metric
+assumes a ban that lands _after_ the draft, where it either strikes a drafted character or misses.
+Every mode that ships places the ban **before** the draft — `legalDraftPool` subtracts it, so the
+character is never drafted and there is nothing to strike. The ban prevents rather than denies, so a
+hit rate is not a fact about these modes rather than a fact the record is missing. Measuring it
+needs a mode where the draft comes first, not a column.
+
 ## Adding a game that was played elsewhere (D44)
 
 Every other row in the history is the residue of a match this deployment refereed: a room was
@@ -240,6 +281,30 @@ by hand**: it counts like any other match, but a row nobody's client ever report
 claim than one two seats agreed on, and the page says which it is showing.
 
 Wrong entries are ordinary rows afterwards — edit or delete them from the same screen.
+
+## Deleting and correcting a tournament (D49)
+
+`/admin` lists every tournament with two controls.
+
+**Delete** removes the whole record, which takes three writes rather than one:
+
+- The **tournament object** is closed first. Every write inside it files a fresh summary with the
+  registry, so a live tournament deleted from the index alone comes back the moment somebody
+  reports a result. If it cannot be reached, nothing is deleted.
+- The **registry row** goes, taking the archived bracket with it, so `/t/CODE` stops serving one.
+- Its **matches are released, not deleted** — `tournament_id` is cleared. The games were played and
+  still count on the leaderboard; they become ordinary records this screen can correct, since D39's
+  refusal to edit a bracket match has nothing left to protect. The count comes back and is shown.
+
+**Rename an entrant** is the only edit, and only on a _finished_ tournament. Everything else — who
+is in it, who won, the bracket — is derived from the slots the tournament resolved, so an admin
+restating one would be the second truth D39 exists to prevent. A display name is a caption, which
+is what D34 already lets this screen fix on a match. It rewrites the index row and the archived
+bracket together, because two pages read them separately and renaming one is how they come to
+disagree.
+
+A running tournament is refused: it rewrites this record on every result, so the rename would
+survive until the next one and then vanish. The organizer console renames at the source.
 
 ## Duplicate players (D35)
 

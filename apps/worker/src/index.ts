@@ -34,8 +34,21 @@ const ROSTER = rosterAsset as Roster
  * `add` (D44) writes a match this deployment never refereed. It belongs behind the same key as
  * `edit` for the same reason: D34's line is about writing the stored record directly, and
  * inventing a row is that power used a different way rather than a lesser one.
+ *
+ * `deleteTournament` and `renameEntrant` (D49) are the tournament layer's two. The first reaches
+ * through the registry into `TournamentDO` to close it, which is why the door has to be this one:
+ * an organizer token is authority over *a* tournament, and deleting the record of one is not an
+ * organizer's power any more than deleting a match is a player's.
  */
-const ADMIN_ACTIONS = new Set(['add', 'edit', 'delete', 'players', 'merge'])
+const ADMIN_ACTIONS = new Set([
+  'add',
+  'edit',
+  'delete',
+  'players',
+  'merge',
+  'deleteTournament',
+  'renameEntrant',
+])
 
 export { MatchDO } from './MatchDO.js'
 export { PairHistoryDO } from './PairHistoryDO.js'
@@ -124,6 +137,8 @@ export default {
       // D48 — one hero's games, fetched when its row is opened. Its own route rather than part of
       // the board above: forty-four heroes' worth of match lists is a download, not a table.
       path === '/api/hero' ||
+      // D50 — the fun ones: what everybody brings, who everybody bans, who keeps getting banned.
+      path === '/api/stats' ||
       // D37 Phase 8 — the tournament index. Public, and served from the registry rather than from
       // any tournament object, because those are swept after a week and this list is not.
       path === '/api/tournaments'

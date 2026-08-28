@@ -88,7 +88,52 @@ function seatDetail(state: MatchState, seat: Seat) {
       const index = round.selection[seat].value
       return index === null ? null : (slots[index]?.characterId ?? null)
     }),
+    /**
+     * **D51 — the round ban, which the record has never held.**
+     *
+     * The meta ban has been stored since D29 and is what every "most banned" figure has been
+     * counted from — but it is not the only ban in this game. D3's round ban denies an opponent
+     * *slot* for one round, and it happens three times a match to the meta ban's once. A board
+     * of what everybody hates that cannot see the more frequent ban was answering a narrower
+     * question than it appeared to.
+     *
+     * Stored as the **character it denied** rather than the slot index it named. The index is the
+     * addressable thing during a match (D3, and a slot outlives the character in it), and it is
+     * meaningless afterwards: nothing reading this record has the opponent's board to resolve it
+     * against. Resolved here, where that board is still in hand.
+     */
+    roundBans: state.rounds.map((round) => {
+      const index = round.ban[seat].value
+      if (index === null) return null
+      const theirs = state.seats[seat === 'A' ? 'B' : 'A'].slots.value
+      return theirs.find((s) => s.index === index)?.characterId ?? null
+    }),
   }
+}
+
+/**
+ * **D51 — which seat chose first, in the rounds where choosing first meant anything.**
+ *
+ * A counter-pick is a selection made knowing what it is up against, and the record has never been
+ * able to see one: it stores both selections and nothing about their order. This is the same gap
+ * D45 closed for *which hero played which round*, in the one place the log can still answer it.
+ *
+ * **`null` for a simultaneous round, and that is the load-bearing part.** In a hidden round both
+ * seats commit blind, so the order the two `SELECT` events happened to arrive in is an accident of
+ * the network and nobody countered anybody. The signal for which kind of round it was is the
+ * selection slice's own visibility — `select.ts` seals a hidden selection to its owner and leaves
+ * a sequential one public — so this reads the property rather than re-deriving it from the mode.
+ */
+function firstToSelect(state: MatchState): (Seat | null)[] {
+  return state.rounds.map((round) => {
+    const blind = (['A', 'B'] as const).some((seat) => round.selection[seat].owner !== null)
+    if (blind) return null
+    for (const event of state.log) {
+      const payload = event.payload
+      if (payload.type === 'SELECT' && payload.roundIndex === round.index) return payload.seat
+    }
+    return null
+  })
 }
 
 /** The claim body, treated as untrusted — an older client sends none at all. */
@@ -772,6 +817,14 @@ export class MatchDO extends DurableObject<Env> {
           // keeping the event log, which is a separate feature with separate retention.
           detail: {
             rounds: state.rounds.map((r) => r.result),
+            /*
+             * D51 — the mode, so a reader can *know* the format rather than infer it from how
+             * many round slots the record happens to hold. That inference is exact for every mode
+             * shipped so far and stops being exact the day one ships with a different shape,
+             * which is a bad day to discover a page was guessing.
+             */
+            modeId: state.mode.modeId,
+            firstToSelect: firstToSelect(state),
             seats: {
               A: seatDetail(state, 'A'),
               B: seatDetail(state, 'B'),

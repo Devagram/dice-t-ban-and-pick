@@ -6,14 +6,18 @@ import {
   ApiError,
   adminAddMatch,
   adminDeleteMatch,
+  adminDeleteTournament,
   adminEditMatch,
   adminFetchPlayers,
   adminMergePlayers,
+  adminRenameEntrant,
   fetchMatches,
   fetchRoster,
+  fetchTournaments,
   type MatchDetail,
   type MatchRecord,
   type PlayerSummary,
+  type TournamentSummary,
 } from '../api.js'
 import { Roster } from './History.js'
 
@@ -86,6 +90,8 @@ export function Admin({ onBack }: { onBack: () => void }) {
    * Empty on failure rather than fatal — the rest of the screen still edits scores and names.
    */
   const [roster, setRoster] = useState<Character[]>([])
+  /* D49 — public, like the match list: reading the index needs no key, changing it does. */
+  const [tournaments, setTournaments] = useState<TournamentSummary[] | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -93,6 +99,11 @@ export function Admin({ onBack }: { onBack: () => void }) {
     fetchMatches()
       .then(setMatches)
       .catch(() => setError('Could not load matches.'))
+    // Reloaded with the matches because a tournament delete moves both: its games are released
+    // into the ordinary list at the same moment it leaves this one.
+    fetchTournaments()
+      .then(setTournaments)
+      .catch(() => setTournaments([]))
   }
   useEffect(reload, [])
 
@@ -164,11 +175,16 @@ export function Admin({ onBack }: { onBack: () => void }) {
     if (key) adminFetchPlayers(key).then(setPlayers).catch(noop)
   }
 
-  const run = (work: Promise<unknown>, done: string) => {
+  /*
+   * `done` may read the result, because some of these have something to report that only the
+   * server knows — a tournament delete says how many matches it released, and a notice written
+   * before the request could not.
+   */
+  function run<T>(work: Promise<T>, done: string | ((value: T) => string)) {
     setError(null)
     work
-      .then(() => {
-        setNotice(done)
+      .then((value) => {
+        setNotice(typeof done === 'string' ? done : done(value))
         reload()
         refreshPlayers()
       })
@@ -248,6 +264,29 @@ export function Admin({ onBack }: { onBack: () => void }) {
         roster={roster}
         disabled={key.length === 0 || check !== 'accepted'}
         onAdd={(entry) => run(adminAddMatch(key, entry), 'Match added.')}
+      />
+
+      <Tournaments
+        tournaments={tournaments}
+        disabled={key.length === 0}
+        onDelete={(code) =>
+          run(adminDeleteTournament(key, code), (r) =>
+            r.released === 0
+              ? `Deleted ${code}.`
+              : `Deleted ${code} — ${r.released} ${
+                  r.released === 1 ? 'match' : 'matches'
+                } released from it, not deleted.`,
+          )
+        }
+        onRename={(rename) =>
+          run(
+            adminRenameEntrant(key, rename).then((r) => {
+              setTournaments(r.tournaments)
+              return r
+            }),
+            `Renamed to ${rename.to}.`,
+          )
+        }
       />
 
       <section className="panel">
@@ -828,6 +867,199 @@ function playedAtFrom(value: string): number {
   const [y, m, d] = value.split('-').map(Number)
   if (!y || !m || !d) return Date.now()
   return new Date(y, m - 1, d, 12).getTime()
+}
+
+/**
+ * **D49 — the tournaments, and the two things this screen may do to one.**
+ *
+ * **Delete** is the whole record: the object, the row, and the link its matches carry. Its games
+ * are released rather than deleted — they were played, they still count, and they become ordinary
+ * records this screen can correct. The count comes back and is shown, because "deleted" understates
+ * a command that also let a dozen matches out of a bracket.
+ *
+ * **Rename** is the only edit. Everything else on a tournament — who is in it, who won, the bracket
+ * — is derived from the slots it resolved, and an admin restating one of those would be a second
+ * truth of the kind D39 exists to prevent. A display name is a caption, which is what D34 already
+ * lets this screen fix on a match.
+ *
+ * A running tournament offers neither rename control: it rewrites this record on every result, so
+ * the edit would survive until the next one and then vanish. The organizer console does it at the
+ * source, and the server says so if anybody sends one anyway.
+ */
+function Tournaments({
+  tournaments,
+  disabled,
+  onDelete,
+  onRename,
+}: {
+  tournaments: TournamentSummary[] | null
+  disabled: boolean
+  onDelete: (code: string) => void
+  onRename: (rename: { code: string; from: string; to: string }) => void
+}) {
+  return (
+    <section className="panel">
+      <h2 className="panel__title">Tournaments</h2>
+      {tournaments === null ? (
+        <p className="panel__empty">Loading…</p>
+      ) : tournaments.length === 0 ? (
+        <p className="panel__empty">No tournaments have been run here.</p>
+      ) : (
+        <ul className="adminlist">
+          {tournaments.map((t) => (
+            <TournamentRow
+              key={t.code}
+              tournament={t}
+              disabled={disabled}
+              onDelete={() => onDelete(t.code)}
+              onRename={(from, to) => onRename({ code: t.code, from, to })}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function TournamentRow({
+  tournament,
+  disabled,
+  onDelete,
+  onRename,
+}: {
+  tournament: TournamentSummary
+  disabled: boolean
+  onDelete: () => void
+  onRename: (from: string, to: string) => void
+}) {
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <li className="adminrow">
+      <div className="adminrow__head">
+        {/* A link, because the first thing anybody does before deleting a tournament is look at
+            it — and after a delete this is the 404 that confirms it went. */}
+        <a className="adminrow__code" href={`/t/${tournament.code}`}>
+          {tournament.code}
+        </a>
+        <span className="adminrow__when">
+          {new Date(tournament.createdAt).toLocaleDateString()}
+        </span>
+      </div>
+
+      <div className="adminrow__line">
+        <span className="adminrow__label">
+          {tournament.entrants.length} {tournament.entrants.length === 1 ? 'entrant' : 'entrants'}
+        </span>
+        <span className="adminrow__hint">
+          {tournament.complete
+            ? tournament.champion
+              ? `${tournament.champion} won`
+              : 'finished'
+            : 'still running'}
+        </span>
+      </div>
+
+      {tournament.entrants.length > 0 ? (
+        <div className="adminrow__line">
+          <span className="adminrow__label">Entrants</span>
+          <span className="adminrow__hint">{tournament.entrants.join(', ')}</span>
+        </div>
+      ) : null}
+
+      {tournament.complete && tournament.entrants.length > 0 ? (
+        <div className="adminrow__line">
+          <span className="adminrow__label">Rename</span>
+          <select
+            className="field__input adminrow__who"
+            aria-label={`Entrant to rename in ${tournament.code}`}
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+          >
+            <option value="">Choose…</option>
+            {tournament.entrants.map((name, i) => (
+              <option key={`${name}:${i}`} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="field__input adminrow__who"
+            aria-label={`New name in ${tournament.code}`}
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="their name, spelled right"
+          />
+          <button
+            type="button"
+            className="btn btn--primary btn--tiny"
+            disabled={disabled || !from || !to.trim()}
+            onClick={() => {
+              onRename(from, to.trim())
+              setFrom('')
+              setTo('')
+            }}
+          >
+            Rename
+          </button>
+        </div>
+      ) : (
+        <div className="adminrow__line">
+          <span className="adminrow__hint">
+            {tournament.complete
+              ? 'nothing here to rename'
+              : /* Said rather than hidden: a control that is simply absent reads as one this
+                   screen forgot, and the fix is on another page. */
+                'a running tournament rewrites this record on every result — rename an entrant from its organizer console'}
+          </span>
+        </div>
+      )}
+
+      <div className="adminrow__actions">
+        {confirming ? (
+          <>
+            <button
+              type="button"
+              className="btn btn--danger btn--tiny"
+              disabled={disabled}
+              onClick={() => {
+                onDelete()
+                setConfirming(false)
+              }}
+            >
+              Really delete {tournament.code}
+            </button>
+            <button
+              type="button"
+              className="btn btn--quiet btn--tiny"
+              onClick={() => setConfirming(false)}
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          // Two steps, like every other delete here — and this one closes the tournament object
+          // as well as the record, which no amount of re-running the event brings back.
+          <button
+            type="button"
+            className="btn btn--quiet btn--tiny"
+            disabled={disabled}
+            onClick={() => setConfirming(true)}
+          >
+            Delete
+          </button>
+        )}
+        {confirming ? (
+          <span className="adminrow__hint">
+            its matches are kept and released from the bracket, not deleted
+          </span>
+        ) : null}
+        {disabled ? <span className="adminrow__hint">Enter the admin key to edit.</span> : null}
+      </div>
+    </li>
+  )
 }
 
 function EditRow({

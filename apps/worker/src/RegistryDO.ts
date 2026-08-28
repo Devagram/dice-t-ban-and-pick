@@ -265,6 +265,8 @@ export class RegistryDO extends DurableObject<Env> {
         return Response.json(this.heroBoard())
       case 'hero':
         return this.heroDetail(request)
+      case 'stats':
+        return Response.json(this.stats())
       case 'add':
         return this.add(request)
       case 'edit':
@@ -275,6 +277,10 @@ export class RegistryDO extends DurableObject<Env> {
         return Response.json({ tournaments: this.tournaments() })
       case 'tournament':
         return this.recordTournament(request)
+      case 'deleteTournament':
+        return this.deleteTournament(request)
+      case 'renameEntrant':
+        return this.renameEntrant(request)
       case 'archive':
         return this.archive(request)
       case 'players':
@@ -842,6 +848,9 @@ export class RegistryDO extends DurableObject<Env> {
             roomCode: String(row['room_code']),
             playedAt: Number(row['played_at']),
             format,
+            // D51 — named rather than inferred, on every match recorded since. `null` on the older
+            // ones, where `format` is the best the record can do.
+            ...(modeOf(detail) ? { modeId: modeOf(detail)! } : {}),
             draftCount: draftCount(seat),
             seat,
             round: exact[seat] ? round : null,
@@ -879,6 +888,181 @@ export class RegistryDO extends DurableObject<Env> {
       matchups: [...against.values()].sort(byEdge),
       appearances: appearances.slice(0, 200),
     })
+  }
+
+  /**
+   * **D50 — the fun ones.**
+   *
+   * The leaderboard answers who is winning and the hero board answers what is good. This answers
+   * the things a group actually argues about: what everybody brings, who everybody bans, and who
+   * keeps getting banned.
+   *
+   * Every figure here is a count over the same stored rows, derived on every read like all the
+   * others, so an edited or deleted match stops counting rather than leaving a stale total.
+   *
+   * **What is not here, and why.** "Most counter-picked" needs to know which seat selected second
+   * in a round, and the record has never stored selection order — only the selections. It is the
+   * D45 problem again and would need the same fix: write it down from now on. Nothing here
+   * approximates it, because a counter-pick guessed from a record that cannot see one would be a
+   * statistic about nothing.
+   *
+   * The **meta ban's hit rate** is absent for a better reason: it is not observable at all. In
+   * `bring-ban1` the ban lands before the draft, so a banned character simply never appears — and
+   * in `base` a hit forces a repick, so the drafted list holds the replacement. Either way the
+   * record cannot distinguish a ban that struck from one that missed, and §15's O6 metric needs
+   * the event log rather than this table.
+   */
+  private stats(): StatsPage {
+    const roster = {
+      picked: new Map<string, number>(),
+      played: new Map<string, number>(),
+      benched: new Map<string, number>(),
+      banned: new Map<string, number>(),
+      stolen: new Map<string, number>(),
+      mirrored: new Map<string, number>(),
+      // D51 — the three the record could not answer until it started collecting them.
+      denied: new Map<string, number>(),
+      counterPicked: new Map<string, number>(),
+      answered: new Map<string, number>(),
+    }
+    /** Rounds whose selection order is known — the sample behind the two counter-pick cards. */
+    let sequentialRounds = 0
+    const players = new Map<string, PlayerStatsBuild>()
+    let matches = 0
+
+    const bump = (into: Map<string, number>, id: string) => into.set(id, (into.get(id) ?? 0) + 1)
+    const strings = (value: unknown): string[] =>
+      Array.isArray(value)
+        ? value.filter((v): v is string => typeof v === 'string' && v !== '')
+        : []
+
+    for (const row of this.sql
+      .exec<Row>('SELECT a_id, a_name, b_id, b_name, detail FROM matches')
+      .toArray()) {
+      let detail: StoredDetail | null
+      try {
+        detail = JSON.parse(String(row['detail'] ?? 'null')) as StoredDetail | null
+      } catch {
+        continue
+      }
+      if (!detail?.seats) continue
+      matches++
+
+      // Both seats resolved before either is counted, because half of what this page is for is
+      // what the *opponent* did — who they banned, and therefore what this player is known for.
+      const seated = {
+        A: { id: String(row['a_id']), name: String(row['a_name']) },
+        B: { id: String(row['b_id']), name: String(row['b_name']) },
+      }
+      const entry = (seat: 'A' | 'B'): PlayerStatsBuild => {
+        const who = seated[seat]
+        const existing = players.get(who.id)
+        if (existing) {
+          // Latest name wins, like every other total here: a rename should show up rather than
+          // stick at whatever this player was first called.
+          if (who.name) existing.name = who.name
+          existing.matches++
+          return existing
+        }
+        const fresh: PlayerStatsBuild = {
+          playerId: who.id,
+          name: who.name,
+          matches: 1,
+          picked: new Map(),
+          banned: new Map(),
+          bannedAgainst: new Map(),
+        }
+        players.set(who.id, fresh)
+        return fresh
+      }
+      const mine = { A: entry('A'), B: entry('B') }
+
+      const drafted = { A: [] as string[], B: [] as string[] }
+      for (const seat of ['A', 'B'] as const) {
+        const side = detail.seats[seat]
+        if (!side) continue
+        drafted[seat] = strings(side.drafted)
+        const played = strings(side.played)
+
+        for (const id of drafted[seat]) {
+          bump(roster.picked, id)
+          bump(mine[seat].picked, id)
+        }
+        for (const id of played) bump(roster.played, id)
+        // Brought and never reached — the other half of what a pick meant.
+        for (const id of drafted[seat]) if (!played.includes(id)) bump(roster.benched, id)
+
+        const metaBan = typeof side.metaBan === 'string' && side.metaBan ? side.metaBan : null
+        if (metaBan) {
+          bump(roster.banned, metaBan)
+          bump(mine[seat].banned, metaBan)
+          // Against the *other* player: what somebody is banned for is a fact about them, not
+          // about the person who typed it.
+          bump(mine[seat === 'A' ? 'B' : 'A'].bannedAgainst, metaBan)
+          /*
+           * The steal. D4 scopes a ban to the opponent rather than removing the character from
+           * the match, and `bring-ban1`'s own notes call this out: with mirrors allowed you may
+           * draft the character you just took off them. Banning it and then playing it is the
+           * most pointed thing anybody does in this game, so it gets counted.
+           */
+          if (drafted[seat].includes(metaBan)) bump(roster.stolen, metaBan)
+        }
+      }
+
+      // §15 asks for the frequency of mirror drafts. One count per character both seats brought.
+      for (const id of new Set(drafted.A)) if (drafted.B.includes(id)) bump(roster.mirrored, id)
+
+      /*
+       * D51 — the round ban, which happens three times a match to the meta ban's once. Counted
+       * separately rather than folded into "most hated": one is a character somebody took off you
+       * before you drafted, the other is a card they took away for a single round, and a figure
+       * that added them together would answer neither question.
+       */
+      for (const seat of ['A', 'B'] as const) {
+        for (const id of strings(detail.seats[seat]?.roundBans)) bump(roster.denied, id)
+      }
+
+      /*
+       * D51 — the counter-pick, which needs three facts the record now has together: who chose
+       * first, and what each of them chose. A round with no order was blind, and nobody countered
+       * anybody in it.
+       */
+      const order = Array.isArray(detail.firstToSelect) ? detail.firstToSelect : []
+      for (const { round, heroes } of playedRoundsOf(detail)) {
+        const first = order[round]
+        if (first !== 'A' && first !== 'B') continue
+        const second = first === 'A' ? 'B' : 'A'
+        if (!heroes[first] || !heroes[second]) continue
+        sequentialRounds++
+        // The one chosen knowing what it faced, and the one it was chosen against.
+        bump(roster.counterPicked, heroes[second]!)
+        bump(roster.answered, heroes[first]!)
+      }
+    }
+
+    return {
+      matches,
+      picked: top(roster.picked),
+      played: top(roster.played),
+      benched: top(roster.benched),
+      banned: top(roster.banned),
+      stolen: top(roster.stolen),
+      mirrored: top(roster.mirrored),
+      denied: top(roster.denied),
+      counterPicked: top(roster.counterPicked),
+      answered: top(roster.answered),
+      sequentialRounds,
+      players: [...players.values()]
+        .map((p) => ({
+          playerId: p.playerId,
+          name: p.name,
+          matches: p.matches,
+          picked: top(p.picked, PLAYER_TOP),
+          banned: top(p.banned, PLAYER_TOP),
+          bannedAgainst: top(p.bannedAgainst, PLAYER_TOP),
+        }))
+        .sort((x, y) => y.matches - x.matches || x.name.localeCompare(y.name)),
+    }
   }
 
   /**
@@ -1389,6 +1573,152 @@ export class RegistryDO extends DurableObject<Env> {
   }
 
   /**
+   * **D49 — removing a tournament, which takes three writes and not one.**
+   *
+   * The row here is only one of the three places a tournament exists, and deleting it alone gets
+   * all three wrong:
+   *
+   * - **The tournament object outlives the row and refiles.** Every write inside `TournamentDO`
+   *   calls `touch`, which files a fresh summary here — so a live tournament deleted from this
+   *   table reappears the moment somebody reports a result, and the admin is left pressing Delete
+   *   on something that keeps coming back. So the object is destroyed first, and a failure there
+   *   stops the whole thing rather than leaving a half-deleted tournament behind.
+   *
+   * - **Its matches point at it.** They keep `tournament_id`, which the history renders as a link
+   *   to a bracket that no longer exists and which D39 reads to refuse an edit — protecting a
+   *   bracket that is gone. So the games are *released* rather than deleted: they were played,
+   *   they still count on the leaderboard, and they become ordinary records that this screen can
+   *   correct like any other.
+   *
+   * The count comes back so the admin learns what the delete touched. "Deleted" understates a
+   * command that also let a dozen matches out of a bracket.
+   */
+  private async deleteTournament(request: Request): Promise<Response> {
+    let body: { code?: unknown }
+    try {
+      body = (await request.json()) as { code?: unknown }
+    } catch {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+    const code = typeof body?.code === 'string' ? body.code.trim() : ''
+    if (!code) return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+
+    try {
+      const stub = this.env.TOURNAMENT.get(this.env.TOURNAMENT.idFromName(code))
+      const destroyed = await stub.fetch('https://tournament/destroy', { method: 'POST' })
+      if (!destroyed.ok) throw new Error(`destroy answered ${destroyed.status}`)
+    } catch {
+      return Response.json(
+        {
+          error: 'TOURNAMENT_LIVE',
+          detail: `could not reach tournament ${code} to close it — nothing was deleted`,
+        },
+        { status: 502 },
+      )
+    }
+
+    const released = Number(
+      this.sql
+        .exec<{ n: number }>('SELECT COUNT(*) AS n FROM matches WHERE tournament_id = ?', code)
+        .toArray()[0]?.n ?? 0,
+    )
+    this.sql.exec('UPDATE matches SET tournament_id = NULL WHERE tournament_id = ?', code)
+    this.sql.exec('DELETE FROM tournaments WHERE code = ?', code)
+
+    return Response.json({ ok: true, released })
+  }
+
+  /**
+   * **D49 — correcting a name on a finished tournament.**
+   *
+   * The only thing about a tournament this screen may edit, and the reason is the same one D39
+   * gives for refusing to edit a bracket match: everything else here is *derived*. Entrants,
+   * champion and the archived bracket are written by `TournamentDO` from the slots it resolved, so
+   * an admin setting a champion would be stating a result the bracket disagrees with — two truths,
+   * and the stale one is always the one nobody is looking at. A display name is a caption, which
+   * is exactly what D34 already lets this screen fix on a match.
+   *
+   * **Refused while the tournament is running**, and not out of caution: an unfinished tournament
+   * is still writing here, so the rename would survive until the next reported result and then
+   * vanish. The organizer console renames an entrant properly — at the source, where the bracket
+   * follows — and that is where this points.
+   *
+   * Rewrites the archived bracket alongside the summary, because the two are read by different
+   * pages: the history index shows this row and `/t/CODE` shows that view. Renaming one is how
+   * they come to disagree.
+   */
+  private async renameEntrant(request: Request): Promise<Response> {
+    let body: { code?: unknown; from?: unknown; to?: unknown }
+    try {
+      body = (await request.json()) as typeof body
+    } catch {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+    const code = typeof body?.code === 'string' ? body.code.trim() : ''
+    const from = typeof body?.from === 'string' ? body.from : ''
+    const to = typeof body?.to === 'string' ? body.to.trim().slice(0, 40) : ''
+    if (!code || !from || !to) {
+      return Response.json({ error: 'MALFORMED_BODY' }, { status: 400 })
+    }
+
+    const row = this.sql.exec<Row>('SELECT * FROM tournaments WHERE code = ?', code).toArray()[0]
+    if (!row) return Response.json({ error: 'NOT_FOUND' }, { status: 404 })
+
+    if (Number(row['complete']) !== 1) {
+      return Response.json(
+        {
+          error: 'TOURNAMENT_RUNNING',
+          detail:
+            `${code} is still running, and it rewrites this record on every result — a rename ` +
+            'here would be overwritten. Rename the entrant from the organizer console instead.',
+        },
+        { status: 409 },
+      )
+    }
+
+    const entrants = JSON.parse(String(row['entrants'] ?? '[]')) as unknown[]
+    const names = entrants.filter((n): n is string => typeof n === 'string')
+    if (!names.includes(from)) {
+      return Response.json(
+        { error: 'NO_SUCH_ENTRANT', detail: `${code} has no entrant called '${from}'` },
+        { status: 404 },
+      )
+    }
+
+    // The champion is stored here as a *name*, so it is renamed with everybody else. Inside the
+    // archived view it is an entrant id, which a rename cannot touch and does not need to.
+    const champion = row['champion'] === from ? to : ((row['champion'] as string | null) ?? null)
+
+    let view: unknown = null
+    if (typeof row['view'] === 'string') {
+      try {
+        const parsed = JSON.parse(row['view']) as { entrants?: { displayName?: unknown }[] }
+        if (Array.isArray(parsed?.entrants)) {
+          parsed.entrants = parsed.entrants.map((e) =>
+            e?.displayName === from ? { ...e, displayName: to } : e,
+          )
+        }
+        view = parsed
+      } catch {
+        // A bracket that will not parse is one this cannot rewrite. The summary is still worth
+        // correcting, and leaving the stored string untouched keeps whatever it holds.
+        view = undefined
+      }
+    }
+
+    this.sql.exec(
+      `UPDATE tournaments SET entrants = ?, champion = ?${view === undefined ? '' : ', view = ?'}
+         WHERE code = ?`,
+      JSON.stringify(names.map((n) => (n === from ? to : n))),
+      champion,
+      ...(view === undefined ? [] : [view === null ? null : JSON.stringify(view)]),
+      code,
+    )
+
+    return Response.json({ ok: true, tournaments: this.tournaments() })
+  }
+
+  /**
    * The final bracket of a finished tournament, once its own object is gone.
    *
    * Answers 404 for a code nobody has heard of *and* for one whose tournament is still running —
@@ -1665,6 +1995,56 @@ export interface HeroStanding {
   worst: HeroMatchup[]
 }
 
+/** D50 — a character and how many times something happened to it. */
+export interface HeroCount {
+  characterId: string
+  count: number
+}
+
+/** D50 — what one player brings, bans, and is banned for. */
+export interface PlayerStats {
+  playerId: string
+  name: string
+  matches: number
+  picked: HeroCount[]
+  banned: HeroCount[]
+  bannedAgainst: HeroCount[]
+}
+
+export interface StatsPage {
+  /** How many stored matches these are counted from — the sample behind every figure below. */
+  matches: number
+  picked: HeroCount[]
+  played: HeroCount[]
+  benched: HeroCount[]
+  banned: HeroCount[]
+  stolen: HeroCount[]
+  mirrored: HeroCount[]
+  /** D51 — the round ban, counted apart from the meta ban above. */
+  denied: HeroCount[]
+  /** D51 — chosen second in a round, knowing what it was against. */
+  counterPicked: HeroCount[]
+  /** D51 — chosen first, and answered. */
+  answered: HeroCount[]
+  /**
+   * How many rounds had a knowable selection order — the sample behind the two counter-pick
+   * figures, and zero on every match recorded before D51. Sent so the page can say which of its
+   * cards is still filling up rather than showing an empty one that looks broken.
+   */
+  sequentialRounds: number
+  players: PlayerStats[]
+}
+
+/** The per-player maps, before they are cut down to the few each card shows. */
+interface PlayerStatsBuild {
+  playerId: string
+  name: string
+  matches: number
+  picked: Map<string, number>
+  banned: Map<string, number>
+  bannedAgainst: Map<string, number>
+}
+
 /** One hero's record in the rounds it has played against one other hero. */
 export interface HeroMatchup {
   characterId: string
@@ -1684,6 +2064,8 @@ export interface HeroAppearance {
   playedAt: number
   /** Derived from how many round slots the record holds — see `formatOf`. */
   format: string
+  /** D51 — the mode itself, on a match recorded since it was stored. */
+  modeId?: string
   draftCount: number
   seat: 'A' | 'B'
   round: number | null
@@ -1700,12 +2082,18 @@ interface StoredSeatDetail {
   /** D45. Absent on every match recorded before it. */
   lineup?: unknown[]
   metaBan?: unknown
+  /** D51 — the character this seat's *round* ban denied, per round. Absent before D51. */
+  roundBans?: unknown[]
 }
 
 /** The stored `detail` blob. Everything here is optional because older rows are older rows. */
 interface StoredDetail {
   rounds?: unknown[]
   seats?: Partial<Record<'A' | 'B', StoredSeatDetail>>
+  /** D51 — the mode this was played under, so a format is read rather than inferred. */
+  modeId?: unknown
+  /** D51 — which seat chose first, per round; `null` where the round was blind. */
+  firstToSelect?: unknown[]
 }
 
 /**
@@ -1828,6 +2216,11 @@ function playedRoundsOf(detail: StoredDetail): PlayedRound[] {
   }))
 }
 
+/** The mode this match was played under, when the record knows it (D51). */
+function modeOf(detail: StoredDetail): string | null {
+  return typeof detail.modeId === 'string' && detail.modeId ? detail.modeId : null
+}
+
 /** How many round slots the record holds, as the format it implies. */
 function formatOf(detail: StoredDetail): string {
   const slots = Array.isArray(detail.rounds) ? detail.rounds.length : 0
@@ -1837,8 +2230,9 @@ function formatOf(detail: StoredDetail): string {
    * is overtime by the same convention the history page renders rounds under, so regulation is
    * whatever is left under it.
    *
-   * Storing the mode would be the airtight answer and is not worth a column yet: it would be
-   * exact for matches recorded from now on and leave every existing one needing this anyway.
+   * **D51 stores the mode**, which is the airtight answer — but only for matches recorded since,
+   * so this stays as the fallback every older row still needs. The two are reported separately
+   * rather than folded together: a derived `Bo3` and a known `bring-ban1` are different claims.
    */
   const regulation = Math.min(slots, 3)
   return regulation > 0 ? `Bo${regulation}` : 'unknown'
@@ -1909,4 +2303,26 @@ function heroRounds(hero: HeroStanding): number {
 function winRate(hero: HeroStanding): number {
   const rounds = heroRounds(hero)
   return rounds === 0 ? 0 : hero.wins / rounds
+}
+
+/**
+ * How many entries a roster-wide card shows, and how many a player's does.
+ *
+ * A leaderboard of forty-four is the hero board, which exists. These cards answer "who tops this"
+ * and a top three answers it — the fourth entry is where a fun fact turns back into a table.
+ */
+const ROSTER_TOP = 5
+const PLAYER_TOP = 3
+
+/**
+ * The most of something, biggest first.
+ *
+ * Ties break on the id so the order is total: two characters with the same count must not swap
+ * places between two reads of the same page.
+ */
+function top(counts: Map<string, number>, limit = ROSTER_TOP): HeroCount[] {
+  return [...counts.entries()]
+    .map(([characterId, count]) => ({ characterId, count }))
+    .sort((a, b) => b.count - a.count || a.characterId.localeCompare(b.characterId))
+    .slice(0, limit)
 }

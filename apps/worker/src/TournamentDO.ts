@@ -287,12 +287,34 @@ export class TournamentDO extends DurableObject<Env> {
         return this.editEntrants(request)
       case 'ws':
         return this.handleWebSocket(request)
+      case 'destroy':
+        return this.destroy()
       default:
         return Response.json(
           { error: 'NOT_FOUND', detail: `no action '${action}'` },
           { status: 404 },
         )
     }
+  }
+
+  /**
+   * **D49 — the admin's delete, which is D42's sweep arriving early.**
+   *
+   * Deliberately **not** in `ORGANIZER_ACTIONS`, and that needs saying next to a list whose whole
+   * point is that gates are not forgotten. This one is not an organizer's to make: an organizer
+   * holds a token for *their* tournament and deleting a record is the power D34 put behind the
+   * admin key. It is gated twice over — `index.ts` will not route to it (its regex names every
+   * action a client may reach, and this is not among them), and `RegistryDO` only calls it from
+   * behind that key.
+   *
+   * The same `deleteAll` + `migrate` pair the alarm uses, for the same reason: the instance
+   * outlives the delete, and a request arriving before eviction must find an empty schema rather
+   * than no schema at all.
+   */
+  private async destroy(): Promise<Response> {
+    await this.ctx.storage.deleteAll()
+    this.migrate()
+    return Response.json({ ok: true })
   }
 
   /**

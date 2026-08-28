@@ -2813,6 +2813,105 @@ td.table__secondary .table__record {
   font-variant-numeric: tabular-nums;
 }
 
+/* --- D50: the fun ones ---------------------------------------------------- */
+
+/*
+ * A grid of cards rather than more tables.
+ *
+ * Two boards on this screen are already tables, and a third would be a third thing to read the
+ * same way. These are single facts with their runners-up under them, and a card is what a single
+ * fact looks like — `auto-fit` so the row holds as many as fit and never fewer than one.
+ */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.6rem;
+}
+
+.statcard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--panel-2);
+  clip-path: var(--clip-corner);
+}
+
+.statcard__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step--1);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--muted);
+}
+
+/* The answer, at the size an answer gets. Everything else on the card is context for it. */
+.statcard__leader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.statcard__name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step-1);
+  line-height: 1.1;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.statcard__count {
+  margin-left: auto;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/*
+ * The runners-up, and they are the point rather than padding: a leader with nothing under it is
+ * an assertion, and the same leader over a 9, an 8 and a 7 shows whether it was a landslide.
+ */
+.statcard__rest {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.statcard__runner {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.statcard__runner .statcard__count {
+  color: var(--muted);
+}
+
+.statcard__blurb {
+  margin: auto 0 0;
+  padding-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+/* Which of these has never happened here is itself worth knowing, so the card stays. */
+.statcard__none {
+  margin: 0;
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  font-size: 0.8rem;
+}
+
 /* --- D31: the lobby list ------------------------------------------------- */
 
 .panel__empty {
