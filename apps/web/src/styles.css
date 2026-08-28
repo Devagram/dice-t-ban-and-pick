@@ -2217,46 +2217,129 @@ select {
 
 /* --- D29: the standings table -------------------------------------------- */
 
+/*
+ * A real table, laid out as one — not a grid wearing table markup.
+ *
+ * `display: contents` on `thead`/`tbody` would have let the whole thing be one grid, and it is
+ * the reason this is not: several screen readers drop table semantics when the row groups are
+ * removed from the box tree, which would undo exactly what the markup was rewritten for.
+ * `table-layout: fixed` gives the same column control a grid was providing, and `border-spacing`
+ * gives back the gutter between rows that the row list had.
+ */
 .table {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 2px;
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0 3px;
 }
 
-.table__row {
-  display: grid;
-  grid-template-columns: 2.5rem 1fr 7.5rem 7.5rem;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: var(--panel-2);
-  clip-path: var(--clip-corner);
+/*
+ * The panel holds a full-bleed table, so it drops the padding it gives a stack of prose.
+ * The table's own cells carry the inset.
+ */
+.panel--table {
+  padding: 10px;
 }
 
-.table__row--head {
+.table__row--head th {
   background: transparent;
+  padding: 0 10px 6px;
   color: var(--muted);
+  font-family: var(--font-display);
+  font-weight: 700;
   font-size: var(--step--1);
   text-transform: uppercase;
   letter-spacing: var(--tracking-caps);
-  padding-bottom: 2px;
+  text-align: left;
+  vertical-align: bottom;
+}
+
+/* The rank column is the one that is centred, and its header has to agree with the numerals
+   under it — `.table__row--head th` is the more specific rule, so it has to say so. */
+.table__row--head th.table__rank {
+  text-align: center;
+}
+
+/* Group name over its key — "Matches" above "W–L–D" — which is what replaced the second header
+   row. Stacked rather than side by side so the key sits directly over the digits it labels. */
+.table__head {
+  display: block;
+}
+
+.table__key {
+  display: block;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+.table__row td {
+  background: var(--panel-2);
+  padding: 9px 10px;
+  vertical-align: middle;
+  transition: background var(--t-quick) var(--ease-out);
+}
+
+/*
+ * The arena's clipped corner, drawn across the row.
+ *
+ * `--clip-corner` cannot go on the `tr` — clipping a table row is not something browsers agree
+ * on — so the notch is cut from the two cells that own the corners it touches, and the row reads
+ * as one shape because the cells share a background.
+ */
+.table__row td:first-child {
+  clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px);
+}
+
+.table__row td:last-child {
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+}
+
+.table__row:hover td {
+  background: color-mix(in srgb, var(--panel-2) 95%, var(--accent));
 }
 
 /* Your own row, so you can find yourself without reading every name. */
-.table__row--you {
-  box-shadow: inset 0 0 0 1px var(--accent);
+.table__row--you td {
+  background: color-mix(in srgb, var(--panel-2) 88%, var(--accent));
+}
+
+/*
+ * Stated separately because `:hover` outranks it otherwise, and the row that is *you* going
+ * dimmer under the cursor than the row above it is the one thing this highlight must not do.
+ */
+.table__row--you:hover td {
+  background: color-mix(in srgb, var(--panel-2) 82%, var(--accent));
+}
+
+.table__row--you td:first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .table__rank {
+  width: 3rem;
   font-family: var(--font-display);
   font-weight: 700;
-  color: var(--muted);
-  text-align: right;
+  font-size: var(--step-1);
+  line-height: 1;
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* First place, in the colour the app already uses for a champion. Only the numeral: a whole gold
+   row would say something stronger than "top of a list among friends". */
+.table__row--lead .table__rank {
+  color: var(--gold);
 }
 
 .table__name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step-1);
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   overflow-wrap: anywhere;
 }
 
@@ -2267,33 +2350,105 @@ select {
   letter-spacing: var(--tracking-caps);
 }
 
+.table__matches {
+  width: 11rem;
+}
+
+.table__rounds {
+  width: 7rem;
+}
+
+.table__record {
+  display: flex;
+  align-items: baseline;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* The digits. Tabular figures live here rather than on the record around them, because these are
+   the only characters in it that have to line up row to row — and because `--nil` below modifies
+   this, which the stylesheet's own invariant requires actually exist. */
 .table__num {
-  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
-/* Matches and rounds, side by side — two questions about the same player. */
-.table__group {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  text-align: center;
-  font-size: var(--step--1);
+td.table__matches .table__record {
+  font-size: var(--step-1);
+}
+
+/* Rounds are the supporting number: the same shape, a step down and dimmed, so the eye reaches
+   the match record first and finds this when it wants it. */
+td.table__rounds .table__record {
+  font-size: var(--step-0);
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
 }
 
-.table__row:not(.table__row--head):not(.table__row--sub) .table__group {
-  color: inherit;
-  font-size: inherit;
-  letter-spacing: normal;
+.table__sep {
+  padding: 0 0.18em;
+  color: color-mix(in srgb, var(--muted) 55%, transparent);
 }
 
-.table__row--sub {
-  background: transparent;
-  padding-top: 0;
-  padding-bottom: 4px;
+/* A zero is still a column that has to line up, so it is dimmed rather than dropped — which
+   leaves every digit that means something carrying full weight. */
+.table__num--nil {
+  color: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+
+/*
+ * Win / draw / loss as a proportion of the matches played.
+ *
+ * The thing that makes the table readable at a glance: shape before digits. It is a restatement
+ * of the three numbers above it and nothing more, which is why it is `aria-hidden` and why it
+ * carries no percentage — see the note in Leaderboard.tsx about the question a percentage would
+ * force this screen to answer.
+ */
+.table__share {
+  display: flex;
+  height: 4px;
+  margin-top: 6px;
+  gap: 1px;
+  background: color-mix(in srgb, var(--line) 60%, transparent);
+  overflow: hidden;
+}
+
+.table__seg {
+  display: block;
+  min-width: 2px;
+}
+
+.table__seg--win {
+  background: var(--good);
+}
+
+.table__seg--draw {
+  background: var(--warn);
+}
+
+.table__seg--loss {
+  background: color-mix(in srgb, var(--danger) 55%, var(--panel-2));
+}
+
+@media (max-width: 34rem) {
+  .table__matches {
+    width: 6.5rem;
+  }
+
+  .table__rounds {
+    width: 5rem;
+  }
+
+  .table__name,
+  td.table__matches .table__record {
+    font-size: var(--step-0);
+  }
+
+  /* The bar is the one thing here that is decoration rather than data, so it is what goes when
+     there is no room for both. */
+  .table__share {
+    display: none;
+  }
 }
 
 /* A name somebody already owns is an ordinary answer, not an alarm — stated beside the field. */

@@ -98,3 +98,81 @@ describe('the standings read at a glance', () => {
     expect(onBack).toHaveBeenCalled()
   })
 })
+
+/**
+ * What the 2026-08-28 rebuild has to keep true.
+ *
+ * The screen was a list of rows with two `aria-hidden` header rows over it, and both halves of
+ * that were the same bug: nothing labelled which of six single-letter columns you were reading,
+ * and a screen reader was handed the numbers with the headers hidden. These are about the table
+ * still being a table — not about how it looks, which is CSS and not something a test should
+ * pretend to check.
+ */
+describe('the standings are readable, by eye and by screen reader', () => {
+  it('is a real table with named columns', async () => {
+    render(<Leaderboard onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
+
+    // The headers were `aria-hidden` when they were two decorative rows. A column nobody can name
+    // is a column of unlabelled numbers to anyone not looking at it.
+    const columns = screen.getAllByRole('columnheader').map((h) => h.textContent)
+    expect(columns).toEqual(['#Rank', 'Player', 'MatchesW–L–D', 'RoundsW–L–D'])
+    expect(screen.getByRole('table', { name: /standings/i })).toBeTruthy()
+  })
+
+  it('joins each record into one figure rather than three columns', async () => {
+    render(<Leaderboard onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
+
+    const [matches, rounds] = [
+      ...document.querySelectorAll('.table__row:not(.table__row--head) .table__record'),
+    ]
+    // Read as a record — the separators are decoration, so they are the one thing here hidden
+    // from the accessibility tree rather than announced as "dash".
+    expect(matches!.textContent).toBe('7–3–1')
+    expect(rounds!.textContent).toBe('16–9–2')
+    const separators = [...matches!.querySelectorAll('.table__sep')]
+    expect(separators.every((sep) => sep.getAttribute('aria-hidden') === 'true')).toBe(true)
+  })
+
+  it('dims a zero instead of dropping it, so the columns still line up', async () => {
+    render(<Leaderboard onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Alex')).toBeTruthy())
+
+    // Alex has no draws. The digit stays — a record missing its third number is unreadable
+    // against one that has it — and loses its weight instead.
+    const alex = document.querySelectorAll('.table__row:not(.table__row--head)')[1]!
+    const drawn = alex.querySelectorAll('.table__num')[2]!
+    expect(drawn.textContent).toBe('0')
+    expect(drawn.className).toContain('table__num--nil')
+    expect(alex.querySelectorAll('.table__num')[0]!.className).not.toContain('table__num--nil')
+  })
+
+  it('draws the share of a record in proportion, and says nothing to a screen reader', async () => {
+    render(<Leaderboard onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
+
+    // Tom: 7–3–1 of 11 matches, wins first from the left.
+    const bar = document.querySelector('.table__row:not(.table__row--head) .table__share')!
+    expect(bar.getAttribute('aria-hidden')).toBe('true')
+    const widths = [...bar.querySelectorAll('.table__seg')].map(
+      (seg) => (seg as HTMLElement).style.width,
+    )
+    expect(widths[0]).toBe(`${(7 / 11) * 100}%`)
+    expect(widths).toHaveLength(3)
+
+    // Alex drew nothing, so there is no draw segment to draw — a zero-width sliver would read as
+    // a result nobody had.
+    const alexBar = document.querySelectorAll('.table__share')[1]!
+    expect(alexBar.querySelectorAll('.table__seg')).toHaveLength(2)
+  })
+
+  it('marks first place without repainting the whole row', async () => {
+    render(<Leaderboard onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
+
+    const rows = [...document.querySelectorAll('.table__row:not(.table__row--head)')]
+    expect(rows[0]!.className).toContain('table__row--lead')
+    expect(rows[1]!.className).not.toContain('table__row--lead')
+  })
+})
