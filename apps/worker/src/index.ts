@@ -121,6 +121,9 @@ export default {
       // D45 — the hero board. Public for the same reason the other two are: it is the same stored
       // rows, counted by character rather than by player.
       path === '/api/heroes' ||
+      // D48 — one hero's games, fetched when its row is opened. Its own route rather than part of
+      // the board above: forty-four heroes' worth of match lists is a download, not a table.
+      path === '/api/hero' ||
       // D37 Phase 8 — the tournament index. Public, and served from the registry rather than from
       // any tournament object, because those are swept after a week and this list is not.
       path === '/api/tournaments'

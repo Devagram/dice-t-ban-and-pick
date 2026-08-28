@@ -263,6 +263,8 @@ export class RegistryDO extends DurableObject<Env> {
         return Response.json({ matchups: this.matchups() })
       case 'heroes':
         return Response.json(this.heroBoard())
+      case 'hero':
+        return this.heroDetail(request)
       case 'add':
         return this.add(request)
       case 'edit':
@@ -710,7 +712,6 @@ export class RegistryDO extends DurableObject<Env> {
         continue
       }
       if (!detail?.seats) continue
-      const rounds = Array.isArray(detail.rounds) ? detail.rounds : []
 
       for (const seat of ['A', 'B'] as const) {
         const side = detail.seats[seat]
@@ -724,27 +725,6 @@ export class RegistryDO extends DurableObject<Env> {
       }
 
       /*
-       * Every round that produced a result. `null` is a round `stopWhenDecided` meant nobody
-       * played — not a result for anybody, and not a gap in the record either.
-       */
-      const decided = rounds
-        .map((outcome, round) => ({ outcome, round }))
-        .filter(
-          (r): r is { outcome: 'A' | 'B' | 'TIE'; round: number } =>
-            r.outcome === 'A' || r.outcome === 'B' || r.outcome === 'TIE',
-        )
-
-      const source = {
-        A: heroesByRound(detail.seats.A, decided),
-        B: heroesByRound(detail.seats.B, decided),
-      }
-      /*
-       * A pairing is only real when *both* sides' rounds are known one by one. A deduced sweep
-       * gives every hero its result and still cannot say who it faced — see `heroesByRound`.
-       */
-      const pairingKnown = source.A.exact && source.B.exact
-
-      /*
        * A round at a time rather than a seat at a time, and the difference is the unit
        * `unattributedRounds` is counted in: a round has two heroes on the table, so walking the
        * seats would count each missing round twice and report a gap of twice its real size.
@@ -752,8 +732,12 @@ export class RegistryDO extends DurableObject<Env> {
        * Either side missing means neither is credited, which keeps "attributable" a property of
        * the round rather than of one seat's half of it.
        */
-      for (const { outcome, round } of decided) {
-        const played = { A: source.A.lineup[round] ?? null, B: source.B.lineup[round] ?? null }
+      for (const { outcome, heroes: played, exact } of playedRoundsOf(detail)) {
+        /*
+         * A pairing is only real when *both* sides' rounds are known one by one. A deduced sweep
+         * gives every hero its result and still cannot say who it faced — see `heroesByRound`.
+         */
+        const pairingKnown = exact.A && exact.B
         if (!played.A || !played.B) {
           unattributedRounds++
           continue
@@ -794,6 +778,107 @@ export class RegistryDO extends DurableObject<Env> {
     }
 
     return { heroes: [...table.values()].sort(byRank), unattributedRounds }
+  }
+
+  /**
+   * **D48 — one hero's games, round by round.**
+   *
+   * The board says a hero is 4–2–1; this says which games those were, who was holding it, what it
+   * was up against, and how each one went. It is the answer to the question the board provokes and
+   * cannot itself hold — forty-four heroes' worth of match lists is not a table, it is a download.
+   *
+   * Read through `playedRoundsOf`, the same reader the board counts, so the list and the total
+   * above it cannot come to disagree. Two aggregations, one reading.
+   *
+   * **What it will not claim.** A round deduced from a sweep (D47) knows the hero's result and not
+   * its round number or its opponent — the order within a sweep is unknowable. Those come back with
+   * `round: null` and `opponent.hero: null` rather than with a plausible guess, and the screen says
+   * so. The alternative is a page that looks precise about the one thing it cannot be.
+   */
+  private heroDetail(request: Request): Response {
+    const characterId = new URL(request.url).searchParams.get('id') ?? ''
+    if (!characterId) {
+      return Response.json({ error: 'MALFORMED_QUERY', detail: 'no hero id' }, { status: 400 })
+    }
+
+    const appearances: HeroAppearance[] = []
+    const against = new Map<string, HeroMatchup>()
+
+    const rows = this.sql
+      .exec<Row>(
+        `SELECT room_code, played_at, a_id, a_name, b_id, b_name, detail, tournament_id
+           FROM matches ORDER BY played_at DESC LIMIT 500`,
+      )
+      .toArray()
+
+    for (const row of rows) {
+      let detail: StoredDetail | null
+      try {
+        detail = JSON.parse(String(row['detail'] ?? 'null')) as StoredDetail | null
+      } catch {
+        continue
+      }
+      if (!detail?.seats) continue
+
+      const players = {
+        A: { id: String(row['a_id']), name: String(row['a_name']) },
+        B: { id: String(row['b_id']), name: String(row['b_name']) },
+      }
+      const format = formatOf(detail)
+      const draftCount = (seat: 'A' | 'B') => {
+        const drafted = detail.seats?.[seat]?.drafted
+        return Array.isArray(drafted) ? drafted.length : 0
+      }
+
+      for (const { round, outcome, heroes, exact } of playedRoundsOf(detail)) {
+        for (const seat of ['A', 'B'] as const) {
+          if (heroes[seat] !== characterId) continue
+          const other = seat === 'A' ? 'B' : 'A'
+          // The pairing needs both sides; the round number needs only this one.
+          const pairingKnown = exact.A && exact.B
+          const opponentHero = pairingKnown ? heroes[other] : null
+
+          appearances.push({
+            roomCode: String(row['room_code']),
+            playedAt: Number(row['played_at']),
+            format,
+            draftCount: draftCount(seat),
+            seat,
+            round: exact[seat] ? round : null,
+            outcome: outcome === 'TIE' ? 'DRAW' : outcome === seat ? 'WIN' : 'LOSS',
+            player: players[seat],
+            opponent: { ...players[other], hero: opponentHero },
+            ...(row['tournament_id'] ? { tournamentId: String(row['tournament_id']) } : {}),
+          })
+
+          // A mirror is left out for the reason it is left out of the board: a hero's record
+          // against itself is level by construction and says nothing about either copy.
+          if (opponentHero && opponentHero !== characterId) {
+            const entry = against.get(opponentHero) ?? {
+              characterId: opponentHero,
+              wins: 0,
+              losses: 0,
+              draws: 0,
+            }
+            if (outcome === 'TIE') entry.draws++
+            else if (outcome === seat) entry.wins++
+            else entry.losses++
+            against.set(opponentHero, entry)
+          }
+        }
+      }
+    }
+
+    return Response.json({
+      characterId,
+      /*
+       * **Every** opponent, best first — not the three each end the board shows. The row is a
+       * summary and this is the page behind it, so the cap that keeps the board a table would
+       * only withhold what somebody opened this to read.
+       */
+      matchups: [...against.values()].sort(byEdge),
+      appearances: appearances.slice(0, 200),
+    })
   }
 
   /**
@@ -1588,6 +1673,26 @@ export interface HeroMatchup {
   draws: number
 }
 
+/**
+ * D48 — one round a hero played, as the page behind its row lists it.
+ *
+ * `round` and `opponent.hero` are `null` on a round deduced from a sweep: the result is known and
+ * the order within the sweep is not, so neither the round number nor who it faced can be stated.
+ */
+export interface HeroAppearance {
+  roomCode: string
+  playedAt: number
+  /** Derived from how many round slots the record holds — see `formatOf`. */
+  format: string
+  draftCount: number
+  seat: 'A' | 'B'
+  round: number | null
+  outcome: 'WIN' | 'LOSS' | 'DRAW'
+  player: { id: string; name: string }
+  opponent: { id: string; name: string; hero: string | null }
+  tournamentId?: string
+}
+
 /** One seat's half of the stored `detail`, as the aggregation is willing to trust it. */
 interface StoredSeatDetail {
   drafted?: unknown[]
@@ -1650,25 +1755,93 @@ const MATCHUPS_SHOWN = 3
  * anybody's best or worst — it is the one they should argue about.
  */
 function endsOf(against: Map<string, HeroMatchup>): { best: HeroMatchup[]; worst: HeroMatchup[] } {
-  const edge = (m: HeroMatchup) => m.wins - m.losses
-  const rounds = (m: HeroMatchup) => m.wins + m.losses + m.draws
   const all = [...against.values()]
   return {
     best: all
-      .filter((m) => edge(m) > 0)
-      .sort(
-        (a, b) =>
-          edge(b) - edge(a) || rounds(b) - rounds(a) || a.characterId.localeCompare(b.characterId),
-      )
+      .filter((m) => edgeOf(m) > 0)
+      .sort(byEdge)
       .slice(0, MATCHUPS_SHOWN),
+    // Reversed, so "worst" reads furthest-behind first the way "best" reads furthest-ahead first.
     worst: all
-      .filter((m) => edge(m) < 0)
-      .sort(
-        (a, b) =>
-          edge(a) - edge(b) || rounds(b) - rounds(a) || a.characterId.localeCompare(b.characterId),
-      )
+      .filter((m) => edgeOf(m) < 0)
+      .sort(byEdge)
+      .reverse()
       .slice(0, MATCHUPS_SHOWN),
   }
+}
+
+const edgeOf = (m: HeroMatchup) => m.wins - m.losses
+const matchupRounds = (m: HeroMatchup) => m.wins + m.losses + m.draws
+
+/**
+ * Best matchup first, across both the board's two ends and the per-hero page's whole list.
+ *
+ * One comparator rather than two: the page is the board's row opened up, and an order that
+ * disagreed between them would make the top of the list and the "beats" chip name different heroes.
+ */
+function byEdge(a: HeroMatchup, b: HeroMatchup): number {
+  return (
+    edgeOf(b) - edgeOf(a) ||
+    matchupRounds(b) - matchupRounds(a) ||
+    a.characterId.localeCompare(b.characterId)
+  )
+}
+
+/**
+ * **One reader for "what happened in this match, hero by hero".**
+ *
+ * The board counts these and the per-hero page lists them, and they must not be two readings of
+ * the same rows: a total that disagrees with the games it is a total of is the failure this file
+ * warns about at the top, and the one nobody notices because only one of the two is on screen.
+ *
+ * `exact` is per seat and says whether *that* side's round indices are facts. A recorded lineup is
+ * exact; a deduced sweep is not, because the order is unknowable — see `heroesByRound`. It is
+ * carried per seat rather than per round because a pairing needs both sides and a round label needs
+ * only one.
+ */
+interface PlayedRound {
+  round: number
+  outcome: 'A' | 'B' | 'TIE'
+  heroes: Record<'A' | 'B', string | null>
+  exact: Record<'A' | 'B', boolean>
+}
+
+function playedRoundsOf(detail: StoredDetail): PlayedRound[] {
+  const rounds = Array.isArray(detail.rounds) ? detail.rounds : []
+  const decided = rounds
+    .map((outcome, round) => ({ outcome, round }))
+    .filter(
+      (r): r is { outcome: 'A' | 'B' | 'TIE'; round: number } =>
+        r.outcome === 'A' || r.outcome === 'B' || r.outcome === 'TIE',
+    )
+
+  const source = {
+    A: heroesByRound(detail.seats?.A, decided),
+    B: heroesByRound(detail.seats?.B, decided),
+  }
+
+  return decided.map(({ outcome, round }) => ({
+    round,
+    outcome,
+    heroes: { A: source.A.lineup[round] ?? null, B: source.B.lineup[round] ?? null },
+    exact: { A: source.A.exact, B: source.B.exact },
+  }))
+}
+
+/** How many round slots the record holds, as the format it implies. */
+function formatOf(detail: StoredDetail): string {
+  const slots = Array.isArray(detail.rounds) ? detail.rounds.length : 0
+  /*
+   * Derived rather than stored, and the derivation is exact for every mode that has shipped: a
+   * `ALWAYS_3_ROUNDS` mode with overtime allocates four slots and the Bo1 allocates one. Index 3
+   * is overtime by the same convention the history page renders rounds under, so regulation is
+   * whatever is left under it.
+   *
+   * Storing the mode would be the airtight answer and is not worth a column yet: it would be
+   * exact for matches recorded from now on and leave every existing one needing this anyway.
+   */
+  const regulation = Math.min(slots, 3)
+  return regulation > 0 ? `Bo${regulation}` : 'unknown'
 }
 
 /**

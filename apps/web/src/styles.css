@@ -2499,6 +2499,163 @@ td.table__secondary .table__record {
   color: var(--muted);
 }
 
+/*
+ * D48 — the row is a control that opens the games behind it.
+ *
+ * A button rather than a click handler on the `tr`: a row is not a control, and this one has to be
+ * reachable by keyboard and announce that it opens something. Stripped back to the text it wraps,
+ * because a leaderboard row that looks like a button reads as a form.
+ */
+.hrow--toggle {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.hrow--toggle:hover .hrow__name,
+.hrow--toggle:focus-visible .hrow__name {
+  color: var(--accent);
+}
+
+/* The name and its marker on one line, so the marker sits beside the name rather than under it. */
+.hrow__title {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+/* The affordance. Small and beside the name rather than a chevron in its own column, which would
+   cost a column on a table that has four. */
+.hrow__more {
+  margin-left: 0.4rem;
+  color: var(--muted);
+  font-size: 0.8em;
+}
+
+.table__row--open .hrow__name {
+  color: var(--accent);
+}
+
+/*
+ * The panel, in a row of its own so the four columns above keep their widths.
+ *
+ * Deliberately not `.table__row`: every reader of this table selects on that class to count
+ * heroes, and a detail row wearing it would make an opened board report one hero too many.
+ */
+.herodetail__cell {
+  padding: 0.75rem 1rem 1rem;
+  background: color-mix(in srgb, var(--panel-2) 70%, var(--bg-2));
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+}
+
+.hpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.hpanel__title {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step--1);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--muted);
+}
+
+/* Every opponent, not the three each end the row shows. Wraps rather than scrolls: this is a
+   short list at the scale this app is for, and a scroller inside a table row hides its own end. */
+.hpanel__ups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.hup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 0.75rem;
+}
+
+.hup__record {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* The same three readings the board uses, in the same three colours. */
+.hup__record--up {
+  color: var(--good);
+}
+
+.hup__record--down {
+  color: color-mix(in srgb, var(--danger) 80%, var(--text));
+}
+
+.hup__record--level {
+  color: var(--muted);
+}
+
+.hpanel__rounds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/*
+ * One round per line, on a grid so the columns line up down the list — a history you scan for
+ * "when did this stop working" reads badly when every line sets its own tab stops.
+ */
+.hgame {
+  display: grid;
+  grid-template-columns: 5rem minmax(8rem, 1fr) 7rem 5.5rem minmax(6rem, 1fr) 3.5rem;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 0.75rem;
+}
+
+.hgame__when,
+.hgame__mode,
+.hgame__round,
+.hgame__vs {
+  color: var(--muted);
+}
+
+.hgame__outcome {
+  font-weight: 700;
+  text-align: right;
+}
+
+.hgame--win .hgame__outcome {
+  color: var(--good);
+}
+
+.hgame--loss .hgame__outcome {
+  color: color-mix(in srgb, var(--danger) 80%, var(--text));
+}
+
+.hgame--draw .hgame__outcome {
+  color: var(--warn);
+}
+
 .table__rate {
   font-family: var(--font-display);
   font-weight: 700;
@@ -2595,6 +2752,15 @@ td.table__secondary .table__record {
      list that wraps to four lines stops being readable at a glance, which is its whole job. */
   .ends__chip:nth-child(n + 4) {
     display: none;
+  }
+
+  /* The history stacks. Six columns in 320px is six columns of two characters each. */
+  .hgame {
+    grid-template-columns: 1fr auto;
+  }
+
+  .hgame__who {
+    grid-column: 1 / -1;
   }
 }
 

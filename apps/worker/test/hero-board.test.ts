@@ -577,3 +577,172 @@ describe('the deduction against a real game', () => {
     expect(deduced.unattributed).toBe(0)
   })
 })
+
+/**
+ * **D48 — the games behind a hero's row.**
+ *
+ * The board says a hero is 4–2–1; this says which games those were and who was holding it. Read
+ * through the same `playedRoundsOf` the board counts, so the two cannot come to disagree — and the
+ * properties worth pinning are the ones where a page like this is tempted to overstate: a deduced
+ * round has no round number and no opponent, and saying otherwise would be the one invented thing
+ * on the screen.
+ */
+describe('the games behind a hero', () => {
+  const hero = async (stub: DurableObjectStub, characterId: string) =>
+    (await (await stub.fetch(`https://r/hero?id=${characterId}`)).json()) as {
+      characterId: string
+      matchups: { characterId: string; wins: number; losses: number; draws: number }[]
+      appearances: {
+        roomCode: string
+        format: string
+        draftCount: number
+        seat: 'A' | 'B'
+        round: number | null
+        outcome: 'WIN' | 'LOSS' | 'DRAW'
+        player: { id: string; name: string }
+        opponent: { id: string; name: string; hero: string | null }
+      }[]
+    }
+
+  it('lists one entry per round, with who was holding it and what it met', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'B', 'A'],
+      A: { lineup: ['thor', 'loki', 'thor'], drafted: ['thor', 'loki', 'santa', 'ninja'] },
+      B: { lineup: ['ninja', 'druid', 'santa'], drafted: ['ninja', 'druid', 'santa', 'loki'] },
+    })
+
+    const thor = await hero(r, 'thor')
+    // Two rounds in one match: a hero that plays twice appears twice, because the row above counts
+    // rounds and this is that count opened up.
+    expect(thor.appearances).toHaveLength(2)
+    expect(thor.appearances[0]).toMatchObject({
+      roomCode: 'ROOM01',
+      seat: 'A',
+      round: 0,
+      outcome: 'WIN',
+      player: { name: 'Tom' },
+      opponent: { name: 'Alex', hero: 'ninja' },
+    })
+    expect(thor.appearances[1]).toMatchObject({
+      round: 2,
+      outcome: 'WIN',
+      opponent: { hero: 'santa' },
+    })
+  })
+
+  it('names the format and the draft from what the record holds', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      // Four slots is a Bo3 with overtime — every `ALWAYS_3_ROUNDS` mode allocates one.
+      rounds: ['A', 'B', 'A', null],
+      A: { lineup: ['thor', 'loki', 'thor', null], drafted: ['thor', 'loki', 'santa', 'ninja'] },
+      B: { lineup: ['ninja', 'druid', 'santa', null], drafted: ['ninja', 'druid', 'santa'] },
+    })
+    await seed(r, 'ROOM02', {
+      rounds: ['B'],
+      A: { lineup: ['thor'], drafted: ['thor', 'loki', 'santa'] },
+      B: { lineup: ['ninja'], drafted: ['ninja', 'druid', 'santa'] },
+    })
+
+    const thor = await hero(r, 'thor')
+    const bo1 = thor.appearances.find((a) => a.roomCode === 'ROOM02')!
+    const bo3 = thor.appearances.find((a) => a.roomCode === 'ROOM01')!
+    // Derived from the round slots rather than stored, which is exact for every mode that has
+    // shipped. `draftCount` is the seat's own drafted list, which has been stored since D29.
+    expect(bo1).toMatchObject({ format: 'Bo1', draftCount: 3, outcome: 'LOSS' })
+    expect(bo3).toMatchObject({ format: 'Bo3', draftCount: 4 })
+  })
+
+  it('says which round it cannot name, on a game the record only half remembers', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'A'],
+      // A pre-D45 sweep: D47 knows both heroes won and cannot know in which order.
+      A: { drafted: ['thor', 'loki'], played: ['thor', 'loki'] },
+      B: { drafted: ['ninja', 'druid'], played: ['ninja', 'druid'] },
+    })
+
+    const thor = await hero(r, 'thor')
+    expect(thor.appearances).toHaveLength(1)
+    // The result is a fact and the round number is not. A plausible "R1" here would be the only
+    // invented thing on the page, in the place it would be least visible.
+    expect(thor.appearances[0]).toMatchObject({ round: null, outcome: 'WIN' })
+    expect(thor.appearances[0]!.opponent.hero).toBeNull()
+    // And with no pairing there is no matchup to report either.
+    expect(thor.matchups).toEqual([])
+  })
+
+  it('does name the round and the opponent when one round settles both', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['B'],
+      A: { drafted: ['thor', 'loki'], played: ['thor'] },
+      B: { drafted: ['ninja', 'druid'], played: ['ninja'] },
+    })
+
+    // One round played means one hero a side: the pairing is not a guess, so both are stated.
+    const thor = await hero(r, 'thor')
+    expect(thor.appearances[0]).toMatchObject({ round: 0, outcome: 'LOSS' })
+    expect(thor.appearances[0]!.opponent.hero).toBe('ninja')
+  })
+
+  it('gives every opponent, not the three the board shows at each end', async () => {
+    const r = registry()
+    for (const [i, foe] of ['ninja', 'druid', 'santa', 'krampus', 'seraph'].entries()) {
+      await seed(r, `R${i}`, {
+        rounds: ['A'],
+        A: { lineup: ['thor'] },
+        B: { lineup: [foe] },
+      })
+    }
+
+    const thor = await hero(r, 'thor')
+    // The row is a summary and this is the page behind it; capping here would withhold exactly
+    // what somebody opened it to read.
+    expect(thor.matchups).toHaveLength(5)
+    expect(thor.matchups.every((m) => m.wins === 1)).toBe(true)
+  })
+
+  it('keeps a level matchup, which the board’s two ends leave out', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'B'],
+      A: { lineup: ['thor', 'thor'] },
+      B: { lineup: ['ninja', 'ninja'] },
+    })
+
+    const thor = await hero(r, 'thor')
+    // 1–1 is neither a best nor a worst matchup, which is not a reason to hide it from the list of
+    // everyone this hero has met — it is the pairing still worth arguing about.
+    expect(thor.matchups).toMatchObject([{ characterId: 'ninja', wins: 1, losses: 1 }])
+  })
+
+  it('shows both sides of a mirror as two rounds and no matchup', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A'],
+      A: { lineup: ['thor'] },
+      B: { lineup: ['thor'] },
+    })
+
+    const thor = await hero(r, 'thor')
+    // D1 allows Thor against Thor: it won that round and it lost it, and its record against itself
+    // is level by construction — a matchup entry that could only ever say so.
+    expect(thor.appearances.map((a) => a.outcome).sort()).toEqual(['LOSS', 'WIN'])
+    expect(thor.matchups).toEqual([])
+  })
+
+  it('answers for a hero nobody has played, rather than failing', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', { rounds: ['A'], A: { lineup: ['thor'] }, B: { lineup: ['ninja'] } })
+
+    const nobody = await hero(r, 'krampus')
+    expect(nobody).toMatchObject({ characterId: 'krampus', matchups: [], appearances: [] })
+  })
+
+  it('refuses a request that names no hero', async () => {
+    const r = registry()
+    expect((await r.fetch('https://r/hero')).status).toBe(400)
+  })
+})

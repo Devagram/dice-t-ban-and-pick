@@ -3,10 +3,12 @@ import { useEffect, useState } from 'react'
 import type { Character } from '@banpick/types'
 
 import {
+  fetchHero,
   fetchHeroes,
   fetchRoster,
   fetchStandings,
   type HeroBoard,
+  type HeroHistory,
   type HeroMatchup,
   type HeroStanding,
   type Standing,
@@ -194,6 +196,11 @@ function HeroesBoard() {
   const [board, setBoard] = useState<HeroBoard | null>(null)
   const [roster, setRoster] = useState<Map<string, Character>>(new Map())
   const [error, setError] = useState<string | null>(null)
+  /*
+   * One hero open at a time. A board with six rows expanded is a page you scroll past rather than
+   * a table you compare across, and comparing is what a leaderboard is for.
+   */
+  const [open, setOpen] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -257,7 +264,16 @@ function HeroesBoard() {
         </thead>
         <tbody>
           {board.heroes.map((hero, i) => (
-            <HeroRow key={hero.characterId} hero={hero} rank={i + 1} roster={roster} />
+            <HeroRow
+              key={hero.characterId}
+              hero={hero}
+              rank={i + 1}
+              roster={roster}
+              open={open === hero.characterId}
+              onToggle={() =>
+                setOpen((current) => (current === hero.characterId ? null : hero.characterId))
+              }
+            />
           ))}
         </tbody>
       </table>
@@ -278,10 +294,14 @@ function HeroRow({
   hero,
   rank,
   roster,
+  open,
+  onToggle,
 }: {
   hero: HeroStanding
   rank: number
   roster: Map<string, Character>
+  open: boolean
+  onToggle: () => void
 }) {
   const rounds = hero.wins + hero.losses + hero.draws
   const character = roster.get(hero.characterId)
@@ -289,50 +309,89 @@ function HeroRow({
   const nameOf = (id: string) => roster.get(id)?.name ?? pretty(id)
 
   return (
-    <tr className={`table__row ${rank === 1 && rounds > 0 ? 'table__row--lead' : ''}`}>
-      <td className="table__rank">{rank}</td>
-      <td className="table__name">
-        <span className="hrow">
-          {/* Art is optional everywhere (see `art.ts`), and a hero with none still needs a row —
-              `Portrait` falls back to initials on its own hue. A hero the roster has forgotten
-              gets no tile at all rather than an invented character. */}
-          {character ? <Portrait character={character} size="chip" /> : null}
-          <span className="hrow__text">
-            <span className="hrow__name">{name}</span>
-            <span className="hrow__drafted">
-              drafted {hero.drafted}
-              {/* Drafted and never reached is the other half of what a pick meant — and the one
-                  number here that counts every match ever recorded. */}
-              {hero.drafted > hero.played ? ` · benched ${hero.drafted - hero.played}` : ''}
+    <>
+      <tr
+        className={`table__row ${rank === 1 && rounds > 0 ? 'table__row--lead' : ''} ${
+          open ? 'table__row--open' : ''
+        }`}
+      >
+        <td className="table__rank">{rank}</td>
+        <td className="table__name">
+          {/*
+           * A button around the face and the name rather than a click handler on the row: a row is
+           * not a control, and this one has to be reachable by keyboard and announce that it opens
+           * something. The target is still most of the cell.
+           */}
+          <button
+            type="button"
+            className="hrow hrow--toggle"
+            aria-expanded={open}
+            onClick={onToggle}
+          >
+            {/* Art is optional everywhere (see `art.ts`), and a hero with none still needs a row —
+                `Portrait` falls back to initials on its own hue. A hero the roster has forgotten
+                gets no tile at all rather than an invented character. */}
+            {character ? <Portrait character={character} size="chip" /> : null}
+            <span className="hrow__text">
+              {/* The marker is a sibling of the name, not inside it: a hero's name is the name,
+                  and anything else in that element ends up in every reading of it. */}
+              <span className="hrow__title">
+                <span className="hrow__name">{name}</span>
+                <span className="hrow__more" aria-hidden="true">
+                  {open ? '−' : '+'}
+                </span>
+              </span>
+              <span className="hrow__drafted">
+                drafted {hero.drafted}
+                {/* Drafted and never reached is the other half of what a pick meant — and the one
+                    number here that counts every match ever recorded. */}
+                {hero.drafted > hero.played ? ` · benched ${hero.drafted - hero.played}` : ''}
+              </span>
             </span>
-            {/*
-             * Who this hero beats and who beats it, under it.
-             *
-             * The overall rate says how a hero does; this says *against whom*, which is the
-             * question anybody arguing about a draft is actually asking. Level matchups appear in
-             * neither list — a pairing nobody is winning is not somebody's best or worst.
-             */}
-            <Ends label="beats" kind="best" matchups={hero.best} nameOf={nameOf} />
-            <Ends label="loses to" kind="worst" matchups={hero.worst} nameOf={nameOf} />
-          </span>
-        </span>
-      </td>
-      <td className="table__primary">
-        <Record wins={hero.wins} losses={hero.losses} draws={hero.draws} />
-        <Share wins={hero.wins} losses={hero.losses} draws={hero.draws} />
-      </td>
-      <td className="table__secondary">
-        {rounds === 0 ? (
-          <span className="table__rate table__rate--none" title="no rounds credited to this hero">
-            —
-          </span>
-        ) : (
-          <span className="table__rate" title={`${hero.wins} of ${rounds} rounds`}>
-            {Math.round((hero.wins / rounds) * 100)}%
-          </span>
-        )}
-      </td>
-    </tr>
+          </button>
+
+          {/*
+           * Who this hero beats and who beats it, under it — outside the button, because a list of
+           * other heroes' names inside the control that opens *this* one reads as a link to them.
+           *
+           * The overall rate says how a hero does; this says *against whom*, which is the question
+           * anybody arguing about a draft is actually asking. Level matchups appear in neither
+           * list — a pairing nobody is winning is not somebody's best or worst. The full list,
+           * level records included, is in the panel below.
+           */}
+          <Ends label="beats" kind="best" matchups={hero.best} nameOf={nameOf} />
+          <Ends label="loses to" kind="worst" matchups={hero.worst} nameOf={nameOf} />
+        </td>
+        <td className="table__primary">
+          <Record wins={hero.wins} losses={hero.losses} draws={hero.draws} />
+          <Share wins={hero.wins} losses={hero.losses} draws={hero.draws} />
+        </td>
+        <td className="table__secondary">
+          {rounds === 0 ? (
+            <span className="table__rate table__rate--none" title="no rounds credited to this hero">
+              —
+            </span>
+          ) : (
+            <span className="table__rate" title={`${hero.wins} of ${rounds} rounds`}>
+              {Math.round((hero.wins / rounds) * 100)}%
+            </span>
+          )}
+        </td>
+      </tr>
+
+      {/*
+       * Its own row rather than a cell that grows, so the four columns above keep their widths —
+       * and deliberately *not* `table__row`, which every reader of this table selects on to count
+       * heroes.
+       */}
+      {open ? (
+        <tr className="herodetail">
+          <td className="herodetail__cell" colSpan={4}>
+            <HeroHistoryPanel characterId={hero.characterId} roster={roster} />
+          </td>
+        </tr>
+      ) : null}
+    </>
   )
 }
 
@@ -375,6 +434,132 @@ function Ends({
       ))}
     </span>
   )
+}
+
+/**
+ * **D48 — the games behind the row.**
+ *
+ * Fetched when the row is opened rather than with the board: forty-four heroes' worth of match
+ * lists is a download, not a table. Unmounted when it closes, so a hero corrected in the admin
+ * screen and looked at again shows what the record now says.
+ */
+function HeroHistoryPanel({
+  characterId,
+  roster,
+}: {
+  characterId: string
+  roster: Map<string, Character>
+}) {
+  const [history, setHistory] = useState<HeroHistory | null>(null)
+  const [error, setError] = useState(false)
+  const nameOf = (id: string) => roster.get(id)?.name ?? pretty(id)
+
+  useEffect(() => {
+    let live = true
+    fetchHero(characterId)
+      .then((h) => {
+        if (!live) return
+        /*
+         * A body that is not the shape this renders is a failure, not a slow load. Without the
+         * check a malformed response leaves the panel on "Loading…" for good, which is the one
+         * state that tells the reader nothing and never resolves.
+         */
+        if (!h || !Array.isArray(h.appearances)) setError(true)
+        else setHistory(h)
+      })
+      .catch(() => {
+        if (live) setError(true)
+      })
+    return () => {
+      live = false
+    }
+  }, [characterId])
+
+  if (error) return <p className="muted">Could not load that hero’s games.</p>
+  if (!history) return <p className="muted">Loading…</p>
+  if (history.appearances.length === 0) {
+    return (
+      <p className="muted">
+        No round here can be credited to {nameOf(characterId)} yet — see the note under the table.
+      </p>
+    )
+  }
+
+  return (
+    <div className="hpanel">
+      {history.matchups.length > 0 ? (
+        <section className="hpanel__block">
+          <h3 className="hpanel__title">Against</h3>
+          {/*
+           * Every opponent, best first — the row above shows three a side, and somebody who opened
+           * this wants the ones the summary left out. Level records are here too: the row omits
+           * them because they are neither a best nor a worst, which is not a reason to hide them
+           * from the list they belong in.
+           */}
+          <ul className="hpanel__ups">
+            {history.matchups.map((m) => (
+              <li className="hup" key={m.characterId}>
+                <span className="hup__name">{nameOf(m.characterId)}</span>
+                <span className={`hup__record hup__record--${edgeName(m)}`}>
+                  {m.wins}–{m.losses}
+                  {m.draws > 0 ? `–${m.draws}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="hpanel__block">
+        <h3 className="hpanel__title">
+          {history.appearances.length} {history.appearances.length === 1 ? 'round' : 'rounds'}
+        </h3>
+        <ul className="hpanel__rounds">
+          {history.appearances.map((a, i) => (
+            <li className={`hgame hgame--${a.outcome.toLowerCase()}`} key={`${a.roomCode}:${i}`}>
+              <span className="hgame__when">{when(a.playedAt)}</span>
+              <span className="hgame__who">
+                {/* Whose hands it was in, and whose it was up against — the row above counts
+                    heroes, and a hero is only ever as good as somebody was with it. */}
+                <strong>{a.player.name || 'Unknown'}</strong> vs {a.opponent.name || 'Unknown'}
+              </span>
+              <span className="hgame__mode">
+                {a.format}
+                {a.draftCount > 0 ? ` · draft ${a.draftCount}` : ''}
+              </span>
+              <span className="hgame__round">
+                {/* Null when the round came out of a sweep (D47): the result is known and which
+                    round it was is not, and a plausible R1 would be the one invented thing here. */}
+                {a.round === null ? 'round unknown' : a.round >= 3 ? 'OT' : `R${a.round + 1}`}
+              </span>
+              <span className="hgame__vs">
+                {a.opponent.hero ? `vs ${nameOf(a.opponent.hero)}` : 'opponent unknown'}
+              </span>
+              <span className="hgame__outcome">
+                {a.outcome === 'WIN' ? 'Won' : a.outcome === 'LOSS' ? 'Lost' : 'Drew'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  )
+}
+
+/** Which of the three colours a matchup record wears. Level is its own answer, not a weak win. */
+function edgeName(m: HeroMatchup): 'up' | 'down' | 'level' {
+  if (m.wins > m.losses) return 'up'
+  if (m.wins < m.losses) return 'down'
+  return 'level'
+}
+
+/** Same shape the history page uses, so a date reads the same wherever it appears. */
+function when(at: number): string {
+  const days = Math.floor((Date.now() - at) / 86400000)
+  if (days === 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days}d ago`
+  return new Date(at).toLocaleDateString()
 }
 
 /**

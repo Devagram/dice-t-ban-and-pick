@@ -248,17 +248,16 @@ const ROSTER = {
 
 /** Serves each endpoint the boards ask for; `over` replaces one of them. */
 function serveBoards(over: Record<string, unknown> = {}) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (url: string) => {
-      const path = String(url)
-      const key = Object.keys(over).find((k) => path.includes(k))
-      if (key) return new Response(JSON.stringify(over[key]))
-      if (path.includes('/api/heroes')) return new Response(JSON.stringify(HEROES))
-      if (path.includes('/api/roster')) return new Response(JSON.stringify(ROSTER))
-      return new Response(JSON.stringify({ standings: STANDINGS }))
-    }),
-  )
+  const fetchMock = vi.fn(async (url: string) => {
+    const path = String(url)
+    const key = Object.keys(over).find((k) => path.includes(k))
+    if (key) return new Response(JSON.stringify(over[key]))
+    if (path.includes('/api/heroes')) return new Response(JSON.stringify(HEROES))
+    if (path.includes('/api/roster')) return new Response(JSON.stringify(ROSTER))
+    return new Response(JSON.stringify({ standings: STANDINGS }))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
 }
 
 describe('the two boards', () => {
@@ -442,5 +441,154 @@ describe('the hero board', () => {
     )
     render(<Leaderboard board="heroes" onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+  })
+})
+
+/**
+ * **D48 — opening a hero's row.**
+ *
+ * The row is a summary; this is the page behind it. Two things the screen must not do: fetch
+ * forty-four heroes' match lists to render a table, and state a round number the record cannot
+ * give it.
+ */
+describe('opening a hero', () => {
+  const HISTORY = {
+    characterId: 'thor',
+    matchups: [
+      { characterId: 'moon-elf', wins: 3, losses: 0, draws: 1 },
+      { characterId: 'ninja', wins: 1, losses: 1, draws: 0 },
+      { characterId: 'krampus', wins: 0, losses: 1, draws: 0 },
+    ],
+    appearances: [
+      {
+        roomCode: 'ABC123',
+        playedAt: Date.now() - 86400000,
+        format: 'Bo3',
+        draftCount: 4,
+        seat: 'A' as const,
+        round: 1,
+        outcome: 'WIN' as const,
+        player: { id: 'p-tom', name: 'Tom' },
+        opponent: { id: 'p-alex', name: 'Alex', hero: 'moon-elf' },
+      },
+      {
+        roomCode: 'OLD001',
+        playedAt: Date.now() - 86400000 * 40,
+        format: 'Bo1',
+        draftCount: 3,
+        seat: 'B' as const,
+        round: null,
+        outcome: 'LOSS' as const,
+        player: { id: 'p-alex', name: 'Alex' },
+        opponent: { id: 'p-tom', name: 'Tom', hero: null },
+      },
+    ],
+  }
+
+  /*
+   * Keyed on `/api/hero?` rather than `/api/hero`: the override matcher is a substring test and
+   * the board's own endpoint is `/api/heroes`, which the shorter key also matches — serving this
+   * history to the board and leaving the page with nothing to render.
+   */
+  const withHistory = () => serveBoards({ '/api/hero?': HISTORY })
+
+  const openThor = async () => {
+    await waitFor(() => expect(document.querySelectorAll('.hrow__name').length).toBeGreaterThan(1))
+    fireEvent.click(screen.getAllByRole('button', { expanded: false })[1]!)
+  }
+
+  it('does not fetch a hero’s games until its row is opened', async () => {
+    const fetchMock = withHistory()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await waitFor(() => expect(document.querySelector('.hrow__name')).toBeTruthy())
+
+    // Forty-four heroes' worth of match lists is a download, not a table.
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/hero?'))).toBe(false)
+    await openThor()
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/hero?id=thor'))).toBe(
+        true,
+      ),
+    )
+  })
+
+  it('lists each round with who played it, the format and the opponent', async () => {
+    withHistory()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await openThor()
+
+    const rounds = await screen.findAllByRole('listitem')
+    const played = rounds.filter((li) => li.className.includes('hgame'))
+    expect(played).toHaveLength(2)
+    // A hero is only ever as good as somebody was with it, so the names are on the line.
+    expect(played[0]!.textContent).toContain('Tom')
+    expect(played[0]!.textContent).toContain('Alex')
+    expect(played[0]!.textContent).toContain('Bo3')
+    expect(played[0]!.textContent).toContain('draft 4')
+    expect(played[0]!.textContent).toContain('R2')
+    expect(played[0]!.textContent).toContain('Moon Elf')
+    expect(played[0]!.textContent).toContain('Won')
+  })
+
+  it('says plainly which round it cannot name, rather than picking one', async () => {
+    withHistory()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await openThor()
+
+    // A round deduced from a sweep knows the result and not the order — see D47. A plausible "R1"
+    // would be the only invented thing on this page and the hardest to catch.
+    const old = (await screen.findAllByRole('listitem')).find((li) =>
+      li.textContent?.includes('Lost'),
+    )!
+    expect(old.textContent).toContain('round unknown')
+    expect(old.textContent).toContain('opponent unknown')
+  })
+
+  it('shows every opponent, level records included', async () => {
+    withHistory()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await openThor()
+
+    const ups = await waitFor(() => {
+      const found = [...document.querySelectorAll('.hup')]
+      expect(found.length).toBeGreaterThan(0)
+      return found
+    })
+    // The row shows three a side and drops the level ones; this is the list they belong in.
+    expect(ups.map((u) => u.textContent)).toEqual(['Moon Elf3–0–1', 'Ninja1–1', 'Krampus0–1'])
+  })
+
+  it('closes again, and opening another closes the first', async () => {
+    withHistory()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await openThor()
+    await waitFor(() => expect(document.querySelector('.herodetail')).toBeTruthy())
+
+    // One at a time: a board with six rows expanded is a page you scroll past rather than a table
+    // you compare across.
+    fireEvent.click(screen.getAllByRole('button', { expanded: false })[0]!)
+    await waitFor(() => expect(document.querySelectorAll('.herodetail')).toHaveLength(1))
+    expect(screen.getAllByRole('button', { expanded: true })).toHaveLength(1)
+  })
+
+  it('does not disturb the rows the board is counted from', async () => {
+    withHistory()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await openThor()
+    await waitFor(() => expect(document.querySelector('.herodetail')).toBeTruthy())
+
+    // The detail row deliberately does not wear `table__row`: every reader of this table selects
+    // on that class to count heroes, and an opened board must not report one hero too many.
+    expect(document.querySelectorAll('.table__row:not(.table__row--head)')).toHaveLength(4)
+  })
+
+  it('says so when a hero’s games cannot be loaded', async () => {
+    serveBoards({ '/api/hero?': null })
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await openThor()
+
+    // The board around it still stands: one failed panel is not a failed page.
+    expect(await screen.findByText(/Could not load/)).toBeTruthy()
+    expect(document.querySelectorAll('.table__row:not(.table__row--head)')).toHaveLength(4)
   })
 })

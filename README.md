@@ -155,6 +155,18 @@ drafted — including how often it was drafted and never reached the table. Rank
 rounds won, then on how much the hero has been played; the record sits beside the rate, so a
 one-round 100% reads as exactly that.
 
+**Click a hero to open its games** (D48). The panel lists every opponent it has met — including the
+level records the row's two ends leave out — and then every round it has played: when, who was
+holding it, who they were playing, the format and draft size, which round it was, what it faced,
+and how that round went. Fetched when the row opens rather than with the board, because
+forty-four heroes' worth of match lists is a download rather than a table. One hero opens at a
+time.
+
+The format (`Bo3`, `Bo1`) is derived from how many round slots the record holds, which is exact for
+every mode that has shipped: an `ALWAYS_3_ROUNDS` mode allocates four slots including overtime, and
+the Bo1 allocates one. Storing the mode outright would be airtight and is not worth a column yet —
+it would be exact for matches recorded from now on and leave every existing one needing this anyway.
+
 Under each hero is **who it beats and who beats it**, furthest ahead and furthest behind first, up
 to three a side. Those are split on wins against losses rather than on a rate, which keeps draws
 out of the decision entirely: 3–1–2 is up on that opponent, 1–3–2 is down, and an even record is in

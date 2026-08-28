@@ -285,6 +285,39 @@ export function fetchHeroes(): Promise<HeroBoard> {
   return fetch('/api/heroes').then(json<HeroBoard>)
 }
 
+/**
+ * D48 — one round a hero played, as the page behind its row lists it.
+ *
+ * `round` and `opponent.hero` are `null` on a round deduced from a sweep (D47): the result is
+ * known and the order within the sweep is not, so neither the round number nor who it faced can be
+ * stated. The screen says so rather than showing a plausible guess.
+ */
+export interface HeroAppearance {
+  roomCode: string
+  playedAt: number
+  /** `Bo3`, `Bo1` — derived from how many round slots the record holds. */
+  format: string
+  draftCount: number
+  seat: 'A' | 'B'
+  round: number | null
+  outcome: 'WIN' | 'LOSS' | 'DRAW'
+  player: { id: string; name: string }
+  opponent: { id: string; name: string; hero: string | null }
+  tournamentId?: string
+}
+
+export interface HeroHistory {
+  characterId: string
+  /** Every opponent this hero has met, best matchup first — not the three each end the board shows. */
+  matchups: HeroMatchup[]
+  appearances: HeroAppearance[]
+}
+
+/** Fetched when a hero's row is opened, not with the board. */
+export function fetchHero(characterId: string): Promise<HeroHistory> {
+  return fetch(`/api/hero?id=${encodeURIComponent(characterId)}`).then(json<HeroHistory>)
+}
+
 /** Pairwise records — one row per pairing, read from either side. */
 export function fetchMatchups(): Promise<Matchup[]> {
   return fetch('/api/matchups')
