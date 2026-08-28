@@ -446,11 +446,28 @@ with.
 | `base`            | Bo3. Draft in secret, then three rounds of roll → ban → pick.                       |
 | `bring-ban1`      | Bo3. Both meta-ban one character first, revealed, then draft against that.          |
 | `bo1-bring3-ban1` | **Bo1 (D36).** Bring three each, both ban one of the other's, play one of your two. |
+| `bo1-pick1`       | **Bo1 (D52).** One character each, locked blind. Both open and the game is on.      |
+
+`bo1-pick1` has **no ban, no roll and no selection step**. Every other mode is built around a ban;
+against a single pick a ban would be the match, decided before either seat had chosen. The roll goes
+for the same reason it exists elsewhere — something has to be handed out, and here nothing is. With
+one character each the selection is D26's forced auto-commit, so the match goes from the reveal
+straight to the result and the players are asked for exactly one thing.
 
 ## Adding a mode
 
-Write a YAML file in [`modes/`](modes/), run `npm run build:modes`, and it ships. The mode list is
-read off the directory, so there is no second place to register it.
+Write a YAML file in [`modes/`](modes/), run `npm run build:modes`, and it ships: the worker's mode
+list is read off the directory, so nothing in `src/` needs to learn about it.
+
+Two **tests** do, and both fail loudly rather than quietly when they have not:
+
+- `EXPECTED_VARIANTS` in [`generate-modes.test.ts`](packages/loader/test/generate-modes.test.ts) —
+  what the new mode's parameter space should enumerate (D25's claim, mode by mode).
+- The shipped list in [`smoke.test.ts`](apps/worker/test/smoke.test.ts), which names the modes
+  rather than counting them, so swapping one for another is caught too.
+
+Neither is a place a mode can be _forgotten_, which is the point: the build fails until both agree
+with the directory.
 
 §1 requires that new modes are config and never engine code, and Phase 2 settled it for the two
 Bo3 modes: both resolve from YAML to programs byte-identical to the ones built in TypeScript, and

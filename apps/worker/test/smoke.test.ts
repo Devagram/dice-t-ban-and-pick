@@ -22,6 +22,7 @@ describe('the worker is alive', () => {
         expect((modes as { modeId: string }[]).map((m) => m.modeId).sort()).toEqual([
           'base',
           'bo1-bring3-ban1',
+          'bo1-pick1',
           'bring-ban1',
         ])
       })

@@ -796,6 +796,121 @@
         }
       ]
     },
+    "bo1-pick1": {
+      "modeId": "bo1-pick1",
+      "schemaVersion": 1,
+      "definition": {
+        "modeId": "bo1-pick1",
+        "label": "Bo1 — one pick, no bans",
+        "parameters": {},
+        "modules": [
+          {
+            "type": "SIMULTANEOUS_COMMIT",
+            "id": "draft",
+            "commits": {
+              "picks": {
+                "count": 1,
+                "pool": "legalDraftPool"
+              },
+              "metaBan": null
+            },
+            "reveal": {
+              "picks": "IMMEDIATE",
+              "metaBan": "NONE"
+            }
+          },
+          {
+            "type": "ROUND_LOOP",
+            "id": "rounds",
+            "count": 1,
+            "template": [
+              {
+                "type": "SELECT",
+                "id": "select",
+                "mode": "SEQUENTIAL",
+                "actor": "BOTH",
+                "pool": "legalRoundPick"
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "report",
+                "allowTie": true
+              }
+            ],
+            "overrides": {}
+          }
+        ],
+        "onTie": {
+          "scoring": "HALF_POINT",
+          "consumesCharacters": true
+        },
+        "match": {
+          "resolution": "ALWAYS_1_ROUND",
+          "stopWhenDecided": false
+        },
+        "overtime": {
+          "enabled": false
+        }
+      },
+      "variants": [
+        {
+          "parameters": {},
+          "mode": {
+            "modeId": "bo1-pick1",
+            "label": "Bo1 — one pick, no bans",
+            "parameters": {},
+            "program": [
+              {
+                "type": "SIMULTANEOUS_COMMIT",
+                "id": "draft",
+                "roundIndex": null,
+                "commits": {
+                  "picks": {
+                    "count": 1,
+                    "pool": "legalDraftPool"
+                  },
+                  "metaBan": null
+                },
+                "reveal": {
+                  "picks": "IMMEDIATE",
+                  "metaBan": "NONE"
+                },
+                "revealTags": {
+                  "picks": "draft:reveal",
+                  "metaBan": null
+                }
+              },
+              {
+                "type": "SELECT",
+                "id": "rounds.0.select",
+                "mode": "SEQUENTIAL",
+                "actor": "BOTH",
+                "pool": "legalRoundPick",
+                "roundIndex": 0
+              },
+              {
+                "type": "REPORT_RESULT",
+                "id": "rounds.0.report",
+                "allowTie": true,
+                "roundIndex": 0
+              }
+            ],
+            "onTie": {
+              "scoring": "HALF_POINT",
+              "consumesCharacters": true
+            },
+            "match": {
+              "resolution": "ALWAYS_1_ROUND",
+              "stopWhenDecided": false
+            },
+            "overtime": {
+              "enabled": false
+            }
+          },
+          "modeContentHash": "48c98679c081"
+        }
+      ]
+    },
     "bring-ban1": {
       "modeId": "bring-ban1",
       "schemaVersion": 1,

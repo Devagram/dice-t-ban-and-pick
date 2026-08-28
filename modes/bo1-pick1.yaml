@@ -1,0 +1,78 @@
+# D52 — one game, one character each, and nothing in between.
+#
+# The smallest mode the grammar can express, and worth having for what it removes rather than what
+# it adds: no ban, no privilege, no roll, no order to declare. Both seats lock a character, the
+# picks open, and the game is on.
+#
+# **Why there is no ban.** Every other mode is built around one. The Bo3 modes pay for an
+# asymmetric ban across three rounds (D2 hands it out against turn order, D10 inverts it), and
+# `bo1-bring3-ban1` pays for a symmetric one by making both blind. Here there is nothing to pay
+# with: a ban against a single pick is the match, decided before either seat has chosen. Removing
+# it is what makes one pick a fair format instead of a broken one.
+#
+# **Why there is no roll.** The Bo3 modes roll for a privilege and `bo1-bring3-ban1` rolls for play
+# order, and both exist because something has to be handed out. Nothing does here — there is no
+# privilege to win and, with one character each, no advantage in going first that the format itself
+# creates. The dice game decides that at the table, which is where it was always decided; the app
+# has nothing to add and does not pretend otherwise.
+#
+# **Why the select is still a module.** It reads as ceremony and is not: the selection is what
+# consumes the slot and what tells the record which character played which round (D45). With one
+# character each it is D26's forced auto-commit — the engine plays it, nobody is asked, and the
+# match goes straight from the reveal to the result.
+schemaVersion: 1
+mode: bo1-pick1
+label: 'Bo1 — one pick, no bans'
+
+# No parameters. `draftCount` is a live balance question elsewhere (D25); one is the format here,
+# and at two this would be a different game with a selection decision in it.
+
+modules:
+  # Blind, and revealed the moment both are in — which is what "lock it in" means. A visible pick
+  # would hand the second seat the whole game, and there is no ban phase left to make that a
+  # trade rather than a gift.
+  - use: SIMULTANEOUS_COMMIT
+    id: draft
+    commits:
+      picks:
+        count: 1
+        pool: legalDraftPool
+        crossSeatMirrors: ALLOWED # D1 — both may lock the same character, and it is a real match
+        selfDuplicates: FORBIDDEN # D12, vacuous at one pick and declared anyway
+    reveal:
+      picks: IMMEDIATE
+
+  - use: ROUND_LOOP
+    id: rounds
+    # One round, and `match.resolution` below says the same thing. The loader refuses a mode where
+    # those two disagree — see `validateRoundCount`.
+    count: 1
+    template:
+      # `SEQUENTIAL` rather than `SIMULTANEOUS_HIDDEN`: with one legal option each there is nothing
+      # to conceal, and sealing a selection nobody makes would need a reveal gate to open it again.
+      # Both auto-commit as `FORCED` (D26), so this costs the players no step at all.
+      - use: SELECT
+        id: select
+        mode: SEQUENTIAL
+        actor: BOTH
+        pool: legalRoundPick
+
+      - use: REPORT_RESULT
+        id: report
+        allowTie: true
+
+onTie:
+  scoring: HALF_POINT
+  consumesCharacters: true
+
+match:
+  resolution: ALWAYS_1_ROUND
+  # Nothing to skip: there is no second round for a lead to make dead. Set false rather than true
+  # to say that plainly — a `true` here would read as though it did something.
+  stopWhenDecided: false
+
+# A tied single round is a drawn match, which is what HALF_POINT has always meant. Overtime is off
+# for the reason it is off in the other Bo1: it fires when regulation ends level and both seats can
+# play on, and with one character each nobody can — there is nothing left to play it with.
+overtime:
+  enabled: false

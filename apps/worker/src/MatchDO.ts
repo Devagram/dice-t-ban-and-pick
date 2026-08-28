@@ -118,21 +118,35 @@ function seatDetail(state: MatchState, seat: Seat) {
  * able to see one: it stores both selections and nothing about their order. This is the same gap
  * D45 closed for *which hero played which round*, in the one place the log can still answer it.
  *
- * **`null` for a simultaneous round, and that is the load-bearing part.** In a hidden round both
- * seats commit blind, so the order the two `SELECT` events happened to arrive in is an accident of
- * the network and nobody countered anybody. The signal for which kind of round it was is the
- * selection slice's own visibility — `select.ts` seals a hidden selection to its owner and leaves
- * a sequential one public — so this reads the property rather than re-deriving it from the mode.
+ * `null` wherever a counter-pick was not possible, and there are two ways for that to be true:
+ *
+ * - **Nobody could see.** In a hidden round both seats commit blind, so the order the two `SELECT`
+ *   events happened to arrive in is an accident of the network. The signal for which kind of round
+ *   it was is the selection slice's own visibility — `select.ts` seals a hidden selection to its
+ *   owner and leaves a sequential one public — so this reads the property rather than re-deriving
+ *   it from the mode.
+ *
+ * - **Nobody chose.** D26 auto-commits a selection when exactly one legal option exists, and a
+ *   decision with one option is not a decision. It is the *second* selection that has to be a real
+ *   one for a counter-pick to exist: a seat that answered a forced pick still answered it, while a
+ *   seat whose own hand was forced answered nothing. `bo1-pick1` is the case that makes this
+ *   concrete — one character each, both selections forced, and without this every one of its
+ *   rounds would file a counter-pick that nobody made.
  */
 function firstToSelect(state: MatchState): (Seat | null)[] {
   return state.rounds.map((round) => {
     const blind = (['A', 'B'] as const).some((seat) => round.selection[seat].owner !== null)
     if (blind) return null
-    for (const event of state.log) {
-      const payload = event.payload
-      if (payload.type === 'SELECT' && payload.roundIndex === round.index) return payload.seat
-    }
-    return null
+
+    const selects = state.log
+      .map((event) => event.payload)
+      .filter((p) => p.type === 'SELECT' && p.roundIndex === round.index)
+    if (selects.length < 2) return null
+    const second = selects[1]!
+    if (second.type !== 'SELECT' || second.reason === 'FORCED') return null
+
+    const first = selects[0]!
+    return first.type === 'SELECT' ? first.seat : null
   })
 }
 

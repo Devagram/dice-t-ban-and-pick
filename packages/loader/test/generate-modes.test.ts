@@ -34,6 +34,9 @@ const EXPECTED_VARIANTS: Record<string, Record<string, string | number>[]> = {
   // D36 — no parameters, so exactly one variant. Three brought is the format here rather than a
   // setting; at two there is nothing to ban and at four the ban stops mattering.
   'bo1-bring3-ban1': [{}],
+  // D52 — one pick each, so there is nothing left to parameterise: at two this would be a
+  // different game with a selection decision in it.
+  'bo1-pick1': [{}],
 }
 
 describe('generated worker modes', () => {
