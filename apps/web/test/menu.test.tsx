@@ -21,7 +21,7 @@ describe('the main menu', () => {
       'Join a gameTake an open seat, or use a room code somebody sent you',
       'Host a gameChoose the mode and the rules, then send the link',
       'Host a tournamentA bracket of any size, any mode, single or double elimination',
-      'LeaderboardWho is ahead, and by how much',
+      'LeaderboardWho is ahead — the players, and the heroes they bring',
       'HistoryEvery match played, round by round',
     ])
     // Joining first: a room has one host and everyone else is a joiner.

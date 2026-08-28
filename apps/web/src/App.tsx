@@ -32,7 +32,7 @@ type Route =
   | { screen: 'host' }
   | { screen: 'lobby'; roomCode: string }
   | { screen: 'match'; roomCode: string; seatToken: string; websocketUrl: string }
-  | { screen: 'leaderboard' }
+  | { screen: 'leaderboard'; board: 'players' | 'heroes' }
   | { screen: 'lobbies' }
   | { screen: 'history' }
   | { screen: 'admin' }
@@ -73,7 +73,13 @@ function readRoute(): Route {
 
   // The host's form, which was the front page until the front page became a menu.
   if (/^\/host\/?$/.test(path)) return { screen: 'host' }
-  if (/^\/leaderboard\/?$/.test(path)) return { screen: 'leaderboard' }
+  if (/^\/leaderboard\/?$/.test(path)) return { screen: 'leaderboard', board: 'players' }
+  /*
+   * D45 — the hero board is the leaderboard's other half rather than a screen of its own: the
+   * question is the same one at a different grain, and two pages would be two places to look for
+   * it. Its own URL, though, because a board worth arguing about is worth linking to.
+   */
+  if (/^\/heroes\/?$/.test(path)) return { screen: 'leaderboard', board: 'heroes' }
   // D31 — the open-room list, so a game can be found without a link.
   if (/^\/lobbies\/?$/.test(path)) return { screen: 'lobbies' }
   // D34 — history is public; the dashboard behind it is not (the *server* enforces that, not
@@ -151,6 +157,7 @@ export function App() {
     case 'leaderboard':
       return (
         <Leaderboard
+          board={route.board}
           onBack={() => {
             history.pushState(null, '', '/')
             setRoute({ screen: 'home' })

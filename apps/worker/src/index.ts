@@ -118,6 +118,9 @@ export default {
       // standings are already derived from, shown rather than summarised.
       path === '/api/matches' ||
       path === '/api/matchups' ||
+      // D45 — the hero board. Public for the same reason the other two are: it is the same stored
+      // rows, counted by character rather than by player.
+      path === '/api/heroes' ||
       // D37 Phase 8 — the tournament index. Public, and served from the registry rather than from
       // any tournament object, because those are swept after a week and this list is not.
       path === '/api/tournaments'

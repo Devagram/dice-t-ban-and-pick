@@ -34,7 +34,16 @@ const MENU = [
     name: 'Host a tournament',
     blurb: 'A bracket of any size, any mode, single or double elimination',
   },
-  { href: '/leaderboard', name: 'Leaderboard', blurb: 'Who is ahead, and by how much' },
+  {
+    /*
+     * D45 — one entry for both boards. The hero table is the same question at a different grain,
+     * and a sixth card would make the front door a list of pages rather than of things to do; the
+     * blurb names it so it is not a feature you have to already know about to find.
+     */
+    href: '/leaderboard',
+    name: 'Leaderboard',
+    blurb: 'Who is ahead — the players, and the heroes they bring',
+  },
   { href: '/history', name: 'History', blurb: 'Every match played, round by round' },
 ]
 

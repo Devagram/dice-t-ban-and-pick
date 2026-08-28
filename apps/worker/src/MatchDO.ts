@@ -70,6 +70,24 @@ function seatDetail(state: MatchState, seat: Seat) {
     drafted: slots.map((s) => s.characterId),
     played: slots.filter((s) => s.consumed).map((s) => s.characterId),
     metaBan: state.seats[seat].metaBanPlaced.value,
+    /**
+     * **D45 — which character played which round.**
+     *
+     * `played` above cannot answer that, and the difference is the whole reason this exists: it
+     * is the consumed slots *in slot order*, so a seat that played slot 2 first and slot 0 second
+     * stores them the other way round. Every round outcome in `detail.rounds` was therefore
+     * un-attributable to a character, and a per-hero record could not be computed from a record
+     * that had already been kept for two months.
+     *
+     * Indexed to match `detail.rounds` exactly — same length, same round per position, `null`
+     * where that round was never selected for. That alignment is the contract the aggregation
+     * reads it under, so the two are built from `state.rounds` in the same pass rather than from
+     * two lists that could come to disagree about which round is which.
+     */
+    lineup: state.rounds.map((round) => {
+      const index = round.selection[seat].value
+      return index === null ? null : (slots[index]?.characterId ?? null)
+    }),
   }
 }
 

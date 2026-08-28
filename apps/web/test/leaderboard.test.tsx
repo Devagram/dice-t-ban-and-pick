@@ -47,7 +47,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('the standings read at a glance', () => {
   it('lists players in order, with matches and rounds counted separately', async () => {
-    render(<Leaderboard onBack={vi.fn()} />)
+    render(<Leaderboard board="players" onBack={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
     const rows = [
@@ -62,7 +62,7 @@ describe('the standings read at a glance', () => {
   })
 
   it('marks which row is you, so you need not read every name', async () => {
-    render(<Leaderboard onBack={vi.fn()} />)
+    render(<Leaderboard board="players" onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Alex')).toBeTruthy())
 
     const mine = document.querySelector('.table__row--you')!
@@ -75,7 +75,7 @@ describe('the standings read at a glance', () => {
       'fetch',
       vi.fn(async () => new Response(JSON.stringify({ standings: [] }))),
     )
-    render(<Leaderboard onBack={vi.fn()} />)
+    render(<Leaderboard board="players" onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText(/Nothing yet/)).toBeTruthy())
     // And explains what to do about it, rather than showing an empty table.
     expect(screen.getByText(/both players named/)).toBeTruthy()
@@ -86,13 +86,13 @@ describe('the standings read at a glance', () => {
       'fetch',
       vi.fn(async () => Promise.reject(new Error('offline'))),
     )
-    render(<Leaderboard onBack={vi.fn()} />)
+    render(<Leaderboard board="players" onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
   })
 
   it('offers a way back', async () => {
     const onBack = vi.fn()
-    render(<Leaderboard onBack={onBack} />)
+    render(<Leaderboard board="players" onBack={onBack} />)
     await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(onBack).toHaveBeenCalled()
@@ -110,7 +110,7 @@ describe('the standings read at a glance', () => {
  */
 describe('the standings are readable, by eye and by screen reader', () => {
   it('is a real table with named columns', async () => {
-    render(<Leaderboard onBack={vi.fn()} />)
+    render(<Leaderboard board="players" onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
 
     // The headers were `aria-hidden` when they were two decorative rows. A column nobody can name
@@ -121,7 +121,7 @@ describe('the standings are readable, by eye and by screen reader', () => {
   })
 
   it('joins each record into one figure rather than three columns', async () => {
-    render(<Leaderboard onBack={vi.fn()} />)
+    render(<Leaderboard board="players" onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
 
     const [matches, rounds] = [
@@ -136,7 +136,7 @@ describe('the standings are readable, by eye and by screen reader', () => {
   })
 
   it('dims a zero instead of dropping it, so the columns still line up', async () => {
-    render(<Leaderboard onBack={vi.fn()} />)
+    render(<Leaderboard board="players" onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Alex')).toBeTruthy())
 
     // Alex has no draws. The digit stays — a record missing its third number is unreadable
@@ -149,7 +149,7 @@ describe('the standings are readable, by eye and by screen reader', () => {
   })
 
   it('draws the share of a record in proportion, and says nothing to a screen reader', async () => {
-    render(<Leaderboard onBack={vi.fn()} />)
+    render(<Leaderboard board="players" onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
 
     // Tom: 7–3–1 of 11 matches, wins first from the left.
@@ -168,11 +168,278 @@ describe('the standings are readable, by eye and by screen reader', () => {
   })
 
   it('marks first place without repainting the whole row', async () => {
-    render(<Leaderboard onBack={vi.fn()} />)
+    render(<Leaderboard board="players" onBack={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
 
     const rows = [...document.querySelectorAll('.table__row:not(.table__row--head)')]
     expect(rows[0]!.className).toContain('table__row--lead')
     expect(rows[1]!.className).not.toContain('table__row--lead')
+  })
+})
+
+/**
+ * **D45 — the hero board, the leaderboard's other half.**
+ *
+ * The screen's job is narrow: render what the server ranked, in the order it ranked it, and be
+ * straight about the two things the numbers do not say on their own — that a rate with one round
+ * behind it is not what the board was sorted on, and that rounds from before the record kept a
+ * lineup belong to nobody.
+ */
+
+const HEROES = {
+  heroes: [
+    {
+      characterId: 'krampus',
+      drafted: 3,
+      played: 1,
+      wins: 1,
+      losses: 0,
+      draws: 0,
+      best: [{ characterId: 'thor', wins: 1, losses: 0, draws: 0 }],
+      worst: [],
+    },
+    {
+      characterId: 'thor',
+      drafted: 9,
+      played: 8,
+      wins: 4,
+      losses: 2,
+      draws: 1,
+      best: [
+        { characterId: 'moon-elf', wins: 3, losses: 0, draws: 1 },
+        { characterId: 'treant', wins: 1, losses: 0, draws: 0 },
+      ],
+      worst: [{ characterId: 'krampus', wins: 0, losses: 1, draws: 0 }],
+    },
+    {
+      characterId: 'moon-elf',
+      drafted: 7,
+      played: 6,
+      wins: 2,
+      losses: 3,
+      draws: 1,
+      best: [],
+      worst: [{ characterId: 'thor', wins: 0, losses: 3, draws: 1 }],
+    },
+    {
+      characterId: 'treant',
+      drafted: 2,
+      played: 0,
+      wins: 0,
+      losses: 0,
+      draws: 0,
+      best: [],
+      worst: [],
+    },
+  ],
+  unattributedRounds: 12,
+}
+
+const ROSTER = {
+  rosterVersion: '2026.08.28-1',
+  characters: [
+    { id: 'thor', name: 'Thor', blurb: '', status: 'ACTIVE' },
+    { id: 'moon-elf', name: 'Moon Elf', blurb: '', status: 'ACTIVE' },
+    { id: 'krampus', name: 'Krampus', blurb: '', status: 'ACTIVE' },
+    // `treant` is deliberately absent: a match outlives the roster entry of a character that was
+    // retired out of it, and the row still has to render.
+  ],
+}
+
+/** Serves each endpoint the boards ask for; `over` replaces one of them. */
+function serveBoards(over: Record<string, unknown> = {}) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      const path = String(url)
+      const key = Object.keys(over).find((k) => path.includes(k))
+      if (key) return new Response(JSON.stringify(over[key]))
+      if (path.includes('/api/heroes')) return new Response(JSON.stringify(HEROES))
+      if (path.includes('/api/roster')) return new Response(JSON.stringify(ROSTER))
+      return new Response(JSON.stringify({ standings: STANDINGS }))
+    }),
+  )
+}
+
+describe('the two boards', () => {
+  it('offers both as links, marking the one you are on', () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+
+    // Real links, like the front door's menu: each board is a URL that survives a bookmark and
+    // being pasted to whoever you are arguing with.
+    const players = screen.getByRole('link', { name: 'Players' })
+    const heroes = screen.getByRole('link', { name: 'Heroes' })
+    expect(players.getAttribute('href')).toBe('/leaderboard')
+    expect(heroes.getAttribute('href')).toBe('/heroes')
+    expect(heroes.getAttribute('aria-current')).toBe('page')
+    expect(players.getAttribute('aria-current')).toBeNull()
+  })
+
+  it('shows the players board by default and the heroes board on request', async () => {
+    serveBoards()
+    const { unmount } = render(<Leaderboard board="players" onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Tom')).toBeTruthy())
+    expect(screen.queryByText('Thor')).toBeNull()
+    unmount()
+
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await waitFor(() => expect(document.querySelector('.hrow__name')).toBeTruthy())
+    expect(screen.getAllByText('Thor').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Tom')).toBeNull()
+  })
+})
+
+describe('the hero board', () => {
+  const heroRows = () => [...document.querySelectorAll('.table__row:not(.table__row--head)')]
+
+  /*
+   * Waits on a row rather than on a name. A hero's name also appears in *other* heroes' matchup
+   * chips — Thor is on the board and on Krampus's "beats" line — so `getByText('Thor')` finds
+   * several elements and throws.
+   */
+  const loaded = () => waitFor(() => expect(document.querySelector('.hrow__name')).toBeTruthy())
+
+  it('keeps the order the server ranked, and names the rule it used', async () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await loaded()
+
+    // The server's order, rendered as given — Krampus has won its only round and leads on that.
+    // The screen sorts nothing; it explains what was sorted.
+    expect(heroRows().map((r) => r.querySelector('.hrow__name')?.textContent)).toEqual([
+      'Krampus',
+      'Thor',
+      'Moon Elf',
+      'Treant',
+    ])
+    expect(screen.getByText(/share of rounds won/i)).toBeTruthy()
+  })
+
+  it('shows each hero’s record and the share of rounds it won', async () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await loaded()
+
+    const thor = heroRows()[1]!
+    expect(thor.querySelector('.table__record')!.textContent).toBe('4–2–1')
+    // 4 of 7 rounds. Draws are beside it rather than folded into it, which is what makes this a
+    // share of rounds won rather than an answer to "is a draw half a win?".
+    expect(thor.querySelector('.table__rate')!.textContent).toBe('57%')
+  })
+
+  it('shows a rate for one round and none at all for none', async () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await loaded()
+
+    // A rate is a rate whatever the sample, and the `1–0–0` beside it is what says how much to
+    // read into this one.
+    expect(heroRows()[0]!.querySelector('.table__rate')!.textContent).toBe('100%')
+    expect(heroRows()[0]!.querySelector('.table__record')!.textContent).toBe('1–0–0')
+
+    // Drafted twice, never played: there is no rate to show, and a 0% would be a claim.
+    expect(heroRows()[3]!.querySelector('.table__rate')!.textContent).toBe('—')
+  })
+
+  it('counts drafts the record has kept all along, and says which were benched', async () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await loaded()
+
+    // `drafted` reaches back over every match ever recorded, which is why it can exceed the
+    // rounds beside it — and drafted-but-never-reached is the other half of what a pick meant.
+    expect(heroRows()[1]!.querySelector('.hrow__drafted')!.textContent).toBe(
+      'drafted 9 · benched 1',
+    )
+    expect(heroRows()[3]!.querySelector('.hrow__drafted')!.textContent).toBe(
+      'drafted 2 · benched 2',
+    )
+  })
+
+  it('names who each hero beats and who beats it, under it', async () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await loaded()
+
+    const thor = heroRows()[1]!
+    const line = (kind: 'best' | 'worst') => {
+      const end = thor.querySelector(`.ends--${kind}`)!
+      return {
+        label: end.querySelector('.ends__label')!.textContent,
+        chips: [...end.querySelectorAll('.ends__chip')].map((c) => c.textContent),
+      }
+    }
+
+    // Ordered by the server, furthest ahead first, and the record travels with the name — "beats
+    // Moon Elf" is worth much less than "beats Moon Elf 3–0–1".
+    expect(line('best')).toEqual({ label: 'beats', chips: ['Moon Elf3–0–1', 'Treant1–0'] })
+    expect(line('worst')).toEqual({ label: 'loses to', chips: ['Krampus0–1'] })
+  })
+
+  it('leaves out an end a hero has nothing to put in it', async () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await loaded()
+
+    // Moon Elf is up on nobody, and "beats: nobody" is a line of noise on every hero that has
+    // only ever lost or played level.
+    const moonElf = heroRows()[2]!
+    expect(moonElf.querySelector('.ends--best')).toBeNull()
+    expect(moonElf.querySelector('.ends--worst')).toBeTruthy()
+
+    // Treant has never played a credited round, so it has neither.
+    expect(heroRows()[3]!.querySelector('.ends')).toBeNull()
+  })
+
+  it('names an opponent the roster has forgotten rather than showing its id', async () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await loaded()
+
+    // `treant` is not in the roster fixture — the same prettied id its own row uses, so the two
+    // places it appears agree.
+    const chips = [...heroRows()[1]!.querySelectorAll('.ends__name')].map((c) => c.textContent)
+    expect(chips).toContain('Treant')
+  })
+
+  it('says how much of the history it cannot credit to anybody', async () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await loaded()
+
+    // Without this the board reads as a group who have barely played, when in fact it is a record
+    // that did not store which hero played which round until D45.
+    expect(screen.getByText(/12 earlier rounds are credited to nobody/i)).toBeTruthy()
+  })
+
+  it('renders a hero the roster has forgotten rather than dropping the row', async () => {
+    serveBoards()
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await loaded()
+
+    // D14 retires characters instead of deleting them, but a record outliving its roster entry is
+    // the case this must not lose a row to — the id is prettied and the portrait simply omitted.
+    // Named twice now: its own row, and Thor's list of who it loses to.
+    expect(screen.getAllByText('Treant').length).toBeGreaterThan(0)
+    expect(heroRows()[3]!.querySelector('.portrait')).toBeNull()
+    expect(heroRows()[1]!.querySelector('.portrait')).toBeTruthy()
+  })
+
+  it('says so plainly when nothing has been drafted yet', async () => {
+    serveBoards({ '/api/heroes': { heroes: [], unattributedRounds: 0 } })
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText(/Nothing yet/)).toBeTruthy())
+    expect(screen.getByText(/Draft a hero in a match/)).toBeTruthy()
+  })
+
+  it('surfaces a failure rather than hanging on "Loading…"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new Error('offline'))),
+    )
+    render(<Leaderboard board="heroes" onBack={vi.fn()} />)
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
   })
 })

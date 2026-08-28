@@ -1,0 +1,390 @@
+/// <reference types="@cloudflare/vitest-pool-workers/types" />
+
+import { describe, expect, it } from 'vitest'
+import { env } from 'cloudflare:test'
+
+import type { HeroStanding } from '../src/RegistryDO.js'
+
+/**
+ * **D45 — the stored matches, counted by hero.**
+ *
+ * A round is one hero against one hero, so a round is where a hero's record lives. Everything
+ * below is about that attribution being honest in the two directions it can fail: crediting a
+ * round to the hero that was actually on the table for it, and refusing to credit one at all when
+ * the record cannot say who was.
+ *
+ * Seeded straight into a fresh registry rather than played out over a socket. A played match
+ * cannot tell this test *which* hero it drafted into round two without reading the same state the
+ * code under test reads, and an assertion that computes its own expected answer from the
+ * implementation is not an assertion.
+ */
+
+const registry = () => env.REGISTRY.get(env.REGISTRY.idFromName(crypto.randomUUID()))
+
+type Outcome = 'A' | 'B' | 'TIE' | null
+
+/**
+ * One stored match. `lineup` is what D45 added: which hero each seat had on the table for each
+ * round, indexed to match `rounds` exactly.
+ */
+function seed(
+  stub: DurableObjectStub,
+  roomCode: string,
+  detail: {
+    rounds: Outcome[]
+    A: { drafted?: string[]; played?: string[]; lineup?: (string | null)[] }
+    B: { drafted?: string[]; played?: string[]; lineup?: (string | null)[] }
+  },
+) {
+  const side = (s: { drafted?: string[]; played?: string[]; lineup?: (string | null)[] }) => ({
+    drafted: s.drafted ?? [...new Set((s.lineup ?? []).filter((c): c is string => c !== null))],
+    played: s.played ?? [...new Set((s.lineup ?? []).filter((c): c is string => c !== null))],
+    metaBan: null,
+    ...(s.lineup ? { lineup: s.lineup } : {}),
+  })
+
+  return stub.fetch('https://r/record', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      roomCode,
+      playedAt: 1,
+      a: { id: 'p-a', name: 'Tom' },
+      b: { id: 'p-b', name: 'Alex' },
+      winnerId: 'p-a',
+      scoreA: 2,
+      scoreB: 1,
+      detail: { rounds: detail.rounds, seats: { A: side(detail.A), B: side(detail.B) } },
+    }),
+  })
+}
+
+async function board(stub: DurableObjectStub) {
+  const body = (await (await stub.fetch('https://r/heroes')).json()) as {
+    heroes: HeroStanding[]
+    unattributedRounds: number
+  }
+  return {
+    ...body,
+    of: (characterId: string) => body.heroes.find((h) => h.characterId === characterId),
+    order: body.heroes.map((h) => h.characterId),
+  }
+}
+
+describe('a hero is credited with the rounds it played', () => {
+  it('splits one match between the heroes that were on the table for each round', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'B', 'TIE'],
+      A: { lineup: ['thor', 'loki', 'thor'] },
+      B: { lineup: ['ninja', 'druid', 'santa'] },
+    })
+
+    const heroes = await board(r)
+    // Thor won round one and drew round three; Loki lost the round it was actually in. Before
+    // D45 all three of A's rounds were one undifferentiated "Tom won 2–1".
+    expect(heroes.of('thor')).toMatchObject({ wins: 1, losses: 0, draws: 1 })
+    expect(heroes.of('loki')).toMatchObject({ wins: 0, losses: 1, draws: 0 })
+    // And the other seat's side of the same three rounds.
+    expect(heroes.of('ninja')).toMatchObject({ wins: 0, losses: 1, draws: 0 })
+    expect(heroes.of('druid')).toMatchObject({ wins: 1, losses: 0, draws: 0 })
+    expect(heroes.of('santa')).toMatchObject({ wins: 0, losses: 0, draws: 1 })
+    expect(heroes.unattributedRounds).toBe(0)
+  })
+
+  it('credits nobody for a round nobody played', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'A', null],
+      A: { lineup: ['thor', 'loki', null] },
+      B: { lineup: ['ninja', 'druid', null] },
+    })
+
+    const heroes = await board(r)
+    // `stopWhenDecided` ends a 2–0 Bo3 early. That third round is a real state, not missing
+    // data, and it is not a result for anybody — including the tally of what cannot be credited.
+    expect(heroes.of('thor')).toMatchObject({ wins: 1, losses: 0, draws: 0 })
+    expect(heroes.unattributedRounds).toBe(0)
+    expect(heroes.heroes.every((h) => h.wins + h.losses + h.draws <= 2)).toBe(true)
+  })
+
+  it('gives a mirror round to the same hero on both sides of itself', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'TIE'],
+      A: { lineup: ['thor', 'thor'], drafted: ['thor'], played: ['thor'] },
+      B: { lineup: ['thor', 'thor'], drafted: ['thor'], played: ['thor'] },
+    })
+
+    const heroes = await board(r)
+    /*
+     * D1 allows cross-seat mirrors, so a round can be Thor against Thor. It won that round and it
+     * lost it; the tie is two draws. Anything else would have to decide which copy was "the" Thor,
+     * and there is no such fact.
+     */
+    expect(heroes.of('thor')).toMatchObject({ wins: 1, losses: 1, draws: 2, drafted: 2 })
+  })
+
+  it('counts a hero once per round it played, not once per match', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'B', 'A'],
+      A: { lineup: ['thor', 'thor', 'thor'], drafted: ['thor'], played: ['thor'] },
+      B: { lineup: ['ninja', 'ninja', 'ninja'], drafted: ['ninja'], played: ['ninja'] },
+    })
+
+    const heroes = await board(r)
+    // A mode can play the same hero every round. Three rounds is three results.
+    expect(heroes.of('thor')).toMatchObject({ wins: 2, losses: 1, draws: 0, drafted: 1, played: 1 })
+  })
+})
+
+describe('rounds the record cannot attribute', () => {
+  /** The shape D29 stored: which heroes were brought and used, in slot order — never which round. */
+  const legacy = (stub: DurableObjectStub) =>
+    seed(stub, 'OLD001', {
+      rounds: ['A', 'B', 'A'],
+      A: { drafted: ['thor', 'loki'], played: ['thor', 'loki'] },
+      B: { drafted: ['ninja', 'druid'], played: ['ninja'] },
+    })
+
+  it('counts them as uncredited rather than dropping them silently', async () => {
+    const r = registry()
+    await legacy(r)
+
+    const heroes = await board(r)
+    // Three decisive rounds, none of them attributable — counted as three rather than as the six
+    // hero-slots inside them, because "rounds" is the unit the screen reports and a doubled figure
+    // would overstate the gap it is apologising for.
+    expect(heroes.unattributedRounds).toBe(3)
+    expect(heroes.heroes.every((h) => h.wins + h.losses + h.draws === 0)).toBe(true)
+  })
+
+  it('still counts what those records do say — drafted, and played', async () => {
+    const r = registry()
+    await legacy(r)
+
+    const heroes = await board(r)
+    // `drafted` and `played` have been stored since D29, so they reach back over the whole
+    // archive. Only the outcome is missing, and only the outcome.
+    expect(heroes.of('thor')).toMatchObject({ drafted: 1, played: 1, wins: 0 })
+    // Drafted and never reached: the other half of what a pick meant.
+    expect(heroes.of('druid')).toMatchObject({ drafted: 1, played: 0 })
+  })
+
+  it('mixes old and new records without letting one distort the other', async () => {
+    const r = registry()
+    await seed(r, 'OLD001', {
+      rounds: ['A', 'B'],
+      A: { drafted: ['thor'], played: ['thor'] },
+      B: { drafted: ['ninja'], played: ['ninja'] },
+    })
+    await seed(r, 'NEW001', {
+      rounds: ['A', 'A'],
+      A: { lineup: ['thor', 'thor'], drafted: ['thor'], played: ['thor'] },
+      B: { lineup: ['ninja', 'ninja'], drafted: ['ninja'], played: ['ninja'] },
+    })
+
+    const heroes = await board(r)
+    // Thor: two matches drafted, two rounds credited from the newer one, and the older match's
+    // two rounds credited to nobody.
+    expect(heroes.of('thor')).toMatchObject({ drafted: 2, played: 2, wins: 2, losses: 0 })
+    expect(heroes.unattributedRounds).toBe(2)
+  })
+})
+
+describe('the order the board is in', () => {
+  /** Two heroes with a real sample, and two with one round each. */
+  const stack = async (stub: DurableObjectStub) => {
+    for (const room of ['R1', 'R2']) {
+      await seed(stub, room, {
+        rounds: ['A', 'A', 'B'],
+        A: { lineup: ['hot', 'hot', 'hot'], drafted: ['hot'], played: ['hot'] },
+        B: { lineup: ['cold', 'cold', 'cold'], drafted: ['cold'], played: ['cold'] },
+      })
+    }
+    await seed(stub, 'R3', {
+      rounds: ['A'],
+      A: { lineup: ['lucky'] },
+      B: { lineup: ['unlucky'] },
+    })
+  }
+
+  it('ranks on the rate whatever the sample behind it', async () => {
+    const r = registry()
+    await stack(r)
+    const heroes = await board(r)
+
+    /*
+     * A minimum-rounds gate used to hold `lucky` — one round, all of it won — below `hot`, which
+     * has won four of six. Removed on the owner's call: the record is on the row beside the rate,
+     * so a 1–0–0 at the top reads as exactly what it is.
+     */
+    expect(heroes.order).toEqual(['lucky', 'hot', 'cold', 'unlucky'])
+    expect(heroes.of('lucky')).toMatchObject({ wins: 1, losses: 0 })
+    expect(heroes.of('hot')).toMatchObject({ wins: 4, losses: 2 })
+  })
+
+  it('breaks a tied rate on how much the hero has played', async () => {
+    const r = registry()
+    await stack(r)
+    // `cold` won two of six; `unlucky` won none of one. Both are behind, and the one with a real
+    // sample is the more meaningful row of the two.
+    const order = (await board(r)).order
+    expect(order.indexOf('cold')).toBeLessThan(order.indexOf('unlucky'))
+  })
+
+  it('is total, so two identical records do not swap places between reads', async () => {
+    const r = registry()
+    await stack(r)
+    const first = (await board(r)).order
+    const second = (await board(r)).order
+    expect(second).toEqual(first)
+  })
+})
+
+describe('the board is derived, never accumulated', () => {
+  it('follows an edit to the match it was counted from', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'A', 'A'],
+      A: { lineup: ['thor', 'thor', 'thor'], drafted: ['thor'], played: ['thor'] },
+      B: { lineup: ['ninja', 'ninja', 'ninja'], drafted: ['ninja'], played: ['ninja'] },
+    })
+    expect((await board(r)).of('thor')).toMatchObject({ wins: 3, losses: 0 })
+
+    // The same room recorded again — D15 lets a finished match un-finish and complete differently,
+    // and `record` upserts by room code. A counter would now say six.
+    await seed(r, 'ROOM01', {
+      rounds: ['B', 'B', 'B'],
+      A: { lineup: ['thor', 'thor', 'thor'], drafted: ['thor'], played: ['thor'] },
+      B: { lineup: ['ninja', 'ninja', 'ninja'], drafted: ['ninja'], played: ['ninja'] },
+    })
+    expect((await board(r)).of('thor')).toMatchObject({ wins: 0, losses: 3 })
+  })
+
+  it('empties when the matches do', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A'],
+      A: { lineup: ['thor'] },
+      B: { lineup: ['ninja'] },
+    })
+    await r.fetch('https://r/delete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ roomCode: 'ROOM01' }),
+    })
+
+    const heroes = await board(r)
+    expect(heroes.heroes).toEqual([])
+    expect(heroes.unattributedRounds).toBe(0)
+  })
+})
+
+describe('who a hero beats, and who beats it', () => {
+  /** `n` rounds of `hero` against `foe`, all won by whichever seat `winner` names. */
+  const meetings = (
+    stub: DurableObjectStub,
+    room: string,
+    hero: string,
+    foe: string,
+    rounds: Outcome[],
+  ) =>
+    seed(stub, room, {
+      rounds,
+      A: { lineup: rounds.map(() => hero), drafted: [hero], played: [hero] },
+      B: { lineup: rounds.map(() => foe), drafted: [foe], played: [foe] },
+    })
+
+  it('ranks the opponents it is up on, furthest ahead first', async () => {
+    const r = registry()
+    await meetings(r, 'R1', 'thor', 'ninja', ['A', 'A', 'A'])
+    await meetings(r, 'R2', 'thor', 'druid', ['A', 'B'])
+    await meetings(r, 'R3', 'thor', 'loki', ['A', 'A', 'B'])
+
+    const thor = (await board(r)).of('thor')!
+    // +3 on Ninja, +1 on Loki, level with Druid. Ordered by the edge rather than by the rate, so
+    // 3–0 outranks 2–1 without either having to be scored against a draw.
+    expect(thor.best.map((m) => m.characterId)).toEqual(['ninja', 'loki'])
+    expect(thor.best[0]).toMatchObject({ characterId: 'ninja', wins: 3, losses: 0, draws: 0 })
+    expect(thor.worst).toEqual([])
+  })
+
+  it('leaves a level matchup out of both ends', async () => {
+    const r = registry()
+    await meetings(r, 'R1', 'thor', 'druid', ['A', 'B'])
+    await meetings(r, 'R2', 'thor', 'santa', ['TIE', 'TIE'])
+
+    const thor = (await board(r)).of('thor')!
+    // 1–1 against Druid and 0–0–2 against Santa. Neither is a best or a worst matchup: they are
+    // the ones still worth arguing about, and calling either one would be inventing a verdict.
+    expect(thor.best).toEqual([])
+    expect(thor.worst).toEqual([])
+  })
+
+  it('reads the same pairing from the other side', async () => {
+    const r = registry()
+    await meetings(r, 'R1', 'thor', 'ninja', ['A', 'A', 'B'])
+
+    const heroes = await board(r)
+    expect(heroes.of('thor')!.best).toMatchObject([{ characterId: 'ninja', wins: 2, losses: 1 }])
+    // One set of rounds, two rows that cannot disagree — Ninja is down by exactly what Thor is up.
+    expect(heroes.of('ninja')!.worst).toMatchObject([{ characterId: 'thor', wins: 1, losses: 2 }])
+    expect(heroes.of('ninja')!.best).toEqual([])
+  })
+
+  it('counts a draw in the record without letting it decide the ranking', async () => {
+    const r = registry()
+    await meetings(r, 'R1', 'thor', 'ninja', ['A', 'TIE', 'TIE'])
+
+    const thor = (await board(r)).of('thor')!
+    // 1–0–2: up by one, whatever the draws do. Pricing a draw is the question D29 refused to
+    // answer, and a matchup ranking does not have to ask it.
+    expect(thor.best).toMatchObject([{ characterId: 'ninja', wins: 1, losses: 0, draws: 2 }])
+  })
+
+  it('names three at each end and no more', async () => {
+    const r = registry()
+    for (const [i, foe] of ['ninja', 'druid', 'santa', 'krampus'].entries()) {
+      // Beaten by a different margin each time, so "the top three" is a fact rather than a tie.
+      await meetings(r, `W${i}`, 'thor', foe, Array<Outcome>(4 - i).fill('A'))
+    }
+
+    const thor = (await board(r)).of('thor')!
+    // A full pairwise table is the roster squared; the page shows the two extremes, and the cap
+    // is applied where the sort happens rather than trusted to the screen.
+    expect(thor.best.map((m) => m.characterId)).toEqual(['ninja', 'druid', 'santa'])
+  })
+
+  it('does not report a mirror as a matchup with itself', async () => {
+    const r = registry()
+    await seed(r, 'R1', {
+      rounds: ['A', 'B'],
+      A: { lineup: ['thor', 'thor'], drafted: ['thor'], played: ['thor'] },
+      B: { lineup: ['thor', 'thor'], drafted: ['thor'], played: ['thor'] },
+    })
+
+    const thor = (await board(r)).of('thor')!
+    // D1 allows Thor against Thor, and its record against itself is 1–1 by construction — an
+    // entry that can only ever say "level" and would sit in the middle of the ranking saying
+    // nothing. The rounds still count towards its own totals, where they mean something.
+    expect(thor.best).toEqual([])
+    expect(thor.worst).toEqual([])
+    expect(thor).toMatchObject({ wins: 2, losses: 2 })
+  })
+
+  it('has nothing to say about a hero from before the record kept a lineup', async () => {
+    const r = registry()
+    await seed(r, 'OLD001', {
+      rounds: ['A', 'B'],
+      A: { drafted: ['thor'], played: ['thor'] },
+      B: { drafted: ['ninja'], played: ['ninja'] },
+    })
+
+    const thor = (await board(r)).of('thor')!
+    // Those rounds cannot be attributed to a hero at all, so they cannot be attributed to a
+    // pairing either. Drafted still counts; the matchup lists are empty rather than guessed at.
+    expect(thor).toMatchObject({ drafted: 1, best: [], worst: [] })
+  })
+})

@@ -4,7 +4,7 @@ Two-player ban/pick tool for a dice game, with pluggable rulesets.
 
 The design is the primary document — read it before the code:
 
-- [`banpick-design-spec.md`](banpick-design-spec.md) — the spec. Decisions D1–D44.
+- [`banpick-design-spec.md`](banpick-design-spec.md) — the spec. Decisions D1–D45.
 - [`docs/DELIVERY-PLAN.md`](docs/DELIVERY-PLAN.md) — phased plan and exit criteria.
 - [`docs/TOURNAMENT-PLAN.md`](docs/TOURNAMENT-PLAN.md) — the tournament layer, phases 0–9. Reverses D19.
 - [`docs/SPEC-GAPS.md`](docs/SPEC-GAPS.md) — the gap register, all items resolved.
@@ -57,7 +57,8 @@ met a form for a game they might not be starting.
 | `/lobbies`                           | Join: open seats, games under way, and the field for a code read out at a table              |
 | `/host`                              | Host a game — mode, parameters, the optional ban list                                        |
 | `/organizer`                         | Host a tournament (D37)                                                                      |
-| `/leaderboard`, `/history`           | The record. Public and read-only                                                             |
+| `/leaderboard`, `/heroes`            | The record by player, and by hero (D45). Public and read-only                                |
+| `/history`                           | Every match, round by round. Public and read-only                                            |
 | `/j/:code`, `/r/:code#token`         | A room, and a resume link (D17, D20)                                                         |
 | `/t/:code`, `/t/:code/run`, `/admin` | A bracket, its organizer console, and the admin dashboard — the last two unlinked on purpose |
 
@@ -142,6 +143,33 @@ measures ~60 requests. Hibernation means an idle match costs essentially nothing
 **Renaming the Worker renames the URL.** `name` in `wrangler.jsonc` is the subdomain label;
 change it before the first deploy rather than after, since existing room codes are addressed
 inside the deployment and resume links embed the origin.
+
+## The hero board (D45)
+
+`/leaderboard` has two tabs. **Players** is D29's table. **Heroes** (`/heroes`) counts the same
+stored matches by character instead: a round is one hero against one hero, so a round is where a
+hero's record lives.
+
+Each row is a hero's `W–L–D` **in rounds**, the share of those it won, and how often it has been
+drafted — including how often it was drafted and never reached the table. Ranked on the share of
+rounds won, then on how much the hero has been played; the record sits beside the rate, so a
+one-round 100% reads as exactly that.
+
+Under each hero is **who it beats and who beats it**, furthest ahead and furthest behind first, up
+to three a side. Those are split on wins against losses rather than on a rate, which keeps draws
+out of the decision entirely: 3–1–2 is up on that opponent, 1–3–2 is down, and an even record is in
+neither list — a matchup nobody is winning is not anybody's best or worst. A mirror (D1 allows Thor
+against Thor) is left out of both, since a hero's record against itself is 1–1 by construction.
+
+**Rounds played before this existed belong to nobody, and the board says so.** The stored record
+has always kept which heroes each seat drafted and played, but `played` is the consumed slots in
+_slot_ order — it never said which round each one was played in. D45 adds a `lineup` to the match
+detail, aligned index-for-index with the round results, and only matches recorded after it can be
+attributed. So `drafted` and `played` count the whole archive while `W–L–D` counts what came after,
+and a line under the table reports how many rounds fall in the gap. That gap only shrinks.
+
+This is the instrumentation §15 asks for, arriving late: win rate by hero is what makes "is this
+hero any good, or is that one player" a question with an answer.
 
 ## Adding a game that was played elsewhere (D44)
 

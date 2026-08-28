@@ -260,6 +260,8 @@ export class RegistryDO extends DurableObject<Env> {
         return Response.json({ matches: this.matches(limitFrom(request)) })
       case 'matchups':
         return Response.json({ matchups: this.matchups() })
+      case 'heroes':
+        return Response.json(this.heroBoard())
       case 'add':
         return this.add(request)
       case 'edit':
@@ -648,6 +650,132 @@ export class RegistryDO extends DurableObject<Env> {
     }
 
     return [...table.values()].sort((x, y) => y.played - x.played)
+  }
+
+  /**
+   * **D45 — the same rows, counted by character instead of by player.**
+   *
+   * A round is one hero against one hero, so a round is where a hero's record lives:
+   * `detail.rounds` says who won it and `detail.seats[X].lineup` says what each seat had on the
+   * table for it. Read off the stored matches like every other total here, so an edited or deleted
+   * match stops counting rather than leaving a stale figure behind.
+   *
+   * **`drafted` and `played` reach further back than the record does.** They come from lists
+   * stored since D29, so every match ever recorded contributes to them. `lineup` arrived with D45,
+   * and nothing before it can be attributed to a hero at all — the consumed slots were stored in
+   * slot order, which does not say which round each was played in. So a hero can have been played
+   * twenty times and hold a 2–1–0 record, and that is not an arithmetic bug: it is eighteen rounds
+   * that happened before anything wrote down who played them. `unattributedRounds` is returned
+   * beside the table so the screen can say that rather than read as "nobody has played".
+   */
+  private heroBoard(): { heroes: HeroStanding[]; unattributedRounds: number } {
+    const table = new Map<string, HeroStanding>()
+    /** hero → opponent → the record between them. Filled in the same pass as the totals. */
+    const pairwise = new Map<string, Map<string, HeroMatchup>>()
+    let unattributedRounds = 0
+
+    const entry = (characterId: string): HeroStanding => {
+      const existing = table.get(characterId)
+      if (existing) return existing
+      const fresh: HeroStanding = {
+        characterId,
+        drafted: 0,
+        played: 0,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        best: [],
+        worst: [],
+      }
+      table.set(characterId, fresh)
+      return fresh
+    }
+
+    const versus = (characterId: string, opponent: string): HeroMatchup => {
+      const row = pairwise.get(characterId) ?? new Map<string, HeroMatchup>()
+      pairwise.set(characterId, row)
+      const existing = row.get(opponent)
+      if (existing) return existing
+      const fresh: HeroMatchup = { characterId: opponent, wins: 0, losses: 0, draws: 0 }
+      row.set(opponent, fresh)
+      return fresh
+    }
+
+    for (const row of this.sql.exec<{ detail: string }>('SELECT detail FROM matches').toArray()) {
+      let detail: StoredDetail | null
+      try {
+        detail = JSON.parse(row.detail) as StoredDetail | null
+      } catch {
+        continue
+      }
+      if (!detail?.seats) continue
+      const rounds = Array.isArray(detail.rounds) ? detail.rounds : []
+
+      for (const seat of ['A', 'B'] as const) {
+        const side = detail.seats[seat]
+        if (!side) continue
+        for (const id of Array.isArray(side.drafted) ? side.drafted : []) {
+          if (typeof id === 'string' && id) entry(id).drafted++
+        }
+        for (const id of Array.isArray(side.played) ? side.played : []) {
+          if (typeof id === 'string' && id) entry(id).played++
+        }
+      }
+
+      /*
+       * A round at a time rather than a seat at a time, and the difference is the unit
+       * `unattributedRounds` is counted in: a round has two heroes on the table, so walking the
+       * seats would count each missing round twice and report a gap of twice its real size.
+       *
+       * Either side missing means neither is credited. In practice the two are written together
+       * or not at all — a round cannot resolve until both seats have selected — so this is the
+       * shape of the data rather than a policy, and stating it as one keeps "attributable" a
+       * property of the round instead of a property of one seat's half of it.
+       */
+      for (let round = 0; round < rounds.length; round++) {
+        const outcome = rounds[round]
+        // `null` is a round `stopWhenDecided` meant nobody played — not a result for anybody,
+        // and not a gap in the record either.
+        if (outcome !== 'A' && outcome !== 'B' && outcome !== 'TIE') continue
+
+        const played = { A: heroAt(detail.seats.A, round), B: heroAt(detail.seats.B, round) }
+        if (!played.A || !played.B) {
+          unattributedRounds++
+          continue
+        }
+        for (const seat of ['A', 'B'] as const) {
+          const hero = entry(played[seat]!)
+          /*
+           * The matchup, from this hero's side. Skipped when both seats brought the same
+           * character: D1 allows a mirror, and a hero's record *against itself* is 1–1 by
+           * construction — an entry that can only ever say "level" and would sit in the middle of
+           * every ranking saying nothing. The round still counts towards the hero's own totals,
+           * where it means something.
+           */
+          const mirror = played.A === played.B
+          const against = mirror ? null : versus(played[seat]!, played[seat === 'A' ? 'B' : 'A']!)
+
+          if (outcome === 'TIE') {
+            hero.draws++
+            if (against) against.draws++
+          } else if (outcome === seat) {
+            hero.wins++
+            if (against) against.wins++
+          } else {
+            hero.losses++
+            if (against) against.losses++
+          }
+        }
+      }
+    }
+
+    for (const hero of table.values()) {
+      const ends = endsOf(pairwise.get(hero.characterId) ?? new Map())
+      hero.best = ends.best
+      hero.worst = ends.worst
+    }
+
+    return { heroes: [...table.values()].sort(byRank), unattributedRounds }
   }
 
   /**
@@ -1267,4 +1395,130 @@ function playedRounds(value: unknown): (('A' | 'B' | 'TIE') | null)[] | null {
 function playedAt(value: unknown): number {
   const at = num(value)
   return at !== undefined && at > 0 ? Math.floor(at) : Date.now()
+}
+
+/**
+ * D45 — one hero's record across every stored match.
+ *
+ * `drafted` and `played` count from D29's lists and so cover the whole archive; `wins`/`losses`/
+ * `draws` count rounds, and only rounds a `lineup` can attribute. See `heroBoard`.
+ */
+export interface HeroStanding {
+  characterId: string
+  drafted: number
+  played: number
+  wins: number
+  losses: number
+  draws: number
+  /** The opponents this hero is up on, furthest ahead first. At most `MATCHUPS_SHOWN`. */
+  best: HeroMatchup[]
+  /** The opponents it is down against, furthest behind first. At most `MATCHUPS_SHOWN`. */
+  worst: HeroMatchup[]
+}
+
+/** One hero's record in the rounds it has played against one other hero. */
+export interface HeroMatchup {
+  characterId: string
+  wins: number
+  losses: number
+  draws: number
+}
+
+/** One seat's half of the stored `detail`, as the aggregation is willing to trust it. */
+interface StoredSeatDetail {
+  drafted?: unknown[]
+  played?: unknown[]
+  /** D45. Absent on every match recorded before it. */
+  lineup?: unknown[]
+  metaBan?: unknown
+}
+
+/** The stored `detail` blob. Everything here is optional because older rows are older rows. */
+interface StoredDetail {
+  rounds?: unknown[]
+  seats?: Partial<Record<'A' | 'B', StoredSeatDetail>>
+}
+
+/**
+ * How many attributed rounds a hero needs before its rate is ranked on.
+ *
+ * A leaderboard sorted purely by win rate puts a hero that won its only round above one that has
+ * won eleven of nineteen, which is not a ranking of anything. So a hero is ranked on its rate once
+ * it has this many rounds behind it and sorted by volume until then — the rate is still shown, and
+ * the screen states the rule rather than leaving the order to be reverse-engineered.
+ *
+ * Five is a judgement, not a result: §15's power table is about a different question (rounds per
+ * *match*, of which there are three) and settles nothing here. It is low enough to rank most of a
+ * regular group's roster and high enough that one lucky round does not top the board.
+ */
+/**
+ * Rate first, volume second.
+ *
+ * There was a minimum-rounds gate here, on the reasoning that a hero which won its only round
+ * should not top a hero that won eleven of nineteen. **Removed on the owner's call**: the record
+ * is on the row beside the rate, so a one-round 100% is visible as exactly that, and a board that
+ * quietly reorders itself around a threshold is harder to read than one that does not.
+ *
+ * Ties break on rounds and then on id, so the order is total: two heroes with identical records
+ * must not swap places between two reads of the same table.
+ */
+function byRank(x: HeroStanding, y: HeroStanding): number {
+  const rate = winRate(y) - winRate(x)
+  if (rate !== 0) return rate
+  return heroRounds(y) - heroRounds(x) || x.characterId.localeCompare(y.characterId)
+}
+
+/**
+ * How many opponents each end of a hero's matchup ranking names.
+ *
+ * Capped here rather than sent whole: the pairwise table is every hero against every other, which
+ * is bounded by the roster squared and would be most of the payload for a page that shows six
+ * entries of it.
+ */
+const MATCHUPS_SHOWN = 3
+
+/**
+ * The opponents a hero is up on and down against, from its row of the pairwise table.
+ *
+ * **Split on wins against losses rather than on a rate**, which is what keeps draws out of the
+ * decision entirely: a 3–1–2 is up on that opponent and a 1–3–2 is down, and neither reading has
+ * to price a draw. An even record is in neither list, because a matchup nobody is winning is not
+ * anybody's best or worst — it is the one they should argue about.
+ */
+function endsOf(against: Map<string, HeroMatchup>): { best: HeroMatchup[]; worst: HeroMatchup[] } {
+  const edge = (m: HeroMatchup) => m.wins - m.losses
+  const rounds = (m: HeroMatchup) => m.wins + m.losses + m.draws
+  const all = [...against.values()]
+  return {
+    best: all
+      .filter((m) => edge(m) > 0)
+      .sort(
+        (a, b) =>
+          edge(b) - edge(a) || rounds(b) - rounds(a) || a.characterId.localeCompare(b.characterId),
+      )
+      .slice(0, MATCHUPS_SHOWN),
+    worst: all
+      .filter((m) => edge(m) < 0)
+      .sort(
+        (a, b) =>
+          edge(a) - edge(b) || rounds(b) - rounds(a) || a.characterId.localeCompare(b.characterId),
+      )
+      .slice(0, MATCHUPS_SHOWN),
+  }
+}
+
+/** The hero one seat had on the table for one round, or `null` on a record from before D45. */
+function heroAt(side: StoredSeatDetail | undefined, round: number): string | null {
+  const id = Array.isArray(side?.lineup) ? side.lineup[round] : undefined
+  return typeof id === 'string' && id ? id : null
+}
+
+function heroRounds(hero: HeroStanding): number {
+  return hero.wins + hero.losses + hero.draws
+}
+
+/** Share of attributed rounds won. Draws are their own number and are not folded in (D21/D29). */
+function winRate(hero: HeroStanding): number {
+  const rounds = heroRounds(hero)
+  return rounds === 0 ? 0 : hero.wins / rounds
 }

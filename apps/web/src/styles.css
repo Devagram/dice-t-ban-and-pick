@@ -2350,11 +2350,11 @@ select {
   letter-spacing: var(--tracking-caps);
 }
 
-.table__matches {
+.table__primary {
   width: 11rem;
 }
 
-.table__rounds {
+.table__secondary {
   width: 7rem;
 }
 
@@ -2374,13 +2374,13 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-td.table__matches .table__record {
+td.table__primary .table__record {
   font-size: var(--step-1);
 }
 
 /* Rounds are the supporting number: the same shape, a step down and dimmed, so the eye reaches
    the match record first and finds this when it wants it. */
-td.table__rounds .table__record {
+td.table__secondary .table__record {
   font-size: var(--step-0);
   color: var(--muted);
 }
@@ -2430,23 +2430,170 @@ td.table__rounds .table__record {
   background: color-mix(in srgb, var(--danger) 55%, var(--panel-2));
 }
 
+/*
+ * D45 — the two boards, as links rather than a control.
+ *
+ * Each is a URL that works on its own, so this is a nav and not a toggle: the same reasoning the
+ * front door's menu is built on, and the reason a board can be pasted to somebody.
+ */
+.boards {
+  display: flex;
+  gap: 2px;
+}
+
+.boards__tab {
+  padding: 6px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  clip-path: var(--clip-corner);
+  transition: color var(--t-quick) var(--ease-out);
+}
+
+.boards__tab:hover {
+  color: var(--text);
+}
+
+/* The board you are on. Stated with the accent rather than with a border trick, because the tabs
+   are clipped and a joined-to-the-panel look would be cut off at the corner. */
+.boards__tab--on {
+  background: var(--panel-2);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* A hero's face and name in one cell — the portrait is what makes the board scannable, since
+   nobody reads forty-four names to find the one they were arguing about. */
+.hrow {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.hrow__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.hrow__name {
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+/* The count that reaches back over every match ever recorded, in the size of a caption because
+   it is context for the record beside it rather than the record itself. */
+.hrow__drafted {
+  font-family: var(--font-ui);
+  font-weight: 400;
+  font-size: 0.7rem;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--muted);
+}
+
+.table__rate {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--step-1);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/*
+ * D45 — who a hero beats, and who beats it, under its name.
+ *
+ * A row of small chips rather than a nested table: this is context for the record beside it, and
+ * anything with its own columns would read as a second board rather than as an annotation on this
+ * one. Wraps, because a hero with three of each and a long name will not fit on one line.
+ */
+.ends {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem;
+  margin-top: 2px;
+  font-family: var(--font-ui);
+  font-weight: 400;
+  font-size: 0.7rem;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.ends__label {
+  color: var(--muted);
+  /* Fixed so the two lines' chips start at the same place — "beats" and "loses to" are different
+     widths, and ragged left edges make two lists look like one. */
+  min-width: 3.4rem;
+}
+
+.ends__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+/* Green on the ones it is up on, red on the ones it is down against — the same two colours the
+   share bar uses for a win and a loss, so the page has one vocabulary for "ahead" and "behind". */
+.ends--best .ends__record {
+  color: var(--good);
+}
+
+.ends--worst .ends__record {
+  color: color-mix(in srgb, var(--danger) 80%, var(--text));
+}
+
+.ends__record {
+  font-variant-numeric: tabular-nums;
+}
+
+/* No round can be credited to this hero at all. */
+.table__rate--none {
+  color: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+
 @media (max-width: 34rem) {
-  .table__matches {
+  .table__primary {
     width: 6.5rem;
   }
 
-  .table__rounds {
+  .table__secondary {
     width: 5rem;
   }
 
   .table__name,
-  td.table__matches .table__record {
+  td.table__primary .table__record {
     font-size: var(--step-0);
   }
 
   /* The bar is the one thing here that is decoration rather than data, so it is what goes when
      there is no room for both. */
   .table__share {
+    display: none;
+  }
+
+  .table__rate {
+    font-size: var(--step-0);
+  }
+
+  /* The portrait goes before the name does: a face is recognisable at 34px and useless at 18. */
+  .hrow .portrait {
+    display: none;
+  }
+
+  /* Two chips a side rather than three: the name column is the one being squeezed, and a matchup
+     list that wraps to four lines stops being readable at a glance, which is its whole job. */
+  .ends__chip:nth-child(n + 4) {
     display: none;
   }
 }

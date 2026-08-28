@@ -229,6 +229,49 @@ export function fetchMatches(): Promise<MatchRecord[]> {
     .then((r) => r.matches)
 }
 
+/**
+ * D45 — every character that has been drafted here, with what it did on the table.
+ *
+ * `unattributedRounds` is part of the answer rather than a footnote: rounds played before D45
+ * stored which characters a seat used but not which round each was used in, so they count towards
+ * `drafted` and `played` and towards nobody's win-loss record. A board that did not say so would
+ * look like a group who barely play.
+ */
+export interface HeroStanding {
+  characterId: string
+  drafted: number
+  played: number
+  wins: number
+  losses: number
+  draws: number
+  /** The opponents this hero is up on, furthest ahead first. At most three. */
+  best: HeroMatchup[]
+  /** The opponents it is down against, furthest behind first. At most three. */
+  worst: HeroMatchup[]
+}
+
+/**
+ * One hero's record against one other, in the rounds the two have met.
+ *
+ * Split on wins against losses rather than on a rate, so a draw never has to be priced: up is
+ * best, down is worst, and level is neither.
+ */
+export interface HeroMatchup {
+  characterId: string
+  wins: number
+  losses: number
+  draws: number
+}
+
+export interface HeroBoard {
+  heroes: HeroStanding[]
+  unattributedRounds: number
+}
+
+export function fetchHeroes(): Promise<HeroBoard> {
+  return fetch('/api/heroes').then(json<HeroBoard>)
+}
+
 /** Pairwise records — one row per pairing, read from either side. */
 export function fetchMatchups(): Promise<Matchup[]> {
   return fetch('/api/matchups')
