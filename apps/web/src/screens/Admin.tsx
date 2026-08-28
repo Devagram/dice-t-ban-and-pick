@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import type { Character } from '@banpick/types'
+
 import {
   ApiError,
   adminAddMatch,
@@ -8,6 +10,7 @@ import {
   adminFetchPlayers,
   adminMergePlayers,
   fetchMatches,
+  fetchRoster,
   type MatchDetail,
   type MatchRecord,
   type PlayerSummary,
@@ -75,6 +78,14 @@ export function Admin({ onBack }: { onBack: () => void }) {
   const [check, setCheck] = useState<KeyCheck>('empty')
   const [matches, setMatches] = useState<MatchRecord[] | null>(null)
   const [players, setPlayers] = useState<PlayerSummary[]>([])
+  /*
+   * D46 — the character list, so a hero is chosen from a menu rather than typed.
+   *
+   * Public (§16) and needed with no key: the heroes on a match row should be readable before
+   * anyone proves they may edit them, exactly as the player ids on those rows already are.
+   * Empty on failure rather than fatal — the rest of the screen still edits scores and names.
+   */
+  const [roster, setRoster] = useState<Character[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -84,6 +95,20 @@ export function Admin({ onBack }: { onBack: () => void }) {
       .catch(() => setError('Could not load matches.'))
   }
   useEffect(reload, [])
+
+  useEffect(() => {
+    let live = true
+    fetchRoster()
+      .then((r) => {
+        // `?? []` for the reason `adminFetchPlayers` has one: this feeds a `.map`, and a screen
+        // that throws on an unexpected shape is a worse answer than one with no hero list.
+        if (live) setRoster(r.characters ?? [])
+      })
+      .catch(noop)
+    return () => {
+      live = false
+    }
+  }, [])
 
   /*
    * Fetching the directory doubles as checking the key, which is why the screen can answer "did
@@ -220,6 +245,7 @@ export function Admin({ onBack }: { onBack: () => void }) {
 
       <AddMatch
         players={players}
+        roster={roster}
         disabled={key.length === 0 || check !== 'accepted'}
         onAdd={(entry) => run(adminAddMatch(key, entry), 'Match added.')}
       />
@@ -244,6 +270,7 @@ export function Admin({ onBack }: { onBack: () => void }) {
                 key={`${m.roomCode}:${m.a.id}:${m.b.id}`}
                 match={m}
                 players={players}
+                roster={roster}
                 disabled={key.length === 0}
                 onSave={(patch) => run(adminEditMatch(key, patch), `Saved ${m.roomCode}.`)}
                 onDelete={() => run(adminDeleteMatch(key, m.roomCode), `Deleted ${m.roomCode}.`)}
@@ -511,10 +538,12 @@ function Players({
  */
 function AddMatch({
   players,
+  roster,
   disabled,
   onAdd,
 }: {
   players: PlayerSummary[]
+  roster: Character[]
   disabled: boolean
   onAdd: (entry: Parameters<typeof adminAddMatch>[1]) => void
 }) {
@@ -526,6 +555,8 @@ function AddMatch({
   const [scoreB, setScoreB] = useState('0')
   const [winner, setWinner] = useState<'A' | 'B' | 'DRAW'>('DRAW')
   const [rounds, setRounds] = useState<(('A' | 'B' | 'TIE') | null)[]>([null, null, null, null])
+  // D46 — one hero per seat per round. Empty until the admin picks, and sent only if they do.
+  const [lineups, setLineups] = useState<Record<'A' | 'B', (string | null)[]>>(BLANK_LINEUPS)
   const [when, setWhen] = useState(today)
 
   /** What to call this seat on the buttons and above the score, before anything is stored. */
@@ -571,6 +602,10 @@ function AddMatch({
       scoreA: Number(scoreA) || 0,
       scoreB: Number(scoreB) || 0,
       ...(rounds.some((r) => r !== null) ? { rounds } : {}),
+      // Sent per seat and only when that seat has a hero on it, so a match added without them is
+      // stored exactly as D44 stored it: a result, and no claim about who played.
+      ...(lineups.A.some(Boolean) ? { aLineup: lineups.A } : {}),
+      ...(lineups.B.some(Boolean) ? { bLineup: lineups.B } : {}),
       playedAt: playedAtFrom(when),
     })
 
@@ -579,6 +614,7 @@ function AddMatch({
     setScoreB('0')
     setWinner('DRAW')
     setRounds([null, null, null, null])
+    setLineups(BLANK_LINEUPS)
   }
 
   return (
@@ -660,6 +696,16 @@ function AddMatch({
               </button>
             ))}
           </div>
+
+          <Lineup
+            rounds={rounds.length}
+            roster={roster}
+            lineups={lineups}
+            label="of the match being added"
+            onChange={(seat, round, id) =>
+              setLineups((prev) => setHero(prev, seat, round, id, rounds.length))
+            }
+          />
 
           <div className="adminrow__grid">
             <span className="adminrow__label">{named('A') || 'Seat A'}</span>
@@ -787,12 +833,14 @@ function playedAtFrom(value: string): number {
 function EditRow({
   match,
   players,
+  roster,
   disabled,
   onSave,
   onDelete,
 }: {
   match: MatchRecord
   players: PlayerSummary[]
+  roster: Character[]
   disabled: boolean
   onSave: (patch: Parameters<typeof adminEditMatch>[1]) => void
   onDelete: () => void
@@ -810,6 +858,13 @@ function EditRow({
     match.winnerId === null ? 'DRAW' : match.winnerId === match.a.id ? 'A' : 'B',
   )
   const [rounds, setRounds] = useState<(('A' | 'B' | 'TIE') | null)[]>(detail?.rounds ?? [])
+  /*
+   * D46 — the heroes, seeded from what is stored.
+   *
+   * A record from before D45 has none, and this is where one gets them: the match's own log is
+   * long gone, so the dashboard is the only place its rounds can be attributed to a hero at all.
+   */
+  const [lineups, setLineups] = useState(() => lineupsOf(detail, detail?.rounds?.length ?? 0))
   const [confirming, setConfirming] = useState(false)
 
   return (
@@ -932,6 +987,16 @@ function EditRow({
         </div>
       ) : null}
 
+      <Lineup
+        rounds={rounds.length}
+        roster={roster}
+        lineups={lineups}
+        label={`in ${match.roomCode}`}
+        onChange={(seat, round, id) =>
+          setLineups((prev) => setHero(prev, seat, round, id, rounds.length))
+        }
+      />
+
       {/*
        * The drafted rosters, read-only and identical to what the history page shows. They are not
        * editable here on purpose: a wrong score is a typo someone made, a wrong roster would be a
@@ -962,6 +1027,10 @@ function EditRow({
               ...(Number.isFinite(Number(scoreA)) ? { scoreA: Number(scoreA) } : {}),
               ...(Number.isFinite(Number(scoreB)) ? { scoreB: Number(scoreB) } : {}),
               rounds,
+              // Both sent whole rather than as a patch: a seat's lineup is what this form is
+              // showing, and half of one is indistinguishable from a round meant to be cleared.
+              aLineup: lineups.A,
+              bLineup: lineups.B,
             })
           }
         >
@@ -1003,6 +1072,97 @@ function EditRow({
   )
 }
 
+/**
+ * **D46 — who played what, round by round.**
+ *
+ * One row per round, both seats on it, because a round *is* a matchup: the hero board counts
+ * these in pairs and reading them in pairs is how you notice you have put a hero on the wrong
+ * side of one. Laid out on the same grid as the score line above, so the two seats stay in the
+ * same two columns everywhere on the row.
+ *
+ * A select rather than a text field, for the reason the seat controls already are: these are ids,
+ * the server refuses one that is not on the roster, and nobody should have to know that
+ * `moon-elf` is spelled with a hyphen.
+ *
+ * Renders nothing without a roster. The list is the control — an empty menu is not a degraded
+ * version of this, it is a control that cannot do anything.
+ */
+function Lineup({
+  rounds,
+  roster,
+  lineups,
+  label,
+  onChange,
+}: {
+  rounds: number
+  roster: Character[]
+  lineups: Record<'A' | 'B', (string | null)[]>
+  /** Distinguishes these selects from the other form's on a screen that has both. */
+  label: string
+  onChange: (seat: 'A' | 'B', round: number, characterId: string | null) => void
+}) {
+  if (roster.length === 0 || rounds === 0) return null
+
+  return (
+    <div className="lineup">
+      <span className="adminrow__label">Heroes</span>
+      {Array.from({ length: rounds }, (_, round) => (
+        <div className="lineup__round" key={round}>
+          {/* Index 3 is D30's overtime round, which is not the fourth round of anything. */}
+          <span className="lineup__index">{round >= 3 ? 'OT' : `R${round + 1}`}</span>
+          {(['A', 'B'] as const).map((seat) => (
+            <select
+              key={seat}
+              className="field__input lineup__pick"
+              aria-label={`Hero for seat ${seat} in round ${round + 1} ${label}`}
+              value={lineups[seat][round] ?? ''}
+              onChange={(e) => onChange(seat, round, e.target.value || null)}
+            >
+              <option value="">—</option>
+              {roster.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+              {/*
+               * A hero the roster no longer lists still has to be selectable on a row that
+               * already holds it — otherwise opening this row and saving would quietly drop it.
+               * D14 retires rather than deletes, so this is rare and not impossible.
+               */}
+              {lineups[seat][round] && !roster.some((c) => c.id === lineups[seat][round]) ? (
+                <option value={lineups[seat][round]!}>{lineups[seat][round]}</option>
+              ) : null}
+            </select>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Sets one round of one seat's lineup, padding to length so round 3 can be set before round 1. */
+function setHero(
+  lineups: Record<'A' | 'B', (string | null)[]>,
+  seat: 'A' | 'B',
+  round: number,
+  characterId: string | null,
+  rounds: number,
+): Record<'A' | 'B', (string | null)[]> {
+  const next = Array.from({ length: rounds }, (_, i) => lineups[seat][i] ?? null)
+  next[round] = characterId
+  return { ...lineups, [seat]: next }
+}
+
+/** The lineup a stored match already has, padded to the rounds it has. */
+function lineupsOf(
+  detail: MatchDetail | null,
+  rounds: number,
+): Record<'A' | 'B', (string | null)[]> {
+  const of = (seat: 'A' | 'B') =>
+    Array.from({ length: rounds }, (_, i) => detail?.seats?.[seat]?.lineup?.[i] ?? null)
+  return { A: of('A'), B: of('B') }
+}
+
 /** A → B → Tie → unplayed → A. `null` is a round `stopWhenDecided` meant nobody played. */
 function nextOutcome(current: ('A' | 'B' | 'TIE') | null): ('A' | 'B' | 'TIE') | null {
   if (current === 'A') return 'B'
@@ -1012,3 +1172,9 @@ function nextOutcome(current: ('A' | 'B' | 'TIE') | null): ('A' | 'B' | 'TIE') |
 }
 
 function noop(): void {}
+
+/** Four rounds of nobody, which is what a fresh add form shows. */
+const BLANK_LINEUPS: Record<'A' | 'B', (string | null)[]> = {
+  A: [null, null, null, null],
+  B: [null, null, null, null],
+}

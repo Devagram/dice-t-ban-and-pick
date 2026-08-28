@@ -184,9 +184,11 @@ function PlayersBoard() {
  * was that a rate is a rate, and the record sits on the row beside it — a one-round 100% reads as
  * exactly that to anybody looking at the `1–0–0` next to it.
  *
- * **Some rounds belong to nobody.** Matches recorded before D45 stored which heroes a seat used
- * but not which round each one played, so their outcomes cannot be credited. They are counted and
- * reported rather than quietly dropped: a board missing half its history should say which half.
+ * **Some rounds belong to nobody, and fewer than it first looked.** Matches recorded before D45
+ * stored which heroes a seat used but not which round each played. Where every round of a match
+ * went the same way that is enough — each hero won, or lost, or drew its own round whatever the
+ * order — so those are credited. A split is not: one hero won and one lost, and nothing left says
+ * which. Those are counted and reported rather than quietly dropped or quietly halved.
  */
 function HeroesBoard() {
   const [board, setBoard] = useState<HeroBoard | null>(null)
@@ -262,10 +264,10 @@ function HeroesBoard() {
 
       {board.unattributedRounds > 0 ? (
         <p className="field__help">
-          {board.unattributedRounds} earlier{' '}
-          {board.unattributedRounds === 1 ? 'round is' : 'rounds are'} credited to nobody. Matches
-          recorded before this board existed kept which heroes a player brought, but not which of
-          them played each round — so they count towards drafted and played, and towards no record.
+          {board.unattributedRounds} {board.unattributedRounds === 1 ? 'round is' : 'rounds are'}{' '}
+          credited to nobody. Older matches did not store which hero played which round: where every
+          round of one went the same way that can still be worked out, and where it was split it
+          cannot — one hero won and one lost, and nothing left says which.
         </p>
       ) : null}
     </section>

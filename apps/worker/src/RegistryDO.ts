@@ -2,6 +2,7 @@
 
 import { DurableObject } from 'cloudflare:workers'
 
+import rosterAsset from '../../../roster/roster.json' with { type: 'json' }
 import { generateManualCode } from './identity.js'
 
 /**
@@ -723,22 +724,36 @@ export class RegistryDO extends DurableObject<Env> {
       }
 
       /*
+       * Every round that produced a result. `null` is a round `stopWhenDecided` meant nobody
+       * played — not a result for anybody, and not a gap in the record either.
+       */
+      const decided = rounds
+        .map((outcome, round) => ({ outcome, round }))
+        .filter(
+          (r): r is { outcome: 'A' | 'B' | 'TIE'; round: number } =>
+            r.outcome === 'A' || r.outcome === 'B' || r.outcome === 'TIE',
+        )
+
+      const source = {
+        A: heroesByRound(detail.seats.A, decided),
+        B: heroesByRound(detail.seats.B, decided),
+      }
+      /*
+       * A pairing is only real when *both* sides' rounds are known one by one. A deduced sweep
+       * gives every hero its result and still cannot say who it faced — see `heroesByRound`.
+       */
+      const pairingKnown = source.A.exact && source.B.exact
+
+      /*
        * A round at a time rather than a seat at a time, and the difference is the unit
        * `unattributedRounds` is counted in: a round has two heroes on the table, so walking the
        * seats would count each missing round twice and report a gap of twice its real size.
        *
-       * Either side missing means neither is credited. In practice the two are written together
-       * or not at all — a round cannot resolve until both seats have selected — so this is the
-       * shape of the data rather than a policy, and stating it as one keeps "attributable" a
-       * property of the round instead of a property of one seat's half of it.
+       * Either side missing means neither is credited, which keeps "attributable" a property of
+       * the round rather than of one seat's half of it.
        */
-      for (let round = 0; round < rounds.length; round++) {
-        const outcome = rounds[round]
-        // `null` is a round `stopWhenDecided` meant nobody played — not a result for anybody,
-        // and not a gap in the record either.
-        if (outcome !== 'A' && outcome !== 'B' && outcome !== 'TIE') continue
-
-        const played = { A: heroAt(detail.seats.A, round), B: heroAt(detail.seats.B, round) }
+      for (const { outcome, round } of decided) {
+        const played = { A: source.A.lineup[round] ?? null, B: source.B.lineup[round] ?? null }
         if (!played.A || !played.B) {
           unattributedRounds++
           continue
@@ -746,14 +761,17 @@ export class RegistryDO extends DurableObject<Env> {
         for (const seat of ['A', 'B'] as const) {
           const hero = entry(played[seat]!)
           /*
-           * The matchup, from this hero's side. Skipped when both seats brought the same
-           * character: D1 allows a mirror, and a hero's record *against itself* is 1–1 by
-           * construction — an entry that can only ever say "level" and would sit in the middle of
-           * every ranking saying nothing. The round still counts towards the hero's own totals,
-           * where it means something.
+           * The matchup, from this hero's side. Skipped when the pairing was deduced rather than
+           * recorded, and when both seats brought the same character: D1 allows a mirror, and a
+           * hero's record *against itself* is 1–1 by construction — an entry that can only ever
+           * say "level" and would sit in the middle of every ranking saying nothing. The round
+           * still counts towards the hero's own totals, where it means something.
            */
           const mirror = played.A === played.B
-          const against = mirror ? null : versus(played[seat]!, played[seat === 'A' ? 'B' : 'A']!)
+          const against =
+            pairingKnown && !mirror
+              ? versus(played[seat]!, played[seat === 'A' ? 'B' : 'A']!)
+              : null
 
           if (outcome === 'TIE') {
             hero.draws++
@@ -1004,6 +1022,23 @@ export class RegistryDO extends DurableObject<Env> {
     }
 
     const rounds = playedRounds(body['rounds'])
+    /*
+     * D46 — the heroes, when the admin named them.
+     *
+     * This is what makes a hand-added match count on the hero board rather than only on the
+     * player one. D44 stored no rosters at all, on the reasoning that nobody drafted anything;
+     * that was right about a *draft* and wrong about the game — somebody did play a character in
+     * each round, and refusing to record it left the board blind to every game played away from
+     * the site.
+     */
+    const lineup = { A: heroLineup(body['aLineup']), B: heroLineup(body['bLineup']) }
+    if (lineup.A === 'BAD' || lineup.B === 'BAD') {
+      return Response.json(
+        { error: 'UNKNOWN_HERO', detail: 'a hero id in the lineup is not on the roster' },
+        { status: 400 },
+      )
+    }
+
     const match: MatchRecord = {
       roomCode,
       // A backfilled game is usually an old one, and `played_at` is what the history sorts on —
@@ -1017,7 +1052,7 @@ export class RegistryDO extends DurableObject<Env> {
       winnerId: null,
       scoreA: num(body['scoreA']) ?? 0,
       scoreB: num(body['scoreB']) ?? 0,
-      detail: rounds ? { rounds } : null,
+      detail: detailOf(rounds, lineup.A, lineup.B),
     }
     match.winnerId = normalizeWinner(body['winnerId'], match)
 
@@ -1174,6 +1209,30 @@ export class RegistryDO extends DurableObject<Env> {
       scoreA: num(body['scoreA']) ?? record.scoreA,
       scoreB: num(body['scoreB']) ?? record.scoreB,
       detail: 'rounds' in body ? withRounds(record.detail, body['rounds']) : record.detail,
+    }
+
+    /*
+     * D46 — correcting which hero played which round.
+     *
+     * D44 left the rosters read-only here, on the reasoning that a wrong score is a typo and a
+     * wrong roster is a different game. The hero board is what changed that: an unattributed or
+     * misattributed round is now a wrong row on a public table, and the only way to fix one is
+     * from this screen — the match's own log expired long ago.
+     *
+     * Applied after the object above is built rather than inside it, because both seats write to
+     * the same `detail` and doing it in two expressions would have the second overwrite the first.
+     */
+    for (const seat of ['A', 'B'] as const) {
+      const key = seat === 'A' ? 'aLineup' : 'bLineup'
+      if (!(key in body)) continue
+      const lineup = heroLineup(body[key])
+      if (lineup === 'BAD') {
+        return Response.json(
+          { error: 'UNKNOWN_HERO', detail: 'a hero id in the lineup is not on the roster' },
+          { status: 400 },
+        )
+      }
+      if (lineup) next.detail = withLineup(next.detail, seat, lineup)
     }
 
     this.sql.exec(
@@ -1363,6 +1422,111 @@ function normalizeWinner(value: unknown, record: MatchRecord): string | null {
   return typeof value === 'string' ? value : record.winnerId
 }
 
+/**
+ * D46 — every character id this deployment knows, retired ones included.
+ *
+ * Validated against rather than trusted, because the hero board keys on these: one typo'd id
+ * from a hand-written request is a phantom hero on a public table, and unlike a wrong score
+ * nobody would recognise it as an error.
+ *
+ * **Retired characters are accepted.** D14 retires and never deletes precisely so an old record
+ * stays readable, and a match from before a retirement is exactly the sort of thing being
+ * backfilled here — refusing those ids would make the rule useless at the only moment it matters.
+ */
+const KNOWN_HEROES = new Set(
+  (rosterAsset as { characters: { id: string }[] }).characters.map((c) => c.id),
+)
+
+/**
+ * A hand-picked lineup, `null` when none was sent, or the string `'BAD'` when one was and it
+ * names something the roster has never heard of.
+ *
+ * Three answers rather than two because they mean three different things to the caller: leave the
+ * stored heroes alone, replace them, or refuse the request. Collapsing "no lineup" and "a bad
+ * lineup" into `null` would make a typo silently wipe a match's heroes.
+ */
+function heroLineup(value: unknown): (string | null)[] | null | 'BAD' {
+  if (!Array.isArray(value)) return null
+  const lineup: (string | null)[] = []
+  for (const entry of value.slice(0, MAX_ROUNDS_STORED)) {
+    if (entry === null || entry === undefined || entry === '') {
+      lineup.push(null)
+      continue
+    }
+    if (typeof entry !== 'string' || !KNOWN_HEROES.has(entry)) return 'BAD'
+    lineup.push(entry)
+  }
+  return lineup
+}
+
+/** Regulation plus overtime, which is the longest `detail.rounds` any mode produces. */
+const MAX_ROUNDS_STORED = 4
+
+/**
+ * The stored `detail` for a hand-added match: the rounds, and the heroes if any were named.
+ *
+ * `drafted` and `played` are derived from the lineup rather than asked for separately. Nobody
+ * drafted anything here — there was no draft — so the honest reading of "what did this seat
+ * bring" is "what it put on the table", and inventing a bench nobody sat on would put a number on
+ * the hero board that no game produced.
+ */
+function detailOf(
+  rounds: (('A' | 'B' | 'TIE') | null)[] | null,
+  a: (string | null)[] | null,
+  b: (string | null)[] | null,
+): unknown {
+  if (!rounds && !a && !b) return null
+  const side = (lineup: (string | null)[] | null) => {
+    const used = [...new Set((lineup ?? []).filter((id): id is string => id !== null))]
+    return { drafted: used, played: used, metaBan: null, lineup: lineup ?? [] }
+  }
+  return {
+    rounds: rounds ?? [],
+    ...(a || b ? { seats: { A: side(a), B: side(b) } } : {}),
+  }
+}
+
+/**
+ * Replaces one seat's lineup on an existing record, and keeps the two lists beside it honest.
+ *
+ * `played` follows the lineup, because the lineup *is* what was played — leaving the old list
+ * would let a corrected round-two hero sit next to a `played` that still names the wrong one, and
+ * the hero board reads both. `drafted` only ever grows: a hero that was drafted and benched is a
+ * real thing the record knows and this edit was never told about, so it is added to rather than
+ * replaced.
+ */
+function withLineup(detail: unknown, seat: 'A' | 'B', lineup: (string | null)[]): unknown {
+  const base = (detail ?? {}) as Record<string, unknown>
+  const seats = { ...((base['seats'] as Record<string, unknown>) ?? {}) }
+  const existing = (seats[seat] ?? {}) as {
+    drafted?: unknown
+    played?: unknown
+    metaBan?: unknown
+  }
+
+  const used = [...new Set(lineup.filter((id): id is string => id !== null))]
+  const drafted = Array.isArray(existing.drafted)
+    ? (existing.drafted as unknown[]).filter((id): id is string => typeof id === 'string')
+    : []
+  for (const id of used) if (!drafted.includes(id)) drafted.push(id)
+
+  /*
+   * **A lineup naming nobody leaves `played` alone**, and this is not a nicety.
+   *
+   * The dashboard sends both seats whole on every save, so opening a *real* match recorded before
+   * D45 — which has a genuine `played` list and no lineup — and correcting its score would arrive
+   * here with four nulls. Following that would delete what the match itself reported about which
+   * characters were used, in a request that was about a score.
+   *
+   * An empty lineup carries no information about what was played, so it overwrites nothing. One
+   * that names anybody does, and replaces it: see the note above.
+   */
+  const played = used.length > 0 ? used : (existing.played ?? [])
+
+  seats[seat] = { ...existing, drafted, played, metaBan: existing.metaBan ?? null, lineup }
+  return { ...base, seats }
+}
+
 /** Replaces only the round results, leaving the drafted/played detail beside them untouched. */
 function withRounds(detail: unknown, rounds: unknown): unknown {
   const base = (detail ?? {}) as Record<string, unknown>
@@ -1507,10 +1671,61 @@ function endsOf(against: Map<string, HeroMatchup>): { best: HeroMatchup[]; worst
   }
 }
 
-/** The hero one seat had on the table for one round, or `null` on a record from before D45. */
-function heroAt(side: StoredSeatDetail | undefined, round: number): string | null {
-  const id = Array.isArray(side?.lineup) ? side.lineup[round] : undefined
-  return typeof id === 'string' && id ? id : null
+/**
+ * **Which hero played which round — recorded if D45 wrote it down, deduced where it can be.**
+ *
+ * D45 said a round from before it "cannot be attributed", and that was too strong. The record has
+ * always stored enough to settle some of them, because `consumed` is set when a seat *selects*
+ * (see `select.ts`): one slot per seat per round that was played. So `played.length` is the number
+ * of rounds that happened, and the only thing missing is which hero went in which one.
+ *
+ * Two deductions are sound, and a third is not:
+ *
+ * - **A sweep settles every hero's result.** If every round that was played went the same way,
+ *   then whichever order the heroes went in, each of them won (or lost, or drew) its own round.
+ *   The order is unknowable and the result is not. A 2–0 Bo3 and every one-round Bo1 land here.
+ *
+ * - **A single round settles the pairing too.** With one round played, each seat used exactly one
+ *   hero, so who faced whom is not a guess. That is the whole `bo1-bring3-ban1` mode.
+ *
+ * - **A split settles nothing.** Rounds `['A', 'B']` with heroes `[x, y]` means one of them won
+ *   and one lost, and nothing in the record says which. Splitting the difference — half a win
+ *   each — would be inventing a result that no game produced, on a public table, in the one place
+ *   nobody could check it. Those rounds stay uncredited and are counted as such.
+ *
+ * `exact` is about the **pairing**, not the totals: a deduced sweep credits every hero correctly
+ * and still cannot say who any of them faced, because a 2–0 has two possible pairings and the
+ * record does not distinguish them.
+ */
+function heroesByRound(
+  side: StoredSeatDetail | undefined,
+  decided: { outcome: 'A' | 'B' | 'TIE'; round: number }[],
+): { lineup: (string | null)[]; exact: boolean } {
+  const nothing = { lineup: [] as (string | null)[], exact: false }
+
+  const stored = Array.isArray(side?.lineup)
+    ? side.lineup.map((id) => (typeof id === 'string' && id ? id : null))
+    : null
+  // Written down beats worked out, always — including on a match an admin has since corrected.
+  if (stored?.some((id) => id !== null)) return { lineup: stored, exact: true }
+
+  const played = (Array.isArray(side?.played) ? side.played : []).filter(
+    (id): id is string => typeof id === 'string' && id !== '',
+  )
+  /*
+   * The count has to agree before anything is deduced from it. One consumed slot per played round
+   * is the invariant this rests on, and a record that does not satisfy it is one this function has
+   * misunderstood — in which case it should say nothing rather than guess from a premise it has
+   * already seen fail.
+   */
+  if (decided.length === 0 || played.length !== decided.length) return nothing
+  if (new Set(decided.map((d) => d.outcome)).size !== 1) return nothing
+
+  const lineup: (string | null)[] = []
+  decided.forEach((d, i) => {
+    lineup[d.round] = played[i]!
+  })
+  return { lineup, exact: decided.length === 1 }
 }
 
 function heroRounds(hero: HeroStanding): number {

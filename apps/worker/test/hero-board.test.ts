@@ -1,9 +1,10 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 
 import { describe, expect, it } from 'vitest'
-import { env } from 'cloudflare:test'
+import { env, SELF } from 'cloudflare:test'
 
 import type { HeroStanding } from '../src/RegistryDO.js'
+import { playToCompletion, seatedMatch } from './client.js'
 
 /**
  * **D45 — the stored matches, counted by hero.**
@@ -57,6 +58,18 @@ function seed(
       detail: { rounds: detail.rounds, seats: { A: side(detail.A), B: side(detail.B) } },
     }),
   })
+}
+
+/** The public history, once the match object has filed its result. */
+async function matchesSettle(min: number, tries = 80) {
+  for (let i = 0; i < tries; i++) {
+    const body = (await (await SELF.fetch('https://example.com/api/matches')).json()) as {
+      matches: { roomCode: string; detail: unknown }[]
+    }
+    if (body.matches.length >= min) return body.matches
+    await scheduler.wait(1)
+  }
+  throw new Error(`fewer than ${min} matches ever reached the history`)
 }
 
 async function board(stub: DurableObjectStub) {
@@ -386,5 +399,181 @@ describe('who a hero beats, and who beats it', () => {
     // Those rounds cannot be attributed to a hero at all, so they cannot be attributed to a
     // pairing either. Drafted still counts; the matchup lists are empty rather than guessed at.
     expect(thor).toMatchObject({ drafted: 1, best: [], worst: [] })
+  })
+})
+
+/**
+ * **What the record could always have told us.**
+ *
+ * D45 claimed a round from before it "cannot be attributed to a hero at all". That was too strong,
+ * and these are the cases it was wrong about: `consumed` is set when a seat *selects*, so the
+ * stored `played` list holds one hero per round that happened. The order is missing; the results
+ * are not always missing with it.
+ *
+ * The line these draw is between what follows from the record and what would have to be invented.
+ */
+describe('deducing a hero’s round from a record that never named it', () => {
+  it('settles every hero in a match that went one way', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'A', null],
+      // The pre-D45 shape: what each seat used, in slot order, with no lineup beside it.
+      A: { drafted: ['thor', 'loki', 'santa'], played: ['thor', 'loki'] },
+      B: { drafted: ['ninja', 'druid', 'santa'], played: ['ninja', 'druid'] },
+    })
+
+    const heroes = await board(r)
+    /*
+     * A 2–0. Whichever order Thor and Loki went in, each of them won its own round — the order is
+     * unknowable and the result is not. Both of B's lost theirs for the same reason.
+     */
+    expect(heroes.of('thor')).toMatchObject({ wins: 1, losses: 0, draws: 0 })
+    expect(heroes.of('loki')).toMatchObject({ wins: 1, losses: 0, draws: 0 })
+    expect(heroes.of('ninja')).toMatchObject({ wins: 0, losses: 1 })
+    expect(heroes.unattributedRounds).toBe(0)
+  })
+
+  it('will not say who faced whom in one, because the record does not know', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'A'],
+      A: { drafted: ['thor', 'loki'], played: ['thor', 'loki'] },
+      B: { drafted: ['ninja', 'druid'], played: ['ninja', 'druid'] },
+    })
+
+    // Thor beat one of Ninja and Druid and there are two readings of which. The totals above are
+    // the same under both; a matchup is not, so there is none.
+    expect((await board(r)).of('thor')!.best).toEqual([])
+    expect((await board(r)).of('ninja')!.worst).toEqual([])
+  })
+
+  it('settles the pairing as well when only one round was played', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['B'],
+      A: { drafted: ['thor', 'loki', 'santa'], played: ['thor'] },
+      B: { drafted: ['ninja', 'druid', 'santa'], played: ['ninja'] },
+    })
+
+    const heroes = await board(r)
+    // One round means one hero a side, so who faced whom is not a guess. This is every game the
+    // `bo1-bring3-ban1` mode has ever produced.
+    expect(heroes.of('ninja')!.best).toMatchObject([{ characterId: 'thor', wins: 1, losses: 0 }])
+    expect(heroes.of('thor')!.worst).toMatchObject([{ characterId: 'ninja', wins: 0, losses: 1 }])
+  })
+
+  it('settles a match that was drawn all the way through', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['TIE', 'TIE'],
+      A: { drafted: ['thor', 'loki'], played: ['thor', 'loki'] },
+      B: { drafted: ['ninja', 'druid'], played: ['ninja', 'druid'] },
+    })
+
+    // Every round went the same way; that way was a draw (D21 makes it a real terminal state).
+    expect((await board(r)).of('thor')).toMatchObject({ wins: 0, losses: 0, draws: 1 })
+  })
+
+  it('refuses a split, rather than halving a win nobody won', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'B'],
+      A: { drafted: ['thor', 'loki'], played: ['thor', 'loki'] },
+      B: { drafted: ['ninja', 'druid'], played: ['ninja', 'druid'] },
+    })
+
+    const heroes = await board(r)
+    /*
+     * One of Thor and Loki won and one lost, and nothing in the record says which. Splitting the
+     * difference would put a result on a public table that no game produced, in the one place
+     * nobody could check it.
+     */
+    expect(heroes.of('thor')).toMatchObject({ wins: 0, losses: 0, draws: 0, played: 1 })
+    expect(heroes.unattributedRounds).toBe(2)
+  })
+
+  it('says nothing when the heroes and the rounds do not add up', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'A'],
+      // Three heroes used across two rounds is not a record this deduction understands. One
+      // consumed slot per played round is the premise; a row that breaks it gets no inference.
+      A: { drafted: ['thor', 'loki', 'santa'], played: ['thor', 'loki', 'santa'] },
+      B: { drafted: ['ninja'], played: ['ninja', 'druid'] },
+    })
+
+    const heroes = await board(r)
+    expect(heroes.of('thor')).toMatchObject({ wins: 0, losses: 0, draws: 0 })
+    expect(heroes.unattributedRounds).toBe(2)
+  })
+
+  it('prefers what was written down to what can be worked out', async () => {
+    const r = registry()
+    await seed(r, 'ROOM01', {
+      rounds: ['A', 'A'],
+      // `played` is in slot order and the lineup says the play order was the other way round.
+      // Only one of them is a record of what happened.
+      A: { drafted: ['thor', 'loki'], played: ['thor', 'loki'], lineup: ['loki', 'thor'] },
+      B: { drafted: ['ninja', 'druid'], played: ['ninja', 'druid'], lineup: ['druid', 'ninja'] },
+    })
+
+    const heroes = await board(r)
+    // Both heroes won either way — but the pairing only exists because the lineup was stored, and
+    // it is the stored one rather than the order `played` happens to be in.
+    expect(heroes.of('loki')!.best).toMatchObject([{ characterId: 'druid', wins: 1 }])
+    expect(heroes.of('thor')!.best).toMatchObject([{ characterId: 'ninja', wins: 1 }])
+  })
+})
+
+describe('the deduction against a real game', () => {
+  it('reaches the same answer the engine recorded, with the lineup taken away', async () => {
+    // A 2–0, played over sockets by two headless clients. `stopWhenDecided` ends it at two.
+    const match = await seatedMatch({ modeId: 'base', draftCount: 4, players: ['dd-1', 'dd-2'] })
+    await playToCompletion(match.a, match.b, ['A', 'A'])
+    await match.a.settle(40)
+
+    const stored = (await matchesSettle(1)).find((m) => m.roomCode === match.roomCode)!
+    const detail = stored.detail as {
+      rounds: (string | null)[]
+      seats: Record<'A' | 'B', { drafted: string[]; played: string[]; lineup: (string | null)[] }>
+    }
+    expect(detail.seats.A.lineup.filter(Boolean)).toHaveLength(2)
+
+    /*
+     * The same game twice: once as D45 records it, and once as it would have been stored before
+     * D45 — the heroes each seat used, and no order. If the deduction is sound the two boards
+     * agree hero for hero, and this is the only test that can say so, because it is the only one
+     * with the engine's own answer to check against.
+     */
+    const side = (seat: 'A' | 'B', withLineup: boolean) => ({
+      drafted: detail.seats[seat].drafted,
+      played: detail.seats[seat].played,
+      ...(withLineup ? { lineup: detail.seats[seat].lineup } : {}),
+    })
+    const boardFor = async (withLineup: boolean) => {
+      const stub = registry()
+      await seed(stub, 'ROOM01', {
+        rounds: detail.rounds as Outcome[],
+        A: side('A', withLineup),
+        B: side('B', withLineup),
+      })
+      const read = await board(stub)
+      return {
+        // Totals only. The recorded board also knows who faced whom; the deduced one cannot, and
+        // says so by leaving the matchups empty rather than by getting them wrong.
+        totals: read.heroes.map((h) => ({
+          characterId: h.characterId,
+          wins: h.wins,
+          losses: h.losses,
+          draws: h.draws,
+        })),
+        unattributed: read.unattributedRounds,
+      }
+    }
+
+    const recorded = await boardFor(true)
+    const deduced = await boardFor(false)
+    expect(deduced.totals).toEqual(recorded.totals)
+    expect(deduced.unattributed).toBe(0)
   })
 })

@@ -399,3 +399,277 @@ interface MatchRecordish {
   detail: unknown
   tournamentId?: string
 }
+
+/**
+ * **D46 — naming the heroes on a record the admin is writing by hand.**
+ *
+ * D44 stored no heroes at all for an added match, which was defensible while nothing counted them
+ * and became a hole the moment D45's board did: a game played away from the site could reach the
+ * leaderboard and never the hero board. These are about that data arriving intact, and about the
+ * one thing a free-text id would cost — a hero nobody has heard of on a public table.
+ *
+ * Asserted as deltas rather than totals. Other tests in this file play real matches, those drafts
+ * are drawn from the same roster, and a suite that only passes while nobody else happens to draft
+ * Thor is a suite that will fail for a reason nobody can find.
+ */
+describe('naming the heroes on a hand-added match', () => {
+  const key = () => String(env.ADMIN_KEY)
+
+  const added = async (body: Record<string, unknown>) => {
+    const response = await admin('add', body, key())
+    expect(response.status).toBe(200)
+    return ((await response.json()) as { match: AddedMatch }).match
+  }
+
+  const heroCount = async (characterId: string) => {
+    const body = (await (await SELF.fetch('https://example.com/api/heroes')).json()) as {
+      heroes: HeroRow[]
+    }
+    return (
+      body.heroes.find((h) => h.characterId === characterId) ?? {
+        characterId,
+        drafted: 0,
+        played: 0,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+      }
+    )
+  }
+
+  it('credits the hero board with a game that was never played here', async () => {
+    const before = await heroCount('thor')
+
+    await added({
+      aId: 'hero-add-1',
+      bId: 'hero-add-2',
+      winnerId: 'A',
+      scoreA: 2,
+      scoreB: 1,
+      rounds: ['A', 'B', 'A'],
+      aLineup: ['thor', 'loki', 'thor'],
+      bLineup: ['ninja', 'druid', 'santa'],
+    })
+
+    // The point of the whole feature: an evening played away from the site now reaches `/heroes`
+    // as real rounds rather than as a result no hero can be credited with.
+    const after = await heroCount('thor')
+    expect(after.wins - before.wins).toBe(2)
+    expect(after.draws - before.draws).toBe(0)
+    expect(after.played - before.played).toBe(1)
+  })
+
+  it('gives the other seat its side of the same rounds', async () => {
+    const before = await heroCount('druid')
+    await added({
+      aId: 'hero-add-3',
+      bId: 'hero-add-4',
+      winnerId: 'B',
+      rounds: ['A', 'B'],
+      aLineup: ['thor', 'loki'],
+      bLineup: ['ninja', 'druid'],
+    })
+
+    // Druid played round two and B won it. One set of rounds, two sides that cannot disagree.
+    const after = await heroCount('druid')
+    expect(after.wins - before.wins).toBe(1)
+    expect(after.losses - before.losses).toBe(0)
+  })
+
+  it('records what was on the table as what was brought, and nothing more', async () => {
+    const match = await added({
+      aId: 'hero-add-5',
+      bId: 'hero-add-6',
+      winnerId: 'A',
+      rounds: ['A', 'A'],
+      aLineup: ['krampus', 'krampus'],
+      bLineup: ['seraph', 'treant'],
+    })
+
+    // There was no draft, so "what this seat brought" can only honestly mean "what it played".
+    // Inventing a bench would put a number on the hero board that no game produced.
+    const seats = (match.detail as StoredSeats).seats
+    expect(seats.A.drafted).toEqual(['krampus'])
+    expect(seats.A.played).toEqual(['krampus'])
+    expect(seats.A.lineup).toEqual(['krampus', 'krampus'])
+    expect(seats.B.drafted).toEqual(['seraph', 'treant'])
+  })
+
+  it('refuses a hero the roster has never heard of', async () => {
+    const response = await admin(
+      'add',
+      { aId: 'hero-add-7', bId: 'hero-add-8', winnerId: 'A', rounds: ['A'], aLineup: ['batman'] },
+      key(),
+    )
+    // A typo'd id is a phantom hero on a public table, and unlike a wrong score nobody would
+    // recognise it as an error. The dashboard picks from a menu; the server does not rely on that.
+    expect(response.status).toBe(400)
+    expect(((await response.json()) as { error: string }).error).toBe('UNKNOWN_HERO')
+  })
+
+  it('still records a match with no heroes named at all', async () => {
+    const match = await added({
+      aId: 'hero-add-9',
+      bId: 'hero-add-10',
+      winnerId: 'A',
+      rounds: ['A'],
+    })
+    // D44's original shape, unchanged: a result, and no claim about who played it. The hero board
+    // counts that round as one it cannot credit rather than guessing at one.
+    expect((match.detail as StoredSeats).seats).toBeUndefined()
+  })
+})
+
+describe('correcting the heroes on a stored match', () => {
+  const key = () => String(env.ADMIN_KEY)
+
+  const addFor = async (body: Record<string, unknown>) =>
+    ((await (await admin('add', body, key())).json()) as { match: AddedMatch }).match
+
+  it('attributes the rounds of a record that had none on it', async () => {
+    const { roomCode } = await addFor({
+      aId: 'hero-fix-1',
+      bId: 'hero-fix-2',
+      winnerId: 'A',
+      rounds: ['A', 'B'],
+    })
+
+    const edited = await admin(
+      'edit',
+      { roomCode, aLineup: ['pyromancer', 'pyromancer'], bLineup: ['iceman', 'iceman'] },
+      key(),
+    )
+    expect(edited.status).toBe(200)
+
+    /*
+     * This is the only path there is for an old record: the match's own Durable Object expired
+     * long ago, so the dashboard is where a round becomes attributable or stays uncredited for
+     * good. D44's read-only rosters were the right call before anything counted them.
+     */
+    const seats = (((await edited.json()) as { match: AddedMatch }).match.detail as StoredSeats)
+      .seats
+    expect(seats.A.lineup).toEqual(['pyromancer', 'pyromancer'])
+    expect(seats.B.played).toEqual(['iceman'])
+  })
+
+  it('keeps a drafted hero the edit was never told about', async () => {
+    const { roomCode } = await addFor({
+      aId: 'hero-fix-3',
+      bId: 'hero-fix-4',
+      winnerId: 'A',
+      rounds: ['A'],
+      aLineup: ['monk'],
+      bLineup: ['ninja'],
+    })
+
+    const edited = await admin('edit', { roomCode, aLineup: ['samurai'] }, key())
+    const seats = (((await edited.json()) as { match: AddedMatch }).match.detail as StoredSeats)
+      .seats
+
+    /*
+     * `played` follows the lineup, because the lineup *is* what was played — leaving the old value
+     * would put the wrong hero on the board beside the right one. `drafted` only grows: a hero
+     * drafted and benched is a real thing the record knows and this edit was never told about.
+     */
+    expect(seats.A.played).toEqual(['samurai'])
+    expect(seats.A.drafted).toEqual(['monk', 'samurai'])
+  })
+
+  it('leaves the heroes alone when an edit does not mention them', async () => {
+    const { roomCode } = await addFor({
+      aId: 'hero-fix-5',
+      bId: 'hero-fix-6',
+      winnerId: 'A',
+      rounds: ['A'],
+      aLineup: ['rogue'],
+      bLineup: ['ninja'],
+    })
+
+    // Partial by design, like every other field here: correcting a name must not wipe a lineup.
+    const edited = await admin('edit', { roomCode, aName: 'Renamed' }, key())
+    const seats = (((await edited.json()) as { match: AddedMatch }).match.detail as StoredSeats)
+      .seats
+    expect(seats.A.lineup).toEqual(['rogue'])
+  })
+
+  it('does not let a save with no heroes on it erase what the match reported', async () => {
+    /*
+     * The bug this exists for: the dashboard sends both lineups whole on every save, so opening a
+     * real match recorded before D45 — a genuine `played` list, no lineup — and fixing its *score*
+     * arrives here with four nulls. Following that would delete what the match itself said about
+     * which characters were used, in a request that was about a number.
+     */
+    const registry = env.REGISTRY.get(env.REGISTRY.idFromName('registry'))
+    await registry.fetch('https://registry/record', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        roomCode: 'PRE045',
+        playedAt: 1,
+        a: { id: 'pre-1', name: 'Tom' },
+        b: { id: 'pre-2', name: 'Alex' },
+        winnerId: 'pre-1',
+        scoreA: 2,
+        scoreB: 1,
+        detail: {
+          rounds: ['A', 'B', 'A'],
+          seats: {
+            A: { drafted: ['thor', 'loki'], played: ['thor', 'loki'], metaBan: null },
+            B: { drafted: ['ninja'], played: ['ninja'], metaBan: null },
+          },
+        },
+      }),
+    })
+
+    const edited = await admin(
+      'edit',
+      { roomCode: 'PRE045', scoreA: 3, aLineup: [null, null, null], bLineup: [null, null, null] },
+      key(),
+    )
+    const seats = (((await edited.json()) as { match: AddedMatch }).match.detail as StoredSeats)
+      .seats
+
+    // The score lands; the heroes the match reported stay exactly where they were.
+    expect(seats.A.played).toEqual(['thor', 'loki'])
+    expect(seats.A.drafted).toEqual(['thor', 'loki'])
+  })
+
+  it('refuses an unknown hero without applying the rest of the same edit', async () => {
+    const { roomCode } = await addFor({
+      aId: 'hero-fix-7',
+      bId: 'hero-fix-8',
+      winnerId: 'A',
+      scoreA: 1,
+      rounds: ['A'],
+      aLineup: ['rogue'],
+    })
+
+    const refused = await admin('edit', { roomCode, scoreA: 9, aLineup: ['spider-ham'] }, key())
+    expect(refused.status).toBe(400)
+
+    // A refused edit is refused whole. Half-applying one — the score in, the lineup out — would
+    // leave the record saying something nobody asked for and nobody was told about.
+    const after = (await matchesSettle(1)).find((m) => m.roomCode === roomCode) as
+      { scoreA: number } | undefined
+    expect(after?.scoreA).toBe(1)
+  })
+})
+
+/** The stored shape these assertions reach into. The client owns the real types. */
+interface AddedMatch {
+  roomCode: string
+  detail: unknown
+}
+
+interface HeroRow {
+  characterId: string
+  drafted: number
+  played: number
+  wins: number
+  losses: number
+  draws: number
+}
+
+interface StoredSeats {
+  seats: Record<'A' | 'B', { drafted: string[]; played: string[]; lineup: (string | null)[] }>
+}

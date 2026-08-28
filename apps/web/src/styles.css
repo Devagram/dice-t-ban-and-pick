@@ -3370,6 +3370,36 @@ td.table__secondary .table__record {
 }
 
 /*
+ * D46 — picking the heroes, one round per line.
+ *
+ * The grid puts the two seats in the same two columns the score line above uses, so a round reads
+ * across as the matchup it is. The round label is fixed-width for the same reason the matchup
+ * labels on the hero board are: ragged left edges make four lines look like four lists.
+ */
+.lineup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.lineup__round {
+  display: grid;
+  grid-template-columns: 2.2rem 1fr 1fr;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lineup__index {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.lineup__pick {
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+/*
  * D44 — the add-a-match form.
  *
  * Shares the edit row's vocabulary (`adminrow__grid`, `adminrow__line`) on purpose: the controls
@@ -3429,6 +3459,16 @@ td.table__secondary .table__record {
 @media (max-width: 34rem) {
   .adminrow__grid {
     grid-template-columns: 1fr 3rem 1fr;
+  }
+
+  /* The two seats stack rather than shrink: a hero name in a 6rem select is unreadable, and this
+     control exists to be read before it is changed. */
+  .lineup__round {
+    grid-template-columns: 2.2rem 1fr;
+  }
+
+  .lineup__index {
+    grid-row: span 2;
   }
 
   .adminrow__vs {

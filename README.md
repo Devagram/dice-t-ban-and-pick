@@ -161,12 +161,26 @@ out of the decision entirely: 3–1–2 is up on that opponent, 1–3–2 is dow
 neither list — a matchup nobody is winning is not anybody's best or worst. A mirror (D1 allows Thor
 against Thor) is left out of both, since a hero's record against itself is 1–1 by construction.
 
-**Rounds played before this existed belong to nobody, and the board says so.** The stored record
-has always kept which heroes each seat drafted and played, but `played` is the consumed slots in
-_slot_ order — it never said which round each one was played in. D45 adds a `lineup` to the match
-detail, aligned index-for-index with the round results, and only matches recorded after it can be
-attributed. So `drafted` and `played` count the whole archive while `W–L–D` counts what came after,
-and a line under the table reports how many rounds fall in the gap. That gap only shrinks.
+**Older rounds are deduced where the record settles them, and reported where it does not.** The
+stored record has always kept which heroes each seat drafted and played, but `played` is the
+consumed slots in _slot_ order — it never said which round each one was played in. D45 adds a
+`lineup` to the match detail, aligned index-for-index with the round results.
+
+Matches from before that are not all lost, which D45 first claimed and D47 corrected. A slot is
+consumed when a seat _selects_, so `played` holds exactly one hero per round that happened — the
+order is missing, and the results sometimes are not:
+
+- **A sweep settles every hero.** If every round of a match went the same way, then whichever order
+  the heroes went in, each of them won (or lost, or drew) its own round. A 2–0 Bo3 lands here, and
+  so does every one-round Bo1.
+- **A single round settles the pairing too**, since each seat used exactly one hero. That is the
+  whole `bo1-bring3-ban1` mode.
+- **A split settles nothing.** Rounds `['A', 'B']` with heroes `[x, y]` means one won and one lost
+  and nothing says which. Halving it would invent a result no game produced, on a public table, in
+  the one place nobody could check it. Those stay uncredited, and the line under the table says how
+  many there are.
+
+A recorded lineup always beats a deduced one, including on a match an admin has since corrected.
 
 This is the instrumentation §15 asks for, arriving late: win rate by hero is what makes "is this
 hero any good, or is that one player" a question with an answer.
@@ -192,11 +206,20 @@ rows on every read, so there is no recount step and nothing to keep in sync.
   record.
 - **The date is the date it was played**, not the date it was typed. The history sorts on it.
 
-Two things it deliberately will not do. It stores **no rosters**, because nobody drafted anything
-and an empty pair would make a game that was never drafted look like one that was. And it never
-writes a `tournamentId`: a bracket derives itself from resolved slots (D39), so a hand-written row
+- **Name the heroes** (D46). One select per round per seat, so a game played away from the site
+  reaches `/heroes` as real rounds rather than as a result no hero can be credited with. Optional:
+  leave them unset and the record is stored exactly as D44 stored it. What each seat played is
+  recorded as what it brought — there was no draft, so inventing a bench would put a number on the
+  hero board that no game produced. The same control is on every match row, which is the only way
+  a record from before D45 can ever be attributed: its own match log expired months ago.
+
+It never writes a `tournamentId`: a bracket derives itself from resolved slots (D39), so a hand-written row
 claiming to be a tournament match would be the second truth that decision exists to prevent — a
 tournament game that went unrecorded is fixed from the organizer console.
+
+A hero id is checked against the roster, retired characters included (D14). The dashboard picks
+from a menu, but the server does not rely on that: a typo'd id would be a phantom hero on a public
+table, and unlike a wrong score nobody would recognise it as an error.
 
 Hand-added rows take a room code prefixed `M-`, which no real room can have — the registry upserts
 by room code, so a record wearing a plausible six-character code would be overwritten the day that

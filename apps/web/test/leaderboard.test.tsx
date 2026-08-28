@@ -408,9 +408,10 @@ describe('the hero board', () => {
     render(<Leaderboard board="heroes" onBack={vi.fn()} />)
     await loaded()
 
-    // Without this the board reads as a group who have barely played, when in fact it is a record
-    // that did not store which hero played which round until D45.
-    expect(screen.getByText(/12 earlier rounds are credited to nobody/i)).toBeTruthy()
+    // Without this the board reads as a group who have barely played, when in fact these are the
+    // split matches a record with no lineup cannot settle — the rest of that history is deduced.
+    expect(screen.getByText(/12 rounds are credited to nobody/i)).toBeTruthy()
+    expect(screen.getByText(/one hero won and one lost/i)).toBeTruthy()
   })
 
   it('renders a hero the roster has forgotten rather than dropping the row', async () => {

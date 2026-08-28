@@ -118,7 +118,7 @@ export interface MatchRecord {
   detail: {
     rounds: (string | null)[]
     /** Absent on a D44 record, which nobody drafted for. Both readers already guard on it. */
-    seats?: Record<'A' | 'B', { drafted: string[]; played: string[]; metaBan: string | null }>
+    seats?: Record<'A' | 'B', HeroesOfSeat>
   } | null
   /** D37 — present only for a bracket match. The history page badges these. */
   tournamentId?: string
@@ -210,7 +210,20 @@ export interface MatchDetail {
    * and the type claiming otherwise was the kind of promise that holds until the first row that
    * did not come from a played match.
    */
-  seats?: Record<'A' | 'B', { drafted: string[]; played: string[]; metaBan: string | null }>
+  seats?: Record<'A' | 'B', HeroesOfSeat>
+}
+
+/**
+ * What one seat brought, used, and — since D45 — used in which round.
+ *
+ * `lineup` is indexed against `rounds`: position two is the hero that played round three. Absent
+ * on every record from before D45, which is why the hero board reports what it cannot credit.
+ */
+export interface HeroesOfSeat {
+  drafted: string[]
+  played: string[]
+  metaBan: string | null
+  lineup?: (string | null)[]
 }
 
 export interface Matchup {
@@ -299,6 +312,15 @@ export function adminEditMatch(
     scoreA?: number
     scoreB?: number
     rounds?: (('A' | 'B' | 'TIE') | null)[]
+    /**
+     * D46 — which hero each seat played in each round, indexed like `rounds`.
+     *
+     * Sending one replaces that seat's whole lineup, so the dashboard sends what it is showing
+     * rather than a patch: a partial lineup would be indistinguishable from a round the admin
+     * meant to clear.
+     */
+    aLineup?: (string | null)[]
+    bLineup?: (string | null)[]
   },
 ): Promise<MatchRecord> {
   return fetch('/api/admin/edit', {
@@ -328,6 +350,9 @@ export function adminAddMatch(
     scoreA: number
     scoreB: number
     rounds?: (('A' | 'B' | 'TIE') | null)[]
+    /** D46 — the heroes, if the admin named them. What makes an added game reach `/heroes`. */
+    aLineup?: (string | null)[]
+    bLineup?: (string | null)[]
     playedAt?: number
   },
 ): Promise<MatchRecord> {
