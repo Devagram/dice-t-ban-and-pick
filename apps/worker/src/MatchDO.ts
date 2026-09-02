@@ -861,10 +861,20 @@ export class MatchDO extends DurableObject<Env> {
    * this; the first creates a room and the second is handed the same code. Stored in meta rather
    * than held in memory because the DO can hibernate between the two clicks.
    *
-   * **Does not seat anyone.** It creates the room and points both clients at its ordinary join
-   * page. Auto-seating would be a nicer click count and a worse idea: §12.3 makes seating the act
-   * of consent, and consenting on someone's behalf because their opponent pressed a button is
-   * exactly the thing that rule exists to prevent — even when the ruleset is identical.
+   * **D53 — and it seats them both, which it used to refuse to do.**
+   *
+   * The old rule was that seating is consent (§12.3) and no button pressed by your opponent may
+   * give it on your behalf. That reading was too broad, and the cost of it was the whole feature:
+   * both players landed back on a join page, retyped a name, and re-took a seat in a room whose
+   * terms they had *just* played a full match under. What §12.3 protects is consenting to **terms
+   * you have not seen**, and a rematch is by construction the one case where there are none —
+   * `openRematchRoom` copies the ruleset verbatim, and if it ever stopped doing that this would
+   * be wrong again immediately.
+   *
+   * What is not given away with it: a seat is filled with the identity that seat already held,
+   * never a new one, and only for a COMPLETE match with both players named. A seat that cannot be
+   * resolved that way is left empty — the room still opens and the join page still works — so the
+   * failure mode is the old behaviour rather than a wrong player.
    */
   private async handleRematch(url: URL): Promise<Response> {
     const token = url.searchParams.get('token')
@@ -892,23 +902,118 @@ export class MatchDO extends DurableObject<Env> {
      */
     const opened = await this.ctx.blockConcurrencyWhile(async () => {
       const existing = getMeta(this.sql, 'rematchCode')
-      if (existing) return { roomCode: existing, fresh: false }
+      if (existing) return { roomCode: existing, seats: this.rematchSeats(), fresh: false }
 
       const created = await this.openRematchRoom(state)
       if (!created) return null
+      /*
+       * D53 — inside the same barrier as the create, not after it.
+       *
+       * The barrier already exists so that two simultaneous presses cannot open two rooms. Seating
+       * belongs under it for the same reason one step further on: the second presser must be
+       * handed a seat, not a room that is halfway open. Answering with the code before the seats
+       * exist would put one player on a join page for a room about to fill itself underneath them.
+       */
+      const seats = await this.preseatRematch(created, state)
       setMeta(this.sql, 'rematchCode', created)
-      return { roomCode: created, fresh: true }
+      if (Object.keys(seats).length > 0) setMeta(this.sql, 'rematchSeats', JSON.stringify(seats))
+      return { roomCode: created, seats, fresh: true }
     })
 
     if (!opened) {
       return json({ error: 'ROOM_CODE_EXHAUSTED', detail: 'could not open a rematch' }, 503)
     }
-    if (!opened.fresh) return json({ roomCode: opened.roomCode }, 200)
-    const created = opened.roomCode
+    /*
+     * D53 — the asker is told its own token and nobody else's, here and on the socket.
+     *
+     * `seat` came from the token they presented, so this lookup is the whole of the authorisation
+     * check: you are handed the seat you already hold, in a room built from the ruleset you just
+     * played under. Both players reach this line — the second down the idempotent path — and each
+     * gets a different string.
+     */
+    const mine = opened.seats[seat]
+    const body = mine
+      ? { roomCode: opened.roomCode, seatToken: mine }
+      : { roomCode: opened.roomCode }
+    if (!opened.fresh) return json(body, 200)
     // The completed match is the only channel these two still share. Without this the opponent
     // has no way to learn the code, and "play again" is back to sending a link.
-    announceRematch(this.sockets(), created, seat)
-    return json({ roomCode: created }, 201)
+    announceRematch(this.sockets(), opened.roomCode, seat, opened.seats)
+    return json(body, 201)
+  }
+
+  /**
+   * D53 — the rematch room's seat tokens, as this object recorded them.
+   *
+   * **Stored in the clear, which is a deliberate exception to persistence.ts's rule that only
+   * hashes are kept.** That rule holds where a hash answers the only question ever asked of the
+   * value — "does the bearer hold it?" — which is true of every seat token in *this* room. Here
+   * the question is the opposite one, "what is it?", because the token must be handed to a player
+   * who may press the button minutes after this object hibernated, or press it second, or press
+   * it again. A hash cannot answer that, so the choice is storing the token or dropping the
+   * feature.
+   *
+   * The exposure is bounded by what it is: two seats in one room whose only occupants are the two
+   * people already seated here. Anything that can read this storage can read those seats too.
+   */
+  private rematchSeats(): Partial<Record<Seat, string>> {
+    const raw = getMeta(this.sql, 'rematchSeats')
+    if (!raw) return {}
+    try {
+      return JSON.parse(raw) as Partial<Record<Seat, string>>
+    } catch {
+      return {}
+    }
+  }
+
+  /**
+   * D53 — sits both players down in the room that was just opened.
+   *
+   * Through the new object's ordinary `/seat` endpoint rather than by writing its tables: that
+   * endpoint is what appends `SEAT_FILLED`, mints the token, resolves D28's pairing history and
+   * tells D31's registry the room is now playing. Reaching past it would be four behaviours to
+   * keep in step with one that already works.
+   *
+   * **In seat order, sequentially, and each claim is checked against the seat it asked for.**
+   * Open seating is first-come — `handleClaimSeat` takes the first free seat — so A-then-B is
+   * what puts the same two people back in the same two seats. That is what makes the next set a
+   * continuation rather than a reshuffle, and what keeps D28's carried ban and the head-to-head
+   * counting the same way round.
+   *
+   * A partial result is returned rather than discarded. If B's claim fails, A really is seated,
+   * and claiming otherwise would send A to a join page offering them their opponent's seat.
+   */
+  private async preseatRematch(
+    roomCode: string,
+    state: MatchState,
+  ): Promise<Partial<Record<Seat, string>>> {
+    const players = playersOf(state)
+    // An anonymous seat — a match from before D29 required a name — has no identity to carry
+    // across, and inventing one would put a stranger on the leaderboard. The room stays joinable.
+    if (!players) return {}
+
+    const stub = this.env.MATCH.get(this.env.MATCH.idFromName(roomCode))
+    const tokens: Partial<Record<Seat, string>> = {}
+    for (const seat of SEATS) {
+      let claimed: ClaimSeatResponse
+      try {
+        const response = await stub.fetch('https://match/seat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ playerId: players[seat].id, displayName: players[seat].name }),
+        })
+        if (!response.ok) return tokens
+        claimed = (await response.json()) as ClaimSeatResponse
+      } catch {
+        return tokens
+      }
+      // Belt and braces: were first-come ever to hand back the other letter, stopping here leaves
+      // a room with one seat free, which the join page already handles. Carrying on would mint a
+      // token and tell a player it is for a seat it is not for.
+      if (claimed.seat !== seat) return tokens
+      tokens[seat] = claimed.seatToken
+    }
+    return tokens
   }
 
   /**

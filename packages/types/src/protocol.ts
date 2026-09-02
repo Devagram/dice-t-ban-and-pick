@@ -96,10 +96,16 @@ export type ServerMessage =
    *
    * Pushed rather than polled because the completed match is the only channel these two players
    * still share: without it, "play again" is back to copying a link, which is the thing it exists
-   * to remove. Carries the code and the seat that asked, and nothing else — the receiving client
-   * still joins through the ordinary lobby, so §12.3's consent-before-seating is untouched.
+   * to remove.
+   *
+   * **`seatToken` is the one frame on this wire that is not safe to fan out.** Everything else
+   * here is either projected per seat or public by the time it is sent; this is a bearer
+   * credential for a seat in the next room (D17), so `announceRematch` gives each socket only its
+   * own. It is optional because pre-seating can fail — an anonymous seat in an older match has no
+   * identity to carry across — and a frame without one degrades to exactly the old behaviour: a
+   * room code and the ordinary join page.
    */
-  | { type: 'REMATCH'; roomCode: string; by: Seat }
+  | { type: 'REMATCH'; roomCode: string; by: Seat; seatToken?: string }
   /**
    * **D37 — the whole bracket, to everyone watching it.**
    *

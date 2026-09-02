@@ -188,15 +188,23 @@ export function fetchLobbies(): Promise<RoomListing[]> {
  * D32 — opens (or finds) the rematch room for a finished match.
  *
  * Idempotent on the server, so both players pressing this lands them in the same room rather than
- * two rooms each waiting for the other. Returns the code; joining is still the ordinary lobby
- * flow, because §12.3 makes sitting down the act of consent and nobody else gets to do it for you.
+ * two rooms each waiting for the other.
+ *
+ * D53 — and comes back with **your seat in it**, already taken, because a rematch is the one room
+ * whose terms both players have already played a whole match under. `seatToken` is absent when the
+ * server could not seat you (an anonymous seat in an old match), and the caller falls back to the
+ * join page it used to send everyone to.
  */
-export function openRematch(roomCode: string, seatToken: string): Promise<string> {
+export interface RematchRoom {
+  roomCode: string
+  /** D17's bearer credential, for the seat you already held. Absent if pre-seating did not run. */
+  seatToken?: string
+}
+
+export function openRematch(roomCode: string, seatToken: string): Promise<RematchRoom> {
   return fetch(`/api/match/${roomCode}/rematch?token=${encodeURIComponent(seatToken)}`, {
     method: 'POST',
-  })
-    .then(json<{ roomCode: string }>)
-    .then((r) => r.roomCode)
+  }).then(json<RematchRoom>)
 }
 
 // --- D34: history and the admin dashboard ------------------------------------------------------

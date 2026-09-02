@@ -31,8 +31,11 @@ export interface TransportState {
    * Survives a new VIEW deliberately, unlike `progress`: the offer stays true until someone acts
    * on it, and the match screen keeps re-rendering underneath it (an undo can reopen a completed
    * match, and the rematch room is still there when it closes again).
+   *
+   * D53 — `seatToken` is this seat's, in that room. Its presence is what tells the UI the
+   * difference between "here is a room, go and join it" and "you are already sitting down".
    */
-  rematch: { roomCode: string; by: string } | null
+  rematch: { roomCode: string; by: string; seatToken?: string } | null
   /**
    * D33 — the last correction someone made to an earlier round.
    *
@@ -110,7 +113,30 @@ export function connect(
           onChange({ progress: { filled: message.filled, of: message.of, ban: message.ban } })
           break
         case 'REMATCH':
-          onChange({ rematch: { roomCode: message.roomCode, by: message.by } })
+          /*
+           * D53 — the seat is stored the moment it arrives, before anything navigates.
+           *
+           * `recallSeat` keyed by room code is what makes `/j/CODE` open a seated match instead of
+           * a join page (D17), so writing it here means the rematch is reachable even if the
+           * player never presses anything and comes back to the link tomorrow. Storing before
+           * navigating rather than after is the same ordering the resume route already uses: a
+           * token that is only in flight is a token that a closed tab loses.
+           */
+          if (message.seatToken) {
+            rememberSeat(message.roomCode, {
+              seatToken: message.seatToken,
+              websocketUrl: wsUrlFor(message.roomCode),
+            })
+          }
+          onChange({
+            rematch: {
+              roomCode: message.roomCode,
+              by: message.by,
+              // Spread rather than assigned: `exactOptionalPropertyTypes` draws a line between
+              // absent and present-but-undefined, and the UI reads presence as "you are seated".
+              ...(message.seatToken ? { seatToken: message.seatToken } : {}),
+            },
+          })
           break
         case 'RESULT_AMENDED':
           onChange({
@@ -184,6 +210,17 @@ interface StoredSeat {
  * recoverable.
  */
 const seatKey = (roomCode: string): string => `banpick:seat:${roomCode}`
+
+/**
+ * The socket address of a room, derived from where the page is served.
+ *
+ * One definition, used by the router and by the rematch frame, because two of them is two chances
+ * to get the `ws:`/`wss:` swap wrong — and the one that breaks is always the one on https.
+ */
+export function wsUrlFor(roomCode: string): string {
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${scheme}://${location.host}/api/match/${roomCode}/ws`
+}
 
 export function rememberSeat(roomCode: string, seat: StoredSeat): void {
   try {

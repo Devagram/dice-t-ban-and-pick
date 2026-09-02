@@ -11,7 +11,7 @@ import { Match } from './screens/Match.js'
 import { Tournament } from './screens/Tournament.js'
 import { NewTournament } from './screens/NewTournament.js'
 import { Organizer } from './screens/Organizer.js'
-import { recallSeat, rememberSeat } from './transport.js'
+import { recallSeat, rememberSeat, wsUrlFor } from './transport.js'
 
 /**
  * Routing, such as it is.
@@ -110,11 +110,6 @@ function readRoute(): Route {
   if (running) return { screen: 'organizer', code: running[1]!.toUpperCase() }
 
   return { screen: 'home' }
-}
-
-function wsUrlFor(roomCode: string): string {
-  const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${scheme}://${location.host}/api/match/${roomCode}/ws`
 }
 
 export function App() {

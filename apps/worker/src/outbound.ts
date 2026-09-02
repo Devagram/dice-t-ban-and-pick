@@ -75,15 +75,31 @@ export function relayProgress(
 }
 
 /**
- * D32 — announces the rematch room to both seats.
+ * D32 — announces the rematch room to both seats, each with its own seat in it.
  *
  * Sent to everyone including the seat that asked, so a player with the match open in two places
- * sees it in both. Carries a room code and the seat that opened it and nothing else: it never
- * touches `project()` because there is no match state in it, which is precisely why it is safe
- * for it to go to both seats unfiltered.
+ * sees it in both. The room code and the opening seat are public between these two and go out
+ * unfiltered; **the seat token does not**. It is a bearer credential for a seat in the next room
+ * (D17), so it is looked up per socket by the seat that socket authenticated as — the same
+ * per-target discipline `sendView` applies to state, applied to the one credential that now
+ * travels on this wire.
+ *
+ * `seats` may be missing a seat, or be empty. A socket that has no token for its own seat gets
+ * the frame it always got, and its client falls back to the ordinary join page.
  */
-export function announceRematch(targets: Iterable<SeatSocket>, roomCode: string, by: Seat): void {
-  for (const target of targets) deliver(target.socket, { type: 'REMATCH', roomCode, by })
+export function announceRematch(
+  targets: Iterable<SeatSocket>,
+  roomCode: string,
+  by: Seat,
+  seats: Partial<Record<Seat, string>> = {},
+): void {
+  for (const target of targets) {
+    const seatToken = seats[target.seat]
+    deliver(
+      target.socket,
+      seatToken ? { type: 'REMATCH', roomCode, by, seatToken } : { type: 'REMATCH', roomCode, by },
+    )
+  }
 }
 
 /**
